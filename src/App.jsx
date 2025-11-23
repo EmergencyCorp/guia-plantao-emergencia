@@ -5,13 +5,25 @@ import {
   CheckCircle2, Thermometer, Syringe, Siren, FlaskConical, Tag, Package,
   ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save, Cloud, CloudOff, Settings, Info,
   HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine, Wind, Droplet, Timer, Skull, Printer, FilePlus, Calculator,
-  Tablets, Syringe as SyringeIcon, Droplets, Pipette
+  Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc, collection } from 'firebase/firestore';
+import { 
+  getFirestore, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  collection, 
+  query, 
+  where, 
+  orderBy, 
+  limit, 
+  getDocs, 
+  deleteDoc 
+} from 'firebase/firestore';
 
 // --- LÓGICA DE CONFIGURAÇÃO DO FIREBASE ---
 const getFirebaseConfig = () => {
@@ -82,6 +94,9 @@ export default function EmergencyGuideApp() {
   const [selectedPrescriptionItems, setSelectedPrescriptionItems] = useState([]);
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
   const [patientWeight, setPatientWeight] = useState('');
+
+  // Estado para controle de favorito da conduta atual
+  const [isCurrentConductFavorite, setIsCurrentConductFavorite] = useState(false);
 
   useEffect(() => {
     if (!firebaseConfig || !firebaseConfig.apiKey) {
@@ -225,24 +240,114 @@ export default function EmergencyGuideApp() {
     });
   };
 
+  // --- LÓGICA DE CACHE E FAVORITOS ---
+
+  // Gera um ID único e seguro para o documento no Firestore
+  const getConductDocId = (query, room) => {
+    return `${query.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}_${room}`;
+  };
+
+  const toggleFavorite = async () => {
+    if (!currentUser || !conduct || !isCloudConnected) {
+      showError("Necessário estar online para favoritar.");
+      return;
+    }
+
+    const newStatus = !isCurrentConductFavorite;
+    setIsCurrentConductFavorite(newStatus);
+
+    try {
+      const docId = getConductDocId(searchQuery, activeRoom);
+      const docRef = doc(db, 'artifacts', appId, 'users', currentUser.username, 'conducts', docId);
+      
+      await setDoc(docRef, { 
+        isFavorite: newStatus,
+        lastAccessed: new Date().toISOString() // Atualiza data para não ser deletado se for desfavoritado depois
+      }, { merge: true });
+
+    } catch (error) {
+      console.error("Erro ao favoritar:", error);
+      setIsCurrentConductFavorite(!newStatus); // Reverte em caso de erro
+      showError("Erro ao salvar favorito.");
+    }
+  };
+
+  const manageCacheLimit = async (username) => {
+    if (!db) return;
+    try {
+      const conductsRef = collection(db, 'artifacts', appId, 'users', username, 'conducts');
+      // Busca apenas os NÃO favoritos, ordenados por data (mais antigos primeiro)
+      const q = query(conductsRef, where("isFavorite", "==", false), orderBy("lastAccessed", "desc"));
+      
+      const snapshot = await getDocs(q);
+      
+      // Se tiver mais que 10, deleta os excedentes (que são os últimos da lista no snapshot invertido ou lógica manual)
+      // Ajuste: orderBy 'desc' traz os mais recentes primeiro. Então se size > 10, deletamos do índice 10 para frente.
+      if (snapshot.size > 10) {
+        const docsToDelete = snapshot.docs.slice(10);
+        const deletePromises = docsToDelete.map(d => deleteDoc(d.ref));
+        await Promise.all(deletePromises);
+        console.log(`Limpeza de cache: ${docsToDelete.length} condutas antigas removidas.`);
+      }
+    } catch (error) {
+      console.error("Erro ao limpar cache:", error);
+    }
+  };
+
   const generateConduct = async () => {
     if (!searchQuery.trim()) {
       showError('Digite uma condição clínica.');
       return;
     }
+    
+    // Resetar estados de UI
     setLoading(true);
     setConduct(null);
     setErrorMsg('');
+    setIsCurrentConductFavorite(false);
 
+    const docId = getConductDocId(searchQuery, activeRoom);
+
+    // 1. TENTAR PEGAR DO CACHE (FIRESTORE)
+    if (isCloudConnected && currentUser) {
+      try {
+        const docRef = doc(db, 'artifacts', appId, 'users', currentUser.username, 'conducts', docId);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          console.log("Cache hit! Carregando do banco...");
+          setConduct(data.conductData);
+          setIsCurrentConductFavorite(data.isFavorite || false);
+          
+          // Atualiza timestamp de acesso (para não ser deletado na limpeza)
+          await setDoc(docRef, { lastAccessed: new Date().toISOString() }, { merge: true });
+          
+          setLoading(false);
+          saveToHistory(searchQuery, activeRoom); // Atualiza histórico de busca
+          setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
+          return; // Encerra aqui, não chama a IA
+        }
+      } catch (error) {
+        console.error("Erro ao verificar cache:", error);
+      }
+    }
+
+    // 2. SE NÃO ESTIVER NO CACHE, CHAMA A IA
     const roomContext = activeRoom === 'verde' ? 'SALA VERDE (AMBULATORIAL)' : 'SALA VERMELHA (EMERGÊNCIA)';
     
     let promptExtra = "";
-    
     if (activeRoom === 'verde') {
       promptExtra += `
       IMPORTANTE (SALA VERDE):
-      Para cada item em "tratamento_medicamentoso", inclua "receita":
-      "receita": { "uso": "...", "nome_comercial": "...", "quantidade": "...", "instrucoes": "..." }
+      Para cada item em "tratamento_medicamentoso", inclua um objeto "receita" com os dados para prescrição de alta:
+      "receita": {
+         "uso": "USO ORAL, USO TÓPICO, etc",
+         "nome_comercial": "Nome + Concentração (Ex: Dipirona 500mg)",
+         "quantidade": "Ex: 01 caixa, 01 frasco",
+         "instrucoes": "Ex: Tomar 01 comprimido de 6/6h se dor ou febre"
+      }
+      Se o medicamento for apenas de uso hospitalar imediato e não for para casa, "receita": null.
       `;
     }
 
@@ -264,15 +369,16 @@ export default function EmergencyGuideApp() {
     
     REGRAS RÍGIDAS:
     1. JSON puro.
-    2. Separe apresentações diferentes em objetos diferentes.
+    2. "tratamento_medicamentoso": ARRAY de objetos. CRUCIAL: Se um mesmo fármaco tiver mais de uma apresentação (ex: Dipirona Comprimido e Dipirona Gotas), crie OBJETOS SEPARADOS no array.
+    3. "criterios_internacao/alta": OBRIGATÓRIOS.
     
     ESTRUTURA JSON:
     {
       "condicao": "Nome",
       "estadiamento": "Classificação",
       "classificacao": "${roomContext}",
-      "resumo_clinico": "Texto técnico...",
-      "xabcde_trauma": null, // OU objeto {x,a,b,c,d,e} APENAS SE FOR TRAUMA
+      "resumo_clinico": "Texto técnico detalhado...",
+      "xabcde_trauma": null, 
       "avaliacao_inicial": { 
         "sinais_vitais_alvos": ["PAM > 65mmHg", "SatO2 > 94%"], 
         "exames_prioridade1": ["..."], 
@@ -282,19 +388,19 @@ export default function EmergencyGuideApp() {
       "criterios_gravidade": ["..."],
       "tratamento_medicamentoso": [ 
         { 
-          "farmaco": "Nome + Concentração", 
-          "tipo": "Injetável/Comprimido",
-          "sugestao_uso": "Texto descritivo...",
-          "diluicao": "...",
-          "modo_admin": "...",
+          "farmaco": "Nome (Apresentação)", 
+          "apresentacao": "Amp/Comp/Gts", 
+          "dose": "...", 
+          "diluicao": "...", 
+          "modo_admin": "...", 
           "cuidados": "...", 
           "indicacao": "...",
-          "receita": { ... }, 
-          "usa_peso": false, 
+          "receita": { ... }, // Sala Verde
+          "usa_peso": false, // Sala Vermelha
           "dose_padrao_kg": 0,
           "unidade_base": "mg/kg",
-          "concentracao_mg_ml": 0, // Para cálculo de volume (Sala Vermelha)
-          "diluicao_contexto": "..." // Explicação da concentração usada (Sala Vermelha)
+          "concentracao_mg_ml": 0,
+          "diluicao_contexto": "..."
         } 
       ],
       "escalonamento_terapeutico": [ { "passo": "1ª Linha", "descricao": "..." } ],
@@ -321,9 +427,27 @@ export default function EmergencyGuideApp() {
       if (!response.ok) throw new Error('Erro na API');
       const data = await response.json();
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      
       if (text) {
-        setConduct(JSON.parse(text));
-        if(currentUser) saveToHistory(searchQuery, activeRoom);
+        const parsedConduct = JSON.parse(text);
+        setConduct(parsedConduct);
+        
+        // 3. SALVAR NO CACHE (SE TIVER USUARIO LOGADO)
+        if (isCloudConnected && currentUser) {
+          const docRef = doc(db, 'artifacts', appId, 'users', currentUser.username, 'conducts', docId);
+          await setDoc(docRef, {
+            query: searchQuery,
+            room: activeRoom,
+            conductData: parsedConduct,
+            isFavorite: false, // Padrão false ao criar
+            lastAccessed: new Date().toISOString()
+          });
+          
+          // Limpa cache antigo (mantém apenas 10 recentes não favoritos)
+          manageCacheLimit(currentUser.username);
+        }
+
+        saveToHistory(searchQuery, activeRoom);
         setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
       }
     } catch (error) {
@@ -370,6 +494,7 @@ export default function EmergencyGuideApp() {
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans text-slate-800">
+        {/* TELA DE LOGIN */}
         <div className="bg-white rounded-3xl shadow-xl border border-gray-100 max-w-md w-full overflow-hidden">
           <div className="bg-gradient-to-br from-blue-900 to-slate-800 p-8 text-center text-white relative">
             <Shield size={40} className="mx-auto mb-3 text-blue-300" />
@@ -466,7 +591,17 @@ export default function EmergencyGuideApp() {
                   <h2 className="text-3xl font-bold text-slate-800">{conduct.condicao}</h2>
                   {conduct.guideline_referencia && (<p className="text-xs text-slate-500 mt-1 flex items-center gap-1"><BookOpen size={12} /> Fonte: <span className="font-medium">{conduct.guideline_referencia}</span></p>)}
                </div>
-               <button onClick={() => setConduct(null)} className="p-2 hover:bg-gray-200 rounded-full text-gray-500"><X size={24}/></button>
+               <div className="flex gap-2">
+                 {/* BOTÃO FAVORITAR */}
+                 <button 
+                    onClick={toggleFavorite} 
+                    className={`p-2 rounded-full transition-colors ${isCurrentConductFavorite ? 'bg-yellow-100 text-yellow-500 hover:bg-yellow-200' : 'text-gray-400 hover:bg-gray-100 hover:text-yellow-400'}`}
+                    title={isCurrentConductFavorite ? "Remover dos favoritos" : "Salvar nos favoritos"}
+                 >
+                    <Star size={24} fill={isCurrentConductFavorite ? "currentColor" : "none"} />
+                 </button>
+                 <button onClick={() => setConduct(null)} className="p-2 hover:bg-gray-200 rounded-full text-gray-500"><X size={24}/></button>
+               </div>
             </div>
 
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex gap-4">
