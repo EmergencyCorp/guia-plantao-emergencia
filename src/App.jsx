@@ -3,40 +3,76 @@ import {
   Activity, AlertCircle, Search, Clock, Pill, FileText, Loader2, BookOpen, 
   Stethoscope, ClipboardCheck, AlertTriangle, ArrowRight, X, User, 
   CheckCircle2, Thermometer, Syringe, Siren, FlaskConical, Tag, Package,
-  ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save
+  ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save, Cloud, CloudOff, Settings, Info
 } from 'lucide-react';
 
-// --- CONFIGURAÇÃO DE ACESSO (Edite aqui) ---
-// Adicione ou remova usuários desta lista para controlar o acesso
-const AUTHORIZED_USERS = [
-  { 
-    username: 'admin', 
-    password: '123', 
-    name: 'Dr. Administrador',
-    role: 'Diretor Clínico'
-  },
-  { 
-    username: 'medico', 
-    password: 'med', 
-    name: 'Dr. Plantonista',
-    role: 'Médico Assistente'
-  },
-  { 
-    username: 'interno', 
-    password: 'int', 
-    name: 'Acadêmico',
-    role: 'Interno'
+// --- FIREBASE IMPORTS ---
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, doc, setDoc, getDoc, collection } from 'firebase/firestore';
+
+// --- LÓGICA DE CONFIGURAÇÃO DO FIREBASE ---
+const getFirebaseConfig = () => {
+  try {
+    // 1. Ambiente Vite/Netlify (Produção)
+    if (import.meta.env && import.meta.env.VITE_FIREBASE_API_KEY) {
+      return {
+        apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+        authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+        projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+        storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+        messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+        appId: import.meta.env.VITE_FIREBASE_APP_ID
+      };
+    }
+    // 2. Ambiente de Teste (Fallback)
+    if (typeof __firebase_config !== 'undefined') {
+      return JSON.parse(__firebase_config);
+    }
+  } catch (e) {
+    console.error("Erro config firebase:", e);
   }
+  return null;
+};
+
+const firebaseConfig = getFirebaseConfig();
+let app, auth, db;
+
+// Inicializa apenas se houver configuração
+if (firebaseConfig && firebaseConfig.apiKey) {
+  try {
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
+  } catch (e) {
+    console.error("Erro init firebase:", e);
+  }
+}
+
+// IDs e Tokens
+const appId = (typeof __app_id !== 'undefined') ? __app_id : 'emergency-guide-app';
+const initialToken = (typeof __initial_auth_token !== 'undefined') ? __initial_auth_token : null;
+
+// --- CONFIGURAÇÃO DE ACESSO ---
+const AUTHORIZED_USERS = [
+  { username: 'admin', password: '123', name: 'Dr. Administrador', role: 'Diretor Clínico' },
+  { username: 'medico', password: 'med', name: 'Dr. Plantonista', role: 'Médico Assistente' },
+  { username: 'interno', password: 'int', name: 'Acadêmico', role: 'Interno' }
 ];
 
 export default function EmergencyGuideApp() {
-  // Estados de Autenticação Local
   const [currentUser, setCurrentUser] = useState(null);
   const [usernameInput, setUsernameInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [loginError, setLoginError] = useState('');
+  
+  // Estados Firebase
+  const [firebaseUser, setFirebaseUser] = useState(null); 
+  const [isCloudConnected, setIsCloudConnected] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [configStatus, setConfigStatus] = useState('verificando'); // 'ok', 'missing', 'error'
 
-  // Estados da Aplicação Principal
+  // Estados App
   const [activeRoom, setActiveRoom] = useState('verde');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
@@ -45,11 +81,44 @@ export default function EmergencyGuideApp() {
   const [errorMsg, setErrorMsg] = useState('');
   const resultsRef = useRef(null);
 
-  // Estados do Bloco de Notas
+  // Bloco de Notas
   const [showNotepad, setShowNotepad] = useState(false);
   const [userNotes, setUserNotes] = useState('');
 
-  // Verificar se já existe sessão salva ao carregar
+  // 1. Inicialização Auth Firebase
+  useEffect(() => {
+    // Verifica status da config para debug no Netlify
+    if (!firebaseConfig || !firebaseConfig.apiKey) {
+      setConfigStatus('missing');
+      return;
+    }
+    setConfigStatus('ok');
+
+    if (!auth) return;
+
+    const initAuth = async () => {
+      try {
+        if (initialToken) await signInWithCustomToken(auth, initialToken);
+        else await signInAnonymously(auth);
+      } catch (error) {
+        console.error("Auth error:", error);
+      }
+    };
+    initAuth();
+
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setFirebaseUser(user);
+        setIsCloudConnected(true);
+      } else {
+        setFirebaseUser(null);
+        setIsCloudConnected(false);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // 2. Sessão Local
   useEffect(() => {
     const savedUser = localStorage.getItem('emergency_app_user');
     if (savedUser) {
@@ -57,66 +126,79 @@ export default function EmergencyGuideApp() {
         const parsedUser = JSON.parse(savedUser);
         setCurrentUser(parsedUser);
         loadHistory(parsedUser.username);
-        loadNotes(parsedUser.username);
-      } catch (e) {
-        console.error("Erro ao restaurar sessão", e);
-      }
+      } catch (e) {}
     }
   }, []);
 
-  // Função para carregar histórico do LocalStorage
+  // 3. Sync Notas
+  useEffect(() => {
+    if (currentUser && isCloudConnected) fetchNotesFromCloud(currentUser.username);
+    else if (currentUser) {
+      const localNotes = localStorage.getItem(`notes_${currentUser.username}`);
+      if (localNotes) setUserNotes(localNotes);
+    }
+  }, [currentUser, isCloudConnected]);
+
   const loadHistory = (username) => {
     try {
       const history = localStorage.getItem(`history_${username}`);
-      if (history) {
-        setRecentSearches(JSON.parse(history));
-      } else {
-        setRecentSearches([]);
+      if (history) setRecentSearches(JSON.parse(history));
+      else setRecentSearches([]);
+    } catch (e) { setRecentSearches([]); }
+  };
+
+  const fetchNotesFromCloud = async (username) => {
+    const localNotes = localStorage.getItem(`notes_${username}`);
+    if (localNotes) setUserNotes(localNotes);
+
+    if (db && auth?.currentUser) {
+      try {
+        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'notes', username);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists() && docSnap.data().content) {
+          setUserNotes(docSnap.data().content);
+          localStorage.setItem(`notes_${username}`, docSnap.data().content);
+        }
+      } catch (error) { console.error(error); }
+    }
+  };
+
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(async () => {
+      if (currentUser) {
+        localStorage.setItem(`notes_${currentUser.username}`, userNotes);
+        if (db && auth?.currentUser) {
+          setIsSaving(true);
+          try {
+            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'notes', currentUser.username);
+            await setDoc(docRef, {
+              content: userNotes,
+              lastUpdated: new Date().toISOString(),
+              author: currentUser.name,
+              username: currentUser.username
+            }, { merge: true });
+          } catch (error) { console.error(error); } 
+          finally { setIsSaving(false); }
+        }
       }
-    } catch (e) {
-      setRecentSearches([]);
-    }
-  };
+    }, 1500);
+    return () => clearTimeout(delayDebounceFn);
+  }, [userNotes, currentUser]);
 
-  // Função para carregar notas do LocalStorage
-  const loadNotes = (username) => {
-    try {
-      const notes = localStorage.getItem(`notes_${username}`);
-      setUserNotes(notes || '');
-    } catch (e) {
-      setUserNotes('');
-    }
-  };
+  const handleNoteChange = (e) => setUserNotes(e.target.value);
 
-  // Função para salvar notas (chamada a cada alteração)
-  const handleNoteChange = (e) => {
-    const text = e.target.value;
-    setUserNotes(text);
-    if (currentUser) {
-      localStorage.setItem(`notes_${currentUser.username}`, text);
-    }
-  };
-
-  // Função de Login Baseada na Lista Hardcoded
   const handleLogin = (e) => {
-    e.preventDefault(); // Previne recarregamento do formulário
+    e.preventDefault();
     setLoginError('');
-
-    // Busca o usuário na lista de autorizados
-    const foundUser = AUTHORIZED_USERS.find(
-      u => u.username.toLowerCase() === usernameInput.toLowerCase() && u.password === passwordInput
-    );
-
+    const foundUser = AUTHORIZED_USERS.find(u => u.username.toLowerCase() === usernameInput.toLowerCase() && u.password === passwordInput);
     if (foundUser) {
-      // Login com sucesso
       setCurrentUser(foundUser);
-      localStorage.setItem('emergency_app_user', JSON.stringify(foundUser)); // Persiste sessão
+      localStorage.setItem('emergency_app_user', JSON.stringify(foundUser));
       loadHistory(foundUser.username);
-      loadNotes(foundUser.username);
       setUsernameInput('');
       setPasswordInput('');
     } else {
-      setLoginError('Usuário ou senha incorretos.');
+      setLoginError('Credenciais inválidas.');
     }
   };
 
@@ -129,136 +211,55 @@ export default function EmergencyGuideApp() {
     localStorage.removeItem('emergency_app_user');
   };
 
-  const roomConfig = {
-    verde: {
-      name: 'Sala Verde',
-      color: 'emerald',
-      accent: 'bg-emerald-500',
-      border: 'border-emerald-500',
-      text: 'text-emerald-800',
-      light: 'bg-emerald-50',
-      icon: <Stethoscope className="w-5 h-5" />,
-      description: 'Baixa Complexidade / Ambulatorial',
-      examples: ['Cefaleia tensional', 'Lombalgia', 'IVAS', 'Gastroenterite']
-    },
-    vermelha: {
-      name: 'Sala Vermelha',
-      color: 'rose',
-      accent: 'bg-rose-600',
-      border: 'border-rose-600',
-      text: 'text-rose-800',
-      light: 'bg-rose-50',
-      icon: <Siren className="w-5 h-5" />,
-      description: 'Emergência / Risco de Vida',
-      examples: ['Sepse', 'IAMCSST', 'AVC', 'Insuficiência Respiratória']
-    }
-  };
-
-  const showError = (msg) => {
-    setErrorMsg(msg);
-    setTimeout(() => setErrorMsg(''), 4000);
-  };
-
-  const saveToHistory = (newSearchTerm, room) => {
-    if (!currentUser) return;
-
-    const newEntry = { 
-      query: newSearchTerm, 
-      room: room, 
-      timestamp: new Date().toISOString() 
-    };
-
-    const currentHistory = recentSearches.filter(s => s.query.toLowerCase() !== newSearchTerm.toLowerCase());
-    const updatedHistory = [newEntry, ...currentHistory].slice(0, 10);
-    
-    setRecentSearches(updatedHistory);
-    
-    // Salva no LocalStorage vinculado ao usuário
-    localStorage.setItem(`history_${currentUser.username}`, JSON.stringify(updatedHistory));
-  };
-
   const generateConduct = async () => {
     if (!searchQuery.trim()) {
-      showError('Por favor, digite uma condição clínica para buscar.');
+      showError('Digite uma condição clínica.');
       return;
     }
-
     setLoading(true);
     setConduct(null);
     setErrorMsg('');
 
-    const roomContext = activeRoom === 'verde' 
-      ? 'sala verde (baixa complexidade, ambulatorial/urgência menor)' 
-      : 'sala vermelha (alta complexidade, emergência/risco de vida)';
-
-    const roomClassification = activeRoom === 'verde' ? 'Baixa complexidade' : 'Alta complexidade/Emergência';
-
-    const prescriptionGuidance = activeRoom === 'verde'
-      ? 'DIRETRIZ IMPORTANTE: Como é Sala Verde, dê PREFERÊNCIA para medicações via ORAL (VO) ou IM na primeira linha de tratamento visando a alta do paciente. Use EV apenas se estritamente necessário para controle álgico intenso ou se houver falha da VO (deixe o EV claro no escalonamento).'
-      : 'DIRETRIZ: Priorize a via mais eficaz e rápida para estabilização (geralmente EV).';
-
-    const promptText = `Você é um assistente médico sênior especializado em medicina de emergência.
+    const roomContext = activeRoom === 'verde' ? 'SALA VERDE (AMBULATORIAL)' : 'SALA VERMELHA (EMERGÊNCIA)';
     
-    TAREFA: Forneça uma conduta clínica COMPLETA para "${searchQuery}" na ${roomContext}.
-    ${prescriptionGuidance}
-
-    DETECÇÃO DE ESTADIAMENTO/CLASSIFICAÇÃO:
-    Se a doença possui classificações formais (ex: Dengue A/B/C/D, Asma GINA, ICC NYHA, Pneumonia CURB-65):
-    1. Se o usuário especificou (ex: "Dengue C"), siga estritamente esse estadiamento.
-    2. Se o usuário NÃO especificou (ex: "Dengue"), assuma o estadiamento mais provável para a SALA ATUAL (${activeRoom === 'verde' ? 'Leve/Moderado' : 'Grave/Emergência'}) e indique isso claramente no campo 'estadiamento'.
+    // PROMPT AJUSTADO: FORÇA LISTAS SEPARADAS E JSON ESTRUTURADO
+    const promptText = `Atue como médico especialista em emergência.
+    Gere conduta para "${searchQuery}" na ${roomContext}.
     
-    Retorne APENAS um JSON com esta estrutura exata:
+    REGRAS:
+    1. Retorne JSON puro.
+    2. "tratamento_medicamentoso": Array de objetos. Cada droga é um objeto separado.
+    3. "criterios_internacao" e "criterios_alta": LISTAS OBRIGATÓRIAS. Se não houver, escreva "A critério clínico" mas não deixe vazio.
+    4. Priorize segurança e clareza.
+    
+    JSON SCHEMA:
     {
-      "condicao": "Nome da condição",
-      "estadiamento": "Classificação Específica usada nesta conduta (ex: 'Grupo B', 'GINA Step 2'). Se não houver, null.",
-      "classificacao": "${roomClassification}",
-      "resumo_clinico": "Resumo narrativo do quadro típico.",
-      "apresentacao_tipica": {
-        "sintomas_principais": ["..."],
-        "sinais_fisicos": ["..."],
-        "tempo_evolucao": "..."
-      },
-      "achados_exames": {
-        "ecg": "...",
-        "raio_x": "...",
-        "laboratorio": "...",
-        "outros_exames": "..."
-      },
-      "avaliacao_inicial": {
-        "sinais_vitais_especificos": ["PA alvo...", "SatO2 alvo..."],
-        "exames_obrigatorios": ["..."],
-        "exames_complementares": ["..."]
-      },
-      "criterios_gravidade": ["Sinal de alarme 1", "..."],
+      "condicao": "Nome",
+      "estadiamento": "Classificação (ex: Sepse Grave)",
+      "classificacao": "${roomContext}",
+      "resumo_clinico": "Texto curto",
+      "apresentacao_tipica": { "sintomas_principais": [], "sinais_fisicos": [] },
+      "achados_exames": { "ecg": "...", "raio_x": "...", "laboratorio": "..." },
+      "avaliacao_inicial": { "sinais_vitais_especificos": [], "exames_obrigatorios": [] },
+      "criterios_gravidade": ["Red flag 1", "Red flag 2"],
       "tratamento_medicamentoso": [
-        {
-          "linha": "1ª Linha",
-          "farmaco": "NOME",
-          "apresentacao": "Liste as formas disponíveis úteis (ex: Comp 500mg, Gts 200mg/ml, Amp 10mg/2ml).",
-          "indicacao": "Dor/Infecção",
-          "diluicao": "Instrução DESTAQUE sobre diluição. Se EV: 'Diluir X mg em Y ml de SF0.9%'. Se NÃO precisar diluir: 'Não necessário (motivo: bolus/uso direto/IM)'.",
-          "posologia": "Dose + Velocidade de Infusão + Frequência (Evite repetir a diluição aqui se já estiver no campo acima)",
-          "via_administracao": "EV/VO",
-          "tempo_infusao": "...",
-          "cuidados": "...",
-          "observacoes": "..."
-        }
+        { "farmaco": "Nome", "posologia": "Dose/Freq", "via": "EV/VO", "diluicao": "...", "cuidados": "..." }
       ],
-      "escalonamento_terapeutico": {
-        "primeira_linha": "...",
-        "se_falha": "...",
-        "resgate": "..."
-      },
+      "escalonamento": [
+        { "passo": "1ª Linha", "descricao": "..." },
+        { "passo": "Se falha", "descricao": "..." },
+        { "passo": "Resgate", "descricao": "..." }
+      ],
       "medidas_gerais": ["..."],
-      "criterios_internacao": ["..."],
-      "criterios_alta": ["..."],
-      "guideline_referencia": "Fonte"
-    }
-    SEJA PRAGMÁTICO. Doses para adulto 70kg. JSON puro sem markdown.`;
+      "criterios_internacao": ["Critério 1", "Critério 2"],
+      "criterios_alta": ["Critério 1", "Critério 2"],
+      "bibliografia": "Fonte"
+    }`;
 
     try {
-      const apiKey = (import.meta && import.meta.env) ? import.meta.env.VITE_GEMINI_API_KEY : "";
-      
+      const apiKey = (import.meta.env && import.meta.env.VITE_GEMINI_API_KEY) ? import.meta.env.VITE_GEMINI_API_KEY : "";
+      if(!apiKey) throw new Error("API Key do Gemini não configurada.");
+
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -268,107 +269,75 @@ export default function EmergencyGuideApp() {
         })
       });
 
-      if (!response.ok) throw new Error('Falha na API');
-
+      if (!response.ok) throw new Error('Erro na API');
       const data = await response.json();
-      const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      
-      if (textResponse) {
-        const conductData = JSON.parse(textResponse);
-        setConduct(conductData);
-        saveToHistory(searchQuery, activeRoom);
-        setTimeout(() => {
-          resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, 200);
-      } else {
-        throw new Error('Sem resposta válida');
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text) {
+        setConduct(JSON.parse(text));
+        if(currentUser) saveToHistory(searchQuery, activeRoom);
+        setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
       }
     } catch (error) {
-      console.error('Erro:', error);
-      showError('Erro ao gerar conduta. Tente novamente.');
+      console.error(error);
+      showError(error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const loadRecentSearch = (search) => {
-    setActiveRoom(search.room);
-    setSearchQuery(search.query);
+  const saveToHistory = (term, room) => {
+    const newEntry = { query: term, room, timestamp: new Date().toISOString() };
+    const hist = recentSearches.filter(s => s.query.toLowerCase() !== term.toLowerCase());
+    const updated = [newEntry, ...hist].slice(0, 10);
+    setRecentSearches(updated);
+    localStorage.setItem(`history_${currentUser.username}`, JSON.stringify(updated));
   };
 
-  // --- TELA DE LOGIN (Autenticação Local) ---
+  const showError = (msg) => { setErrorMsg(msg); setTimeout(() => setErrorMsg(''), 4000); };
 
+  const roomConfig = {
+    verde: { name: 'Sala Verde', color: 'emerald', accent: 'bg-emerald-500', border: 'border-emerald-500', text: 'text-emerald-800', light: 'bg-emerald-50', icon: <Stethoscope className="w-5 h-5" />, description: 'Ambulatorial / Baixa Complexidade' },
+    vermelha: { name: 'Sala Vermelha', color: 'rose', accent: 'bg-rose-600', border: 'border-rose-600', text: 'text-rose-800', light: 'bg-rose-50', icon: <Siren className="w-5 h-5" />, description: 'Emergência / Risco de Vida' }
+  };
+
+  // --- TELA DE LOGIN ---
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans text-slate-800">
         <div className="bg-white rounded-3xl shadow-xl border border-gray-100 max-w-md w-full overflow-hidden">
-          
-          <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-8 text-center text-white relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/medical-icons.png')] opacity-10"></div>
-            <div className="relative z-10 flex flex-col items-center">
-              <div className="bg-white/20 p-3 rounded-2xl mb-4 backdrop-blur-sm shadow-lg">
-                <Shield size={32} className="text-white" />
-              </div>
-              <h1 className="text-2xl font-bold mb-1">Guia de Plantão</h1>
-              <p className="text-blue-100 text-sm font-medium">Acesso Restrito a Profissionais</p>
-            </div>
+          <div className="bg-gradient-to-br from-blue-900 to-slate-800 p-8 text-center text-white relative">
+            <Shield size={40} className="mx-auto mb-3 text-blue-300" />
+            <h1 className="text-2xl font-bold mb-1">Guia de Plantão</h1>
+            <p className="text-blue-200 text-sm font-medium">Acesso Exclusivo Médico</p>
           </div>
-
+          
           <div className="p-8 space-y-6">
-            <div className="text-center space-y-2">
-              <h2 className="text-xl font-bold text-slate-800">Autenticação</h2>
-              <p className="text-slate-500 text-sm">Insira suas credenciais institucionais.</p>
-            </div>
-
-            {loginError && (
-              <div className="bg-red-50 text-red-600 p-3 rounded-lg text-xs flex items-center gap-2 border border-red-100 animate-in fade-in">
-                <AlertCircle size={14} />
-                {loginError}
-              </div>
-            )}
-
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Usuário</label>
-                <div className="relative">
-                  <User className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
-                  <input 
-                    type="text"
-                    value={usernameInput}
-                    onChange={(e) => setUsernameInput(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all font-medium text-slate-700"
-                    placeholder="Ex: admin"
-                    autoCapitalize="none"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Senha</label>
-                <div className="relative">
-                  <KeyRound className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
-                  <input 
-                    type="password"
-                    value={passwordInput}
-                    onChange={(e) => setPasswordInput(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all font-medium text-slate-700"
-                    placeholder="••••••"
-                  />
-                </div>
-              </div>
-
-              <button 
-                type="submit"
-                className="w-full flex items-center justify-center gap-3 bg-blue-600 text-white font-bold p-3.5 rounded-xl hover:bg-blue-700 transition-all shadow-md hover:shadow-lg mt-2"
-              >
-                <LogIn className="w-5 h-5" />
-                <span>Entrar</span>
-              </button>
-            </form>
+            {loginError && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-xs flex items-center gap-2 border border-red-100"><AlertCircle size={14} /> {loginError}</div>}
             
-            <div className="text-center">
-              <p className="text-[10px] text-slate-400">
-                Acesso controlado localmente. Contate o administrador em caso de problemas.
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase ml-1">Usuário</label>
+                <div className="relative"><User className="absolute left-3 top-3 text-gray-400 w-5 h-5" /><input type="text" value={usernameInput} onChange={(e)=>setUsernameInput(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-900 focus:outline-none transition-all" placeholder="Ex: admin" /></div>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase ml-1">Senha</label>
+                <div className="relative"><KeyRound className="absolute left-3 top-3 text-gray-400 w-5 h-5" /><input type="password" value={passwordInput} onChange={(e)=>setPasswordInput(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-900 focus:outline-none transition-all" placeholder="••••••" /></div>
+              </div>
+              <button type="submit" className="w-full flex items-center justify-center gap-3 bg-blue-900 text-white font-bold p-3.5 rounded-xl hover:bg-blue-800 transition-all shadow-lg mt-2"><LogIn className="w-5 h-5" /> Acessar Sistema</button>
+            </form>
+
+            <div className="text-center space-y-3 pt-2 border-t border-gray-100">
+              {/* DIAGNÓSTICO DE CONEXÃO PARA O NETLIFY */}
+              <div className={`flex items-center justify-center gap-2 text-[10px] px-3 py-1.5 rounded-full mx-auto w-fit ${configStatus === 'missing' ? 'bg-red-50 text-red-700' : isCloudConnected ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+                {configStatus === 'missing' ? <Settings size={12}/> : isCloudConnected ? <Cloud size={12}/> : <CloudOff size={12}/>}
+                <span>
+                  {configStatus === 'missing' ? 'Erro: Variáveis de Ambiente não configuradas' : 
+                   isCloudConnected ? 'Banco de Dados Conectado' : 'Modo Offline (Sem Sync)'}
+                </span>
+              </div>
+              
+              <p className="text-[10px] text-slate-400 leading-tight max-w-xs mx-auto">
+                ATENÇÃO: Ferramenta auxiliar. Não substitui o julgamento clínico. O autor isenta-se de responsabilidade por condutas tomadas. Uso proibido para leigos.
               </p>
             </div>
           </div>
@@ -378,564 +347,217 @@ export default function EmergencyGuideApp() {
   }
 
   // --- APP PRINCIPAL ---
-
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col font-sans text-slate-800 selection:bg-blue-100">
-      
-      {/* Top Navigation */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="bg-blue-600 p-2 rounded-lg text-white shadow-sm">
-              <ClipboardCheck size={20} />
-            </div>
-            <div className="flex flex-col">
-              <h1 className="text-lg font-bold text-slate-800 leading-none">Guia de Plantão</h1>
-              <span className="text-[11px] text-slate-500 font-medium tracking-wide uppercase mt-0.5">Suporte Clínico Inteligente</span>
-            </div>
+            <div className="bg-blue-900 p-2 rounded-lg text-white"><ClipboardCheck size={20} /></div>
+            <div><h1 className="text-lg font-bold text-slate-800 leading-none">Guia de Plantão</h1><span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Suporte Médico</span></div>
           </div>
-          
-          <div className="flex items-center gap-4">
-             <div className="hidden sm:flex flex-col items-end mr-2">
-               <span className="text-xs font-bold text-slate-700">{currentUser.name}</span>
-               <span className="text-[10px] text-slate-400 uppercase tracking-wider">{currentUser.role}</span>
-             </div>
-             
-             {/* Botão de Bloco de Notas */}
-             <button
-               onClick={() => setShowNotepad(true)}
-               className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all relative group"
-               title="Meu Caderno"
-             >
-                <Edit size={20} />
-                <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
-                  Anotações
-                </span>
-             </button>
-
-             <button 
-               onClick={handleLogout}
-               className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-all"
-               title="Sair"
-             >
-               <LogOut size={20} />
-             </button>
+          <div className="flex items-center gap-3">
+             <div className="hidden sm:flex flex-col items-end mr-2"><span className="text-xs font-bold text-slate-700">{currentUser.name}</span><span className="text-[10px] text-slate-400 uppercase">{currentUser.role}</span></div>
+             <button onClick={() => setShowNotepad(true)} className="p-2 text-slate-600 hover:bg-slate-100 rounded-full" title="Caderno"><Edit size={20} /></button>
+             <button onClick={handleLogout} className="p-2 text-red-400 hover:bg-red-50 rounded-full" title="Sair"><LogOut size={20} /></button>
           </div>
         </div>
       </header>
 
       <main className="flex-grow max-w-6xl mx-auto px-4 py-8 space-y-8 w-full">
-        
-        {/* Context & Search Section */}
+        {/* SELETOR DE SALA E BUSCA */}
         <div className="space-y-6">
-          
-          {/* Room Selector */}
           <div className="grid md:grid-cols-2 gap-4">
             {Object.entries(roomConfig).map(([key, config]) => {
               const isActive = activeRoom === key;
               return (
-                <button
-                  key={key}
-                  onClick={() => setActiveRoom(key)}
-                  className={`
-                    relative flex items-start gap-4 p-5 rounded-xl border-2 text-left transition-all duration-200
-                    ${isActive 
-                      ? `bg-white ${config.border} shadow-md translate-y-[-2px]` 
-                      : 'bg-white border-transparent hover:border-gray-200 shadow-sm hover:shadow-md'
-                    }
-                  `}
-                >
-                  <div className={`
-                    p-3 rounded-xl shrink-0 transition-colors
-                    ${isActive ? `${config.light} ${config.text}` : 'bg-gray-100 text-gray-500'}
-                  `}>
-                    {React.cloneElement(config.icon, { className: "w-6 h-6" })}
-                  </div>
-                  
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <h3 className={`font-bold text-base ${isActive ? 'text-slate-800' : 'text-slate-600'}`}>
-                        {config.name}
-                      </h3>
-                      {isActive && <CheckCircle2 size={18} className={config.text} />}
-                    </div>
-                    <p className="text-sm text-slate-500 mb-2">{config.description}</p>
-                    <div className="flex flex-wrap gap-2">
-                      {config.examples.slice(0,3).map((ex, i) => (
-                        <span key={i} className="text-[11px] px-2 py-0.5 bg-gray-50 border border-gray-100 rounded text-gray-500 truncate max-w-full">
-                          {ex}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
+                <button key={key} onClick={() => setActiveRoom(key)} className={`relative flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all ${isActive ? `bg-white ${config.border} shadow-md ring-1 ring-offset-2 ${config.accent.replace('bg-', 'ring-')}` : 'bg-white border-transparent hover:border-gray-200 shadow-sm'}`}>
+                  <div className={`p-3 rounded-xl ${isActive ? `${config.light} ${config.text}` : 'bg-gray-100 text-gray-400'}`}>{config.icon}</div>
+                  <div><h3 className={`font-bold ${isActive ? 'text-slate-800' : 'text-slate-500'}`}>{config.name}</h3><p className="text-xs text-slate-400">{config.description}</p></div>
+                  {isActive && <CheckCircle2 className={`ml-auto ${config.text}`} size={20} />}
                 </button>
               );
             })}
           </div>
 
-          {/* Search Input */}
-          <div className="bg-white p-1.5 rounded-2xl shadow-lg shadow-gray-200/50 border border-gray-100 flex flex-col sm:flex-row gap-2">
-            <div className="flex-1 relative flex items-center">
-              <Search className="absolute left-4 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && generateConduct()}
-                placeholder="Digite o quadro clínico (ex: Cetoacidose, IAM, Sepse...)"
-                className="w-full pl-12 pr-4 py-3.5 bg-transparent border-none outline-none text-slate-800 placeholder:text-gray-400 font-medium"
-              />
-            </div>
-            <button
-              onClick={generateConduct}
-              disabled={loading}
-              className={`
-                px-8 py-3.5 rounded-xl font-bold text-white transition-all flex items-center justify-center gap-2 shadow-md
-                ${loading 
-                  ? 'bg-slate-300 cursor-wait' 
-                  : 'bg-blue-600 hover:bg-blue-700 hover:shadow-lg active:scale-[0.98]'
-                }
-              `}
-            >
-              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Gerar <ArrowRight className="w-5 h-5" /></>}
-            </button>
+          <div className="bg-white p-2 rounded-2xl shadow-lg border border-gray-100 flex items-center gap-2">
+            <Search className="ml-3 text-gray-400" size={20} />
+            <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && generateConduct()} placeholder="Digite o quadro clínico (ex: Cetoacidose, IAM...)" className="flex-1 py-3 bg-transparent outline-none text-slate-800 font-medium" />
+            <button onClick={generateConduct} disabled={loading} className={`px-6 py-3 rounded-xl font-bold text-white flex items-center gap-2 transition-all ${loading ? 'bg-slate-300' : 'bg-blue-900 hover:bg-blue-800'}`}>{loading ? <Loader2 className="animate-spin" /> : <>Gerar <ArrowRight size={18} /></>}</button>
           </div>
 
-          {/* History Chips */}
           {recentSearches.length > 0 && (
             <div className="flex flex-wrap gap-2 px-1">
-              <div className="flex items-center gap-2 text-xs font-medium text-gray-400 uppercase tracking-wider mr-2">
-                <History size={14} /> Histórico
-              </div>
-              {recentSearches.map((search, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => loadRecentSearch(search)}
-                  className="flex items-center gap-1.5 px-3 py-1 bg-white border border-gray-200 rounded-full text-xs text-slate-600 hover:border-blue-300 hover:text-blue-600 transition-colors shadow-sm"
-                >
-                  <div className={`w-1.5 h-1.5 rounded-full ${search.room === 'verde' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                  {search.query}
-                </button>
-              ))}
+              <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase mr-2"><History size={14} /> Recentes</div>
+              {recentSearches.map((search, idx) => (<button key={idx} onClick={() => {setActiveRoom(search.room); setSearchQuery(search.query);}} className="text-xs px-3 py-1 bg-white border border-gray-200 rounded-full hover:border-blue-300 hover:text-blue-700 transition-colors">{search.query}</button>))}
             </div>
           )}
-          
-          {errorMsg && (
-            <div className="bg-red-50 text-red-700 px-4 py-3 rounded-xl border border-red-100 flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
-              <AlertCircle className="shrink-0" size={20} />
-              <span className="font-medium text-sm">{errorMsg}</span>
-            </div>
-          )}
+          {errorMsg && <div className="bg-red-50 text-red-700 px-4 py-3 rounded-xl border border-red-200 flex items-center gap-3 text-sm font-medium"><AlertCircle size={18} /> {errorMsg}</div>}
         </div>
 
-        {/* Results Area */}
+        {/* RESULTADOS */}
         {conduct && (
-          <div ref={resultsRef} className="animate-in slide-in-from-bottom-8 fade-in duration-500 space-y-6">
-            
-            {/* 1. Title & Context Header */}
-            <div className="flex flex-col gap-4">
-              <div className="flex items-start justify-between">
-                <div>
-                   <div className="flex flex-wrap items-center gap-3 mb-3">
-                      <span className={`px-2.5 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider text-white shadow-sm ${
-                        activeRoom === 'verde' ? 'bg-emerald-500' : 'bg-rose-600'
-                      }`}>
-                        {conduct.classificacao}
-                      </span>
-                      
-                      {/* Staging Badge */}
-                      {conduct.estadiamento && (
-                        <span className="flex items-center gap-1.5 bg-slate-800 text-white px-3 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider shadow-sm">
-                          <Tag size={12} />
-                          {conduct.estadiamento}
-                        </span>
-                      )}
-
-                      {conduct.guideline_referencia && (
-                        <span className="text-xs text-slate-500 flex items-center gap-1.5">
-                          <BookOpen size={14} />
-                          {conduct.guideline_referencia}
-                        </span>
-                      )}
-                   </div>
-                   <h2 className="text-3xl md:text-4xl font-bold text-slate-800 tracking-tight leading-tight">
-                     {conduct.condicao}
-                     {conduct.estadiamento && <span className="block md:inline md:ml-3 text-lg md:text-2xl font-normal text-slate-500">{conduct.estadiamento}</span>}
-                   </h2>
-                </div>
-                
-                <button 
-                  onClick={() => { setConduct(null); setSearchQuery(''); }}
-                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors shrink-0"
-                >
-                  <X size={24} />
-                </button>
-              </div>
-
-              {/* Clinical Summary */}
-              <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 text-slate-700 leading-relaxed">
-                <div className="flex gap-3">
-                  <User className="text-blue-500 shrink-0 mt-1" size={20} />
-                  <div>
-                    <span className="font-bold text-slate-900 block mb-1">Quadro Clínico Típico {conduct.estadiamento ? `(${conduct.estadiamento})` : ''}</span>
-                    {conduct.resumo_clinico}
+          <div ref={resultsRef} className="animate-in slide-in-from-bottom-4 fade-in duration-500 space-y-6">
+            {/* CABEÇALHO */}
+            <div className="flex justify-between items-start">
+               <div>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase text-white ${activeRoom === 'verde' ? 'bg-emerald-500' : 'bg-rose-600'}`}>{conduct.classificacao}</span>
+                     {conduct.estadiamento && <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-800 text-white">{conduct.estadiamento}</span>}
                   </div>
-                </div>
-              </div>
+                  <h2 className="text-3xl font-bold text-slate-800">{conduct.condicao}</h2>
+               </div>
+               <button onClick={() => setConduct(null)} className="p-2 hover:bg-gray-200 rounded-full text-gray-500"><X size={24}/></button>
             </div>
 
-            {/* 2. Red Flags Banner (High Priority) */}
+            {/* RESUMO */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex gap-4">
+               <div className="bg-blue-50 p-2 rounded-full h-fit text-blue-600"><User size={24} /></div>
+               <div><h3 className="font-bold text-slate-900 mb-1">Resumo Clínico</h3><p className="text-slate-600 leading-relaxed">{conduct.resumo_clinico}</p></div>
+            </div>
+
+            {/* RED FLAGS */}
             {conduct.criterios_gravidade?.length > 0 && (
-              <div className="bg-rose-50 border border-rose-100 rounded-2xl p-5 shadow-sm">
-                <h3 className="text-rose-800 font-bold flex items-center gap-2 mb-3">
-                  <AlertTriangle className="w-5 h-5" />
-                  SINAIS DE ALARME (RED FLAGS)
-                </h3>
+              <div className="bg-rose-50 border border-rose-100 p-5 rounded-2xl">
+                <h3 className="text-rose-800 font-bold flex items-center gap-2 mb-3 text-sm uppercase"><AlertTriangle size={18}/> Sinais de Alarme (Red Flags)</h3>
                 <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-3">
                   {conduct.criterios_gravidade.map((crit, i) => (
-                    <div key={i} className="flex items-start gap-2 bg-white/60 p-2.5 rounded-lg border border-rose-100/50">
-                      <AlertCircle size={16} className="text-rose-600 mt-0.5 shrink-0" />
-                      <span className="text-sm text-rose-800 font-medium leading-snug">{crit}</span>
+                    <div key={i} className="bg-white/80 p-2.5 rounded-lg border border-rose-100/50 text-sm text-rose-900 font-medium flex gap-2">
+                      <div className="mt-1 w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"/>{crit}
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* 3. Main Content Grid */}
             <div className="grid lg:grid-cols-12 gap-6 items-start">
-              
-              {/* LEFT COLUMN (Diagnostics) - Span 4 */}
+              {/* ESQUERDA: DIAGNÓSTICO */}
               <div className="lg:col-span-4 space-y-6">
-                
-                {/* Evaluation Card */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                   <div className="bg-indigo-50/50 px-5 py-3 border-b border-indigo-50 flex items-center gap-2">
-                      <Activity className="w-5 h-5 text-indigo-600" />
-                      <h3 className="font-bold text-indigo-900 text-sm uppercase tracking-wide">Avaliação Inicial</h3>
-                   </div>
-                   
-                   <div className="p-5 space-y-5">
-                      {/* Vitals */}
+                   <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center gap-2"><Activity size={18} className="text-slate-500"/><h3 className="font-bold text-slate-700 text-sm uppercase">Avaliação Inicial</h3></div>
+                   <div className="p-5 space-y-4 text-sm">
                       {conduct.avaliacao_inicial?.sinais_vitais_especificos && (
-                        <div>
-                          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Alvos Terapêuticos</span>
-                          <div className="flex flex-wrap gap-2">
-                            {conduct.avaliacao_inicial.sinais_vitais_especificos.map((s, i) => (
-                              <span key={i} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-100">
-                                <Activity size={12} /> {s}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
+                        <div><span className="text-xs font-bold text-slate-400 uppercase block mb-2">Alvos Terapêuticos</span>
+                        <div className="flex flex-wrap gap-2">{conduct.avaliacao_inicial.sinais_vitais_especificos.map((s,i)=><span key={i} className="bg-slate-100 px-2 py-1 rounded text-slate-600 border border-slate-200">{s}</span>)}</div></div>
                       )}
-                      
-                      {/* Exams List */}
-                      {(conduct.avaliacao_inicial?.exames_obrigatorios || conduct.avaliacao_inicial?.exames_complementares) && (
-                          <div className="space-y-3">
-                             <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Solicitação de Exames</span>
-                             <ul className="space-y-2">
-                               {conduct.avaliacao_inicial?.exames_obrigatorios?.map((ex, i) => (
-                                 <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
-                                   <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
-                                   <span className="font-medium">{ex}</span>
-                                 </li>
-                               ))}
-                               {conduct.avaliacao_inicial?.exames_complementares?.map((ex, i) => (
-                                 <li key={i} className="flex items-start gap-2 text-sm text-slate-500">
-                                   <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
-                                   <span>{ex} (opcional)</span>
-                                 </li>
-                               ))}
-                             </ul>
-                          </div>
+                      {conduct.avaliacao_inicial?.exames_obrigatorios && (
+                        <div><span className="text-xs font-bold text-slate-400 uppercase block mb-2">Exames</span>
+                        <ul className="space-y-1">{conduct.avaliacao_inicial.exames_obrigatorios.map((ex,i)=><li key={i} className="flex gap-2 items-start"><div className="mt-1.5 w-1 h-1 bg-slate-400 rounded-full"/>{ex}</li>)}</ul></div>
                       )}
                    </div>
                 </div>
-
-                {/* Diagnostic Findings Card */}
+                
+                {/* CRITÉRIOS DE DESFECHO (MOVIDO PARA CÁ PARA TER DESTAQUE) */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                   <div className="bg-blue-50/50 px-5 py-3 border-b border-blue-50 flex items-center gap-2">
-                      <Search className="w-5 h-5 text-blue-600" />
-                      <h3 className="font-bold text-blue-900 text-sm uppercase tracking-wide">Achados Típicos</h3>
-                   </div>
-                   <div className="p-5 space-y-4">
-                      {Object.entries(conduct.achados_exames || {}).map(([key, value]) => {
-                          if(!value) return null;
-                          const map = { ecg: 'ECG', raio_x: 'Imagem', laboratorio: 'Laboratório', outros_exames: 'Outros' };
-                          return (
-                            <div key={key} className="text-sm">
-                              <span className="font-bold text-slate-700 block mb-1">{map[key]}</span>
-                              <p className="text-slate-600 leading-snug bg-gray-50 p-3 rounded-lg border border-gray-100">{value}</p>
-                            </div>
-                          )
-                      })}
-                      
-                      {/* Signs & Symptoms in Diagnostics Card to save space */}
-                      {conduct.apresentacao_tipica && (
-                        <div className="pt-4 border-t border-gray-100">
-                          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-2">Sinais Físicos</span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {conduct.apresentacao_tipica.sinais_fisicos?.map((s, i) => (
-                              <span key={i} className="px-2 py-1 bg-slate-100 text-slate-600 text-xs rounded border border-slate-200">{s}</span>
-                            ))}
-                          </div>
+                   <div className="bg-indigo-50 px-5 py-3 border-b border-indigo-100 flex items-center gap-2"><FileText size={18} className="text-indigo-600"/><h3 className="font-bold text-indigo-900 text-sm uppercase">Critérios de Desfecho</h3></div>
+                   <div className="p-5 space-y-4 text-sm">
+                      {conduct.criterios_internacao && (
+                        <div className="bg-amber-50 p-3 rounded-lg border border-amber-100">
+                          <span className="text-xs font-bold text-amber-800 uppercase block mb-1">Internação / UTI</span>
+                          <ul className="space-y-1">{conduct.criterios_internacao.map((c,i)=><li key={i} className="text-amber-900 flex gap-2"><div className="mt-1.5 w-1 h-1 bg-amber-500 rounded-full shrink-0"/>{c}</li>)}</ul>
+                        </div>
+                      )}
+                      {conduct.criterios_alta && (
+                        <div className="bg-green-50 p-3 rounded-lg border border-green-100">
+                          <span className="text-xs font-bold text-green-800 uppercase block mb-1">Critérios de Alta</span>
+                          <ul className="space-y-1">{conduct.criterios_alta.map((c,i)=><li key={i} className="text-green-900 flex gap-2"><div className="mt-1.5 w-1 h-1 bg-green-500 rounded-full shrink-0"/>{c}</li>)}</ul>
                         </div>
                       )}
                    </div>
                 </div>
-
               </div>
 
-              {/* RIGHT COLUMN (Conduct) - Span 8 */}
+              {/* DIREITA: CONDUTA */}
               <div className="lg:col-span-8 space-y-6">
-                
-                {/* Medication Section - The Core */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden ring-1 ring-emerald-100">
-                   <div className="bg-emerald-50/80 px-6 py-4 border-b border-emerald-100 flex items-center justify-between">
-                      <div className="flex items-center gap-2.5">
-                        <div className="bg-emerald-100 p-1.5 rounded-lg text-emerald-700">
-                          <Pill className="w-5 h-5" />
-                        </div>
-                        <h3 className="font-bold text-emerald-900 text-base">Conduta Medicamentosa</h3>
-                      </div>
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 bg-emerald-100 px-2 py-1 rounded">Prescrição</span>
+                {/* MEDICAMENTOS SEPARADOS EM CARDS */}
+                <div className="space-y-4">
+                   <div className="flex items-center gap-2 text-emerald-800 mb-2 px-2">
+                      <div className="bg-emerald-100 p-1.5 rounded"><Pill size={18}/></div>
+                      <h3 className="font-bold text-lg">Prescrição e Conduta</h3>
                    </div>
                    
-                   <div className="divide-y divide-gray-100">
-                      {conduct.tratamento_medicamentoso?.map((med, idx) => (
-                        <div key={idx} className="p-6 hover:bg-gray-50 transition-colors group">
-                           <div className="flex flex-col md:flex-row md:items-start gap-4 justify-between mb-3">
-                              <div className="flex-1">
-                                <div className="flex items-baseline gap-3">
-                                  <h4 className="text-xl font-bold text-slate-800">{med.farmaco}</h4>
-                                  {med.linha && (
-                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 uppercase tracking-wide border border-slate-200">
-                                      {med.linha}
-                                    </span>
-                                  )}
-                                </div>
-                                
-                                {/* Presentation / Form (New Feature) */}
-                                {med.apresentacao && (
-                                  <div className="flex items-center gap-1.5 text-xs font-medium text-slate-600 mt-1 bg-slate-100 px-2 py-1 rounded w-fit">
-                                     <Package size={12} className="text-slate-400" />
-                                     <span>{med.apresentacao}</span>
-                                  </div>
-                                )}
-
-                                <p className="text-sm text-slate-500 italic mt-1">{med.indicacao}</p>
+                   {conduct.tratamento_medicamentoso?.map((med, idx) => (
+                     <div key={idx} className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+                        <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-emerald-500"></div>
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 mb-3 pl-3">
+                           <div>
+                              <div className="flex items-center gap-2">
+                                 <h4 className="text-xl font-bold text-slate-800">{med.farmaco}</h4>
+                                 {med.linha && <span className="text-[10px] font-bold bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-slate-600">{med.linha}</span>}
                               </div>
-                              
-                              {/* Administration Tag */}
-                              {(med.via_administracao || med.tempo_infusao) && (
-                                <div className="flex items-center gap-3 text-xs font-medium text-slate-500 bg-white border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm shrink-0">
-                                   {med.via_administracao && <span>Via: <b className="text-slate-700">{med.via_administracao}</b></span>}
-                                   {med.tempo_infusao && med.tempo_infusao !== 'N/A' && (
-                                     <>
-                                      <span className="w-px h-3 bg-gray-300" />
-                                      <span>Tempo: <b className="text-slate-700">{med.tempo_infusao}</b></span>
-                                     </>
-                                   )}
-                                </div>
-                              )}
+                              <span className="text-sm text-slate-500 italic">{med.indicacao}</span>
                            </div>
+                           {med.via && <span className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-100">{med.via}</span>}
+                        </div>
+                        
+                        <div className="bg-slate-50 rounded-lg p-3 ml-3 mb-3 font-mono text-sm text-slate-700 border border-slate-100">
+                           {med.posologia}
+                        </div>
+                        
+                        <div className="grid sm:grid-cols-2 gap-4 ml-3 text-sm">
+                           {med.diluicao && <div className="flex gap-2 text-blue-700"><FlaskConical size={16} className="shrink-0 mt-0.5"/><span><strong>Preparo:</strong> {med.diluicao}</span></div>}
+                           {med.cuidados && <div className="flex gap-2 text-amber-700"><AlertTriangle size={16} className="shrink-0 mt-0.5"/><span><strong>Atenção:</strong> {med.cuidados}</span></div>}
+                        </div>
+                     </div>
+                   ))}
+                </div>
 
-                           {/* Dilution Block */}
-                           {med.diluicao && (
-                             <div className="mb-3 flex items-start gap-3 bg-cyan-50 border border-cyan-100 rounded-xl p-3">
-                                <FlaskConical size={18} className="text-cyan-600 mt-0.5 shrink-0" />
-                                <div>
-                                   <span className="text-[10px] font-bold text-cyan-700 uppercase block mb-0.5">Diluição / Preparo</span>
-                                   <p className="text-sm font-medium text-cyan-900">{med.diluicao}</p>
-                                </div>
-                             </div>
-                           )}
-
-                           {/* Posology Box */}
-                           <div className="bg-emerald-50/50 border border-emerald-100 rounded-xl p-4 mb-3 relative">
-                              <div className="absolute left-0 top-4 bottom-4 w-1 bg-emerald-400 rounded-r"></div>
-                              <p className="text-emerald-950 font-mono text-[15px] font-medium leading-relaxed pl-2">
-                                {med.posologia}
-                              </p>
+                {/* ESCALONAMENTO PASSO A PASSO */}
+                <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+                   <h3 className="font-bold text-slate-800 mb-5 flex items-center gap-2"><ArrowRight className="text-purple-600"/> Fluxo de Escalonamento</h3>
+                   <div className="space-y-6 relative">
+                      <div className="absolute left-3.5 top-2 bottom-2 w-0.5 bg-slate-100"></div>
+                      {conduct.escalonamento && conduct.escalonamento.map((step, i) => (
+                        <div key={i} className="relative flex gap-4">
+                           <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 z-10 ring-4 ring-white ${i===0 ? 'bg-purple-100 text-purple-700' : i===1 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>
+                              {i+1}
                            </div>
-
-                           {/* Warnings & Notes */}
-                           <div className="grid sm:grid-cols-2 gap-4 text-sm">
-                              {med.cuidados && (
-                                <div className="flex gap-2 text-amber-700">
-                                  <AlertTriangle size={16} className="shrink-0 mt-0.5" />
-                                  <span>{med.cuidados}</span>
-                                </div>
-                              )}
-                              {med.observacoes && (
-                                <div className="flex gap-2 text-slate-500">
-                                  <FileText size={16} className="shrink-0 mt-0.5" />
-                                  <span>{med.observacoes}</span>
-                                </div>
-                              )}
+                           <div className="pt-1">
+                              <h4 className="text-xs font-bold uppercase text-slate-400 mb-1">{step.passo}</h4>
+                              <p className="text-slate-700 leading-relaxed">{step.descricao}</p>
                            </div>
                         </div>
                       ))}
                    </div>
                 </div>
-
-                {/* Bottom Row: Escalation & Disposition */}
-                <div className="grid md:grid-cols-2 gap-6">
-                   
-                   {/* Escalation */}
-                   <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 h-full">
-                      <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2 text-sm uppercase tracking-wide">
-                        <ArrowRight className="w-4 h-4 text-purple-600" />
-                        Fluxo de Escalonamento
-                      </h3>
-                      <div className="space-y-4 relative">
-                         {/* Connecting Line */}
-                         <div className="absolute left-2.5 top-2 bottom-2 w-0.5 bg-gray-100" />
-                         
-                         <StepItem 
-                           number="1" 
-                           title="Primeira Linha" 
-                           content={conduct.escalonamento_terapeutico?.primeira_linha} 
-                           color="purple" 
-                         />
-                         <StepItem 
-                           number="2" 
-                           title="Se Falha Terapêutica" 
-                           content={conduct.escalonamento_terapeutico?.se_falha} 
-                           color="amber" 
-                         />
-                         <StepItem 
-                           number="3" 
-                           title="Resgate / Avançado" 
-                           content={conduct.escalonamento_terapeutico?.resgate} 
-                           color="rose" 
-                         />
-                      </div>
-                   </div>
-
-                   {/* Disposition & Measures */}
-                   <div className="space-y-6">
-                      
-                      {/* General Measures */}
-                      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
-                         <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2 text-sm uppercase tracking-wide">
-                            <ClipboardCheck className="w-4 h-4 text-slate-600" />
-                            Medidas Gerais
-                         </h3>
-                         <ul className="space-y-2">
-                            {conduct.medidas_gerais?.map((m, i) => (
-                              <li key={i} className="flex items-start gap-2 text-sm text-slate-600">
-                                <CheckCircle2 className="w-4 h-4 text-slate-300 mt-0.5 shrink-0" />
-                                <span>{m}</span>
-                              </li>
-                            ))}
-                         </ul>
-                      </div>
-
-                      {/* Disposition */}
-                      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
-                         <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2 text-sm uppercase tracking-wide">
-                            <FileText className="w-4 h-4 text-cyan-600" />
-                            Critérios de Desfecho
-                         </h3>
-                         <div className="space-y-3">
-                            {conduct.criterios_alta?.length > 0 && (
-                               <div className="bg-green-50 p-3 rounded-xl border border-green-100">
-                                  <span className="text-[10px] font-bold text-green-800 uppercase block mb-1">Alta Segura</span>
-                                  <p className="text-xs text-green-900 leading-snug">{conduct.criterios_alta.join('. ')}</p>
-                                </div>
-                            )}
-                            {conduct.criterios_internacao?.length > 0 && (
-                               <div className="bg-amber-50 p-3 rounded-xl border border-amber-100">
-                                  <span className="text-[10px] font-bold text-amber-800 uppercase block mb-1">Internação</span>
-                                  <p className="text-xs text-amber-900 leading-snug">{conduct.criterios_internacao.join('. ')}</p>
-                               </div>
-                            )}
-                         </div>
-                      </div>
-
-                   </div>
-                </div>
-
               </div>
             </div>
           </div>
         )}
       </main>
 
-      {/* Footer / Copyright / Disclaimer Section */}
+      {/* RODAPÉ REFORÇADO */}
       <footer className="bg-white border-t border-gray-200 mt-auto">
-        <div className="max-w-4xl mx-auto px-4 py-8">
-          
-          {/* AI Warning Box */}
-          <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 mb-6 flex gap-4 items-start">
-             <ShieldAlert className="text-amber-600 shrink-0 w-6 h-6 mt-1" />
-             <div className="space-y-2">
-               <h4 className="text-sm font-bold text-amber-800 uppercase tracking-wide">Aviso Legal Importante</h4>
-               <p className="text-xs text-amber-900/80 leading-relaxed text-justify">
-                 Esta ferramenta utiliza <strong>Inteligência Artificial</strong> para fornecer suporte rápido à decisão clínica. 
-                 Embora baseada em protocolos médicos, <strong>o conteúdo gerado pode conter imprecisões</strong> e não substitui o julgamento clínico profissional, 
-                 a anamnese detalhada, o exame físico ou os protocolos institucionais locais.
-               </p>
-               <p className="text-xs font-bold text-amber-800">
-                 O uso é estritamente restrito a médicos e profissionais de saúde. Não utilize para autodiagnóstico.
-                 O autor e a EmergencyCorp não se responsabilizam por condutas tomadas com base unicamente nesta ferramenta.
+        <div className="max-w-4xl mx-auto px-4 py-8 text-center">
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 flex flex-col md:flex-row gap-4 items-center text-left">
+             <ShieldAlert className="text-amber-600 shrink-0 w-8 h-8" />
+             <div>
+               <h4 className="font-bold text-amber-900 uppercase text-sm mb-1">Aviso Legal Importante</h4>
+               <p className="text-xs text-amber-800/90 leading-relaxed text-justify">
+                 Esta é uma ferramenta de <strong>guia de plantão</strong> baseada em inteligência artificial. 
+                 <strong>NÃO DEVE SER UTILIZADA POR LEIGOS</strong>. O conteúdo pode conter imprecisões ou desatualizações.
+                 Médicos que utilizarem esta ferramenta devem tomar condutas baseados <strong>exclusivamente em sua própria expertise e julgamento clínico</strong>.
+                 O autor e a plataforma isentam-se de qualquer responsabilidade por danos decorrentes do uso destas informações.
                </p>
              </div>
           </div>
-
-          <div className="text-center space-y-2">
-            <p className="text-sm font-semibold text-slate-500">
-              &copy; {new Date().getFullYear()} EmergencyCorp. Todos os direitos reservados.
-            </p>
-            <p className="text-[10px] text-slate-400 uppercase tracking-widest">
-              Emergency Clinical Support System v2.0
-            </p>
-          </div>
-
+          <p className="text-xs text-slate-400">&copy; {new Date().getFullYear()} EmergencyCorp. Todos os direitos reservados.</p>
         </div>
       </footer>
 
       {/* MODAL DE BLOCO DE NOTAS */}
       {showNotepad && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col h-[80vh] animate-in zoom-in-95 duration-200 overflow-hidden">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col h-[80vh] overflow-hidden">
             <div className="bg-gray-50 p-4 border-b border-gray-200 flex justify-between items-center">
               <div className="flex items-center gap-3">
-                 <div className="bg-blue-100 p-2 rounded-lg text-blue-600">
-                    <Edit size={20} />
-                 </div>
-                 <div>
-                    <h3 className="font-bold text-slate-800 leading-none">Meu Caderno de Plantão</h3>
-                    <p className="text-xs text-slate-500 mt-1">
-                      Anotações privadas de {currentUser?.name}
-                    </p>
-                 </div>
+                 <div className="bg-blue-100 p-2 rounded-lg text-blue-600"><Edit size={20} /></div>
+                 <div><h3 className="font-bold text-slate-800 leading-none">Meu Caderno</h3><div className="flex items-center gap-2 mt-1"><span className="text-xs text-slate-500">Anotações de {currentUser?.name}</span><span className="text-gray-300">•</span>{isCloudConnected ? (<span className="flex items-center gap-1 text-[10px] text-green-600 font-medium"><Cloud size={10} /> Nuvem Ativa</span>) : (<span className="flex items-center gap-1 text-[10px] text-amber-600 font-medium"><CloudOff size={10} /> Offline</span>)}</div></div>
               </div>
-              <button 
-                onClick={() => setShowNotepad(false)}
-                className="p-2 hover:bg-gray-200 rounded-full text-gray-500 transition-colors"
-              >
-                <X size={20} />
-              </button>
+              <button onClick={() => setShowNotepad(false)} className="p-2 hover:bg-gray-200 rounded-full text-gray-500 transition-colors"><X size={20} /></button>
             </div>
-            
-            <div className="flex-1 bg-yellow-50 relative">
-              <textarea
-                className="w-full h-full p-6 resize-none focus:outline-none text-slate-700 leading-relaxed bg-transparent text-lg font-medium font-serif"
-                placeholder="Escreva suas anotações pessoais, pendências ou lembretes aqui..."
-                value={userNotes}
-                onChange={handleNoteChange}
-                style={{ backgroundImage: 'linear-gradient(transparent, transparent 31px, #e5e7eb 31px)', backgroundSize: '100% 32px', lineHeight: '32px' }}
-              />
-            </div>
-            
+            <div className="flex-1 bg-yellow-50 relative"><textarea className="w-full h-full p-6 resize-none focus:outline-none text-slate-700 leading-relaxed bg-transparent text-lg font-medium font-serif" placeholder="Escreva suas anotações..." value={userNotes} onChange={handleNoteChange} style={{ backgroundImage: 'linear-gradient(transparent, transparent 31px, #e5e7eb 31px)', backgroundSize: '100% 32px', lineHeight: '32px' }} /></div>
             <div className="p-3 bg-white border-t border-gray-200 flex justify-between items-center text-xs text-gray-500">
-               <div className="flex items-center gap-1.5">
-                  <Save size={14} className="text-green-600" />
-                  <span>Salvo automaticamente</span>
-               </div>
+               <div className="flex items-center gap-1.5">{isSaving ? (<><Loader2 size={14} className="text-blue-600 animate-spin" /><span className="text-blue-600">Salvando...</span></>) : (<><Save size={14} className="text-green-600" /><span>{isCloudConnected ? "Salvo na nuvem" : "Salvo localmente"}</span></>)}</div>
                <span>{userNotes.length} caracteres</span>
             </div>
           </div>
@@ -943,30 +565,4 @@ export default function EmergencyGuideApp() {
       )}
     </div>
   );
-}
-
-// Components
-function StepItem({ number, title, content, color }) {
-   if (!content) return null;
-   
-   const colors = {
-     purple: "bg-purple-100 text-purple-700 ring-purple-200",
-     amber: "bg-amber-100 text-amber-700 ring-amber-200",
-     rose: "bg-rose-100 text-rose-700 ring-rose-200"
-   };
-   
-   return (
-     <div className="relative flex gap-3">
-        <div className={`
-           w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 z-10 ring-2 ring-offset-2 ring-offset-white
-           ${colors[color]}
-        `}>
-           {number}
-        </div>
-        <div className="pb-1">
-           <p className="text-xs font-bold text-gray-500 uppercase mb-0.5">{title}</p>
-           <p className="text-sm text-slate-700 leading-snug">{content}</p>
-        </div>
-     </div>
-   )
 }
