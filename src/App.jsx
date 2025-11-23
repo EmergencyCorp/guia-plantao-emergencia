@@ -86,12 +86,12 @@ export default function EmergencyGuideApp() {
   const [loading, setLoading] = useState(false);
   const [conduct, setConduct] = useState(null);
   const [recentSearches, setRecentSearches] = useState([]);
-  const [favorites, setFavorites] = useState([]); // Estado para lista de favoritos
+  const [favorites, setFavorites] = useState([]);
   const [errorMsg, setErrorMsg] = useState('');
   const resultsRef = useRef(null);
 
   const [showNotepad, setShowNotepad] = useState(false);
-  const [showFavoritesModal, setShowFavoritesModal] = useState(false); // Modal de favoritos
+  const [showFavoritesModal, setShowFavoritesModal] = useState(false);
   const [userNotes, setUserNotes] = useState('');
 
   const [selectedPrescriptionItems, setSelectedPrescriptionItems] = useState([]);
@@ -146,7 +146,7 @@ export default function EmergencyGuideApp() {
     if (currentUser && isCloudConnected) {
       fetchNotesFromCloud(currentUser.username);
       fetchHistoryFromCloud(currentUser.username);
-      subscribeToFavorites(currentUser.username); // Listener em tempo real para favoritos
+      subscribeToFavorites(currentUser.username);
     } else if (currentUser) {
       const localNotes = localStorage.getItem(`notes_${currentUser.username}`);
       if (localNotes) setUserNotes(localNotes);
@@ -158,7 +158,6 @@ export default function EmergencyGuideApp() {
     setSelectedPrescriptionItems([]);
     setPatientWeight('');
     
-    // Verifica se a conduta atual está nos favoritos para pintar a estrelinha
     if (conduct && favorites.length > 0) {
       const docId = getConductDocId(conduct.condicao || searchQuery, activeRoom);
       const isFav = favorites.some(f => f.id === docId || f.query === searchQuery);
@@ -305,7 +304,6 @@ export default function EmergencyGuideApp() {
     return `${query.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}_${room}`;
   };
 
-  // Listener em tempo real para a lista de favoritos
   const subscribeToFavorites = (username) => {
       if (!db) return;
       
@@ -432,7 +430,7 @@ export default function EmergencyGuideApp() {
          "uso": "USO ORAL/TÓPICO/etc",
          "nome_comercial": "Nome + Concentração",
          "quantidade": "Qtd total (ex: 1 cx)",
-         "instrucoes": "Posologia para o paciente"
+         "instrucoes": "Posologia para o paciente (Ex: 'Tomar 1 comprimido de 8/8h'). Use linguagem de receita."
       }
       `;
     }
@@ -455,10 +453,11 @@ export default function EmergencyGuideApp() {
     
     REGRAS RÍGIDAS:
     1. JSON puro.
-    2. "tratamento_medicamentoso": ARRAY de objetos. Se um mesmo fármaco tiver apresentações diferentes (ex: Dipirona Comp vs Gotas), separe em objetos distintos.
+    2. "tratamento_medicamentoso": ARRAY de objetos. CRUCIAL: Se um mesmo fármaco tiver mais de uma apresentação útil (ex: Comprimido e Gotas), crie DOIS OBJETOS DIFERENTES no array.
     3. "tipo": CAMPO OBRIGATÓRIO E RÍGIDO. Escolha EXATAMENTE UM DA LISTA: ['Comprimido', 'Cápsula', 'Xarope', 'Suspensão', 'Gotas', 'Solução Oral', 'Injetável', 'Tópico', 'Inalatório', 'Supositório'].
-    4. "farmaco": Nome + Concentração (Ex: "Dipirona 500mg").
-    5. "criterios_internacao/alta": OBRIGATÓRIOS.
+    4. "sugestao_uso": Se for Sala Verde, descreva COMO USAR baseado na BULA (ex: "Diluir em meio copo d'água e tomar após refeição"). Se for Sala Vermelha, descreva a administração técnica (ex: "Bolus lento").
+    5. "farmaco": Nome + Concentração (Ex: "Dipirona 500mg").
+    6. "criterios_internacao/alta": OBRIGATÓRIOS.
     
     ESTRUTURA JSON:
     {
@@ -478,7 +477,7 @@ export default function EmergencyGuideApp() {
         { 
           "farmaco": "Nome + Concentração", 
           "tipo": "Comprimido", // USE A LISTA RÍGIDA
-          "sugestao_uso": "Texto descritivo...",
+          "sugestao_uso": "Instrução de uso (Bula/Técnica)",
           "diluicao": "...",
           "modo_admin": "...",
           "cuidados": "...", 
@@ -557,15 +556,14 @@ export default function EmergencyGuideApp() {
   const getMedTypeIcon = (type) => {
     if (!type) return <Pill size={14} />;
     const t = type.toLowerCase();
-    if (t.includes('injet')) return <SyringeIcon size={14} className="text-rose-500" />;
+    if (t.includes('injet') || t.includes('amp')) return <SyringeIcon size={14} className="text-rose-500" />;
     if (t.includes('gota') || t.includes('solu') || t.includes('xarope') || t.includes('susp')) return <Droplets size={14} className="text-blue-500" />;
-    if (t.includes('comp') || t.includes('cap') || t.includes('oral')) return <Tablets size={14} className="text-emerald-500" />;
+    if (t.includes('comp') || t.includes('cap')) return <Tablets size={14} className="text-emerald-500" />;
     if (t.includes('tópi') || t.includes('pomada') || t.includes('creme')) return <Pipette size={14} className="text-amber-500" />;
     if (t.includes('inal') || t.includes('spray')) return <SprayCan size={14} className="text-purple-500" />;
     return <Pill size={14} className="text-slate-500" />;
   };
 
-  // Função Helper para definir cor da badge de tipo
   const getMedTypeColor = (type) => {
     if (!type) return 'bg-slate-100 text-slate-500 border-slate-200';
     const t = type.toLowerCase();
@@ -576,21 +574,20 @@ export default function EmergencyGuideApp() {
     return 'bg-slate-100 text-slate-500 border-slate-200';
   };
 
-  // Função Helper para fallback de tipo
   const inferMedType = (med) => {
     if (med.tipo && med.tipo !== "N/A") return med.tipo;
     
-    // Tenta adivinhar pelo nome ou via
     const name = med.farmaco?.toLowerCase() || "";
-    const via = med.via?.toLowerCase() || ""; // A IA as vezes manda 'via' separado
+    const via = med.via?.toLowerCase() || "";
 
     if (via.includes('ev') || via.includes('iv') || via.includes('im') || via.includes('sc')) return "Injetável";
     if (name.includes('gotas')) return "Gotas";
     if (name.includes('xarope')) return "Xarope";
     if (name.includes('comprimido')) return "Comprimido";
     if (name.includes('creme') || name.includes('pomada')) return "Tópico";
+    if (name.includes('spray') || name.includes('bombinha')) return "Inalatório";
     
-    return "Medicamento"; // Fallback final
+    return "Medicamento";
   };
 
   const roomConfig = {
@@ -601,6 +598,7 @@ export default function EmergencyGuideApp() {
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans text-slate-800">
+        {/* TELA DE LOGIN */}
         <div className="bg-white rounded-3xl shadow-xl border border-gray-100 max-w-md w-full overflow-hidden">
           <div className="bg-gradient-to-br from-blue-900 to-slate-800 p-8 text-center text-white relative">
             <Shield size={40} className="mx-auto mb-3 text-blue-300" />
@@ -782,7 +780,7 @@ export default function EmergencyGuideApp() {
                      const itemId = med.farmaco + (med.receita?.nome_comercial || "");
                      const isSelected = selectedPrescriptionItems.some(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
                      const canSelect = activeRoom === 'verde' && med.receita;
-                     const medType = inferMedType(med); // Corrige "N/A" automaticamente
+                     const medType = inferMedType(med); 
                      const isInjectable = medType.toLowerCase().includes('injet');
                      
                      let doseFinal = null;
@@ -812,6 +810,7 @@ export default function EmergencyGuideApp() {
                             </div>
                           )}
                           
+                          {/* BADGE DE TIPO CORRIGIDA E COLORIDA */}
                           <div className="absolute top-4 right-12">
                              <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${getMedTypeColor(medType)}`}>
                                 {getMedTypeIcon(medType)} {medType}
