@@ -11,7 +11,20 @@ import {
 // --- FIREBASE IMPORTS ---
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc, collection } from 'firebase/firestore';
+import { 
+  getFirestore, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  collection, 
+  query as firestoreQuery, // RENOMEADO PARA EVITAR CONFLITOS
+  where, 
+  orderBy, 
+  limit, 
+  getDocs, 
+  deleteDoc,
+  onSnapshot
+} from 'firebase/firestore';
 
 // --- LÓGICA DE CONFIGURAÇÃO DO FIREBASE ---
 const getFirebaseConfig = () => {
@@ -133,7 +146,8 @@ export default function EmergencyGuideApp() {
     if (currentUser && isCloudConnected) {
       fetchNotesFromCloud(currentUser.username);
       fetchHistoryFromCloud(currentUser.username);
-      subscribeToFavorites(currentUser.username);
+      const unsubFavs = subscribeToFavorites(currentUser.username);
+      return () => { if(unsubFavs) unsubFavs(); };
     } else if (currentUser) {
       const localNotes = localStorage.getItem(`notes_${currentUser.username}`);
       if (localNotes) setUserNotes(localNotes);
@@ -271,7 +285,6 @@ export default function EmergencyGuideApp() {
     localStorage.removeItem('emergency_app_user');
   };
 
-  // --- MANIPULAÇÃO DE ITENS DO RECEITUÁRIO ---
   const togglePrescriptionItem = (med) => {
     if (activeRoom !== 'verde' || !med.receita) return;
 
@@ -282,7 +295,6 @@ export default function EmergencyGuideApp() {
       if (exists) {
         return prev.filter(item => (item.farmaco + (item.receita?.nome_comercial || "")) !== itemId);
       } else {
-        // Inicializa com 5 dias padrão se não houver
         return [...prev, { ...med, dias_tratamento: med.receita.dias_sugeridos || 5 }];
       }
     });
@@ -292,7 +304,6 @@ export default function EmergencyGuideApp() {
     const newItems = [...selectedPrescriptionItems];
     newItems[index].dias_tratamento = days;
     
-    // Recalcula quantidade se tiver dados matemáticos
     const item = newItems[index];
     if (item.receita?.calculo_qnt?.frequencia_diaria && days > 0) {
       const total = Math.ceil(item.receita.calculo_qnt.frequencia_diaria * days);
@@ -303,7 +314,6 @@ export default function EmergencyGuideApp() {
     setSelectedPrescriptionItems(newItems);
   };
 
-  // --- LÓGICA DE CACHE E FAVORITOS ---
   const getConductDocId = (query, room) => {
     return `${query.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}_${room}`;
   };
@@ -312,7 +322,8 @@ export default function EmergencyGuideApp() {
       if (!db) return;
       
       const favoritesRef = collection(db, 'artifacts', appId, 'users', username, 'conducts');
-      const q = query(favoritesRef, where("isFavorite", "==", true));
+      // USANDO firestoreQuery AO INVÉS DE query PARA EVITAR CONFLITO
+      const q = firestoreQuery(favoritesRef, where("isFavorite", "==", true));
 
       const unsubscribe = onSnapshot(q, (querySnapshot) => {
           const favs = [];
@@ -380,7 +391,8 @@ export default function EmergencyGuideApp() {
     if (!db) return;
     try {
       const conductsRef = collection(db, 'artifacts', appId, 'users', username, 'conducts');
-      const q = query(conductsRef, where("isFavorite", "==", false), orderBy("lastAccessed", "desc"));
+      // USANDO firestoreQuery AO INVÉS DE query
+      const q = firestoreQuery(conductsRef, where("isFavorite", "==", false), orderBy("lastAccessed", "desc"));
       
       const snapshot = await getDocs(q);
       if (snapshot.size > 10) {
@@ -428,7 +440,7 @@ export default function EmergencyGuideApp() {
     let promptExtra = "";
     if (activeRoom === 'verde') {
       promptExtra += `
-      IMPORTANTE (SALA VERDE - RECEITA INTELIGENTE):
+      IMPORTANTE (SALA VERDE):
       Para cada item em "tratamento_medicamentoso", inclua um objeto "receita":
       "receita": {
          "uso": "USO ORAL/TÓPICO/etc",
@@ -461,7 +473,7 @@ export default function EmergencyGuideApp() {
     1. JSON puro.
     2. "tratamento_medicamentoso": ARRAY de objetos. Se um mesmo fármaco tiver apresentações diferentes (ex: Dipirona Comprimido vs Gotas), crie DOIS OBJETOS DIFERENTES no array.
     3. "tipo": CAMPO OBRIGATÓRIO E RÍGIDO. Escolha EXATAMENTE UM DA LISTA: ['Comprimido', 'Cápsula', 'Xarope', 'Suspensão', 'Gotas', 'Solução Oral', 'Injetável', 'Tópico', 'Inalatório', 'Supositório'].
-    4. "sugestao_uso": Se for Sala Verde, descreva COMO USAR baseado na BULA. Se for Sala Vermelha, descreva a administração técnica.
+    4. "sugestao_uso": Se for Sala Verde, descreva COMO USAR baseado na BULA (ex: "Diluir em meio copo d'água e tomar após refeição"). Se for Sala Vermelha, descreva a administração técnica.
     5. "farmaco": Nome + Concentração (Ex: "Dipirona 500mg").
     6. "criterios_internacao/alta": OBRIGATÓRIOS.
     
@@ -483,7 +495,7 @@ export default function EmergencyGuideApp() {
         { 
           "farmaco": "Nome + Concentração", 
           "tipo": "Comprimido", // USE A LISTA RÍGIDA
-          "sugestao_uso": "Instrução de uso...",
+          "sugestao_uso": "Instrução de uso (Bula/Técnica)",
           "diluicao": "...",
           "modo_admin": "...",
           "cuidados": "...", 
