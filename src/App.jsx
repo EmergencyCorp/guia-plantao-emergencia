@@ -60,6 +60,7 @@ export default function EmergencyGuideApp() {
 
     const roomClassification = activeRoom === 'verde' ? 'Baixa complexidade' : 'Alta complexidade/Emergência';
 
+    // Instrução específica para priorizar VO na sala verde
     const prescriptionGuidance = activeRoom === 'verde'
       ? 'DIRETRIZ IMPORTANTE: Como é Sala Verde, dê PREFERÊNCIA para medicações via ORAL (VO) ou IM na primeira linha de tratamento visando a alta do paciente. Use EV apenas se estritamente necessário para controle álgico intenso ou se houver falha da VO (deixe o EV claro no escalonamento).'
       : 'DIRETRIZ: Priorize a via mais eficaz e rápida para estabilização (geralmente EV).';
@@ -124,7 +125,7 @@ export default function EmergencyGuideApp() {
     SEJA PRAGMÁTICO. Doses para adulto 70kg. JSON puro sem markdown.`;
 
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY; 
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -169,7 +170,7 @@ export default function EmergencyGuideApp() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 font-sans text-slate-800 selection:bg-blue-100">
+    <div className="min-h-screen bg-gray-50 pb-16 font-sans text-slate-800 selection:bg-blue-100">
       
       {/* Top Navigation */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
@@ -631,41 +632,6 @@ export default function EmergencyGuideApp() {
           </div>
         )}
       </main>
-
-      {/* Footer with Copyright and Medical Disclaimer */}
-      <footer className="bg-slate-900 text-slate-300 py-8 mt-16 border-t-4 border-blue-600">
-        <div className="max-w-6xl mx-auto px-4">
-          {/* Medical Warning */}
-          <div className="bg-amber-900/30 border border-amber-700/50 rounded-xl p-5 mb-6">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="w-6 h-6 text-amber-400 shrink-0 mt-0.5" />
-              <div>
-                <h3 className="text-amber-400 font-bold text-sm uppercase tracking-wide mb-2">
-                  Aviso Médico Importante
-                </h3>
-                <p className="text-slate-300 text-sm leading-relaxed">
-                  Esta é uma <strong>ferramenta de suporte clínico por inteligência artificial</strong>. 
-                  As condutas apresentadas <strong>NÃO devem ser aplicadas por leigos</strong> e servem apenas como 
-                  referência para <strong>profissionais de saúde qualificados</strong>. Toda conduta médica deve ser 
-                  precedida de <strong>raciocínio clínico individualizado</strong>, avaliação completa do paciente e 
-                  julgamento profissional experiente. Este sistema não substitui a avaliação médica presencial nem a 
-                  responsabilidade profissional.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Copyright */}
-          <div className="text-center border-t border-slate-800 pt-6">
-            <p className="text-slate-400 text-sm">
-              © {new Date().getFullYear()} <span className="font-bold text-slate-200">EmergencyCorp</span>. Todos os direitos reservados.
-            </p>
-            <p className="text-slate-500 text-xs mt-2">
-              Desenvolvido para uso exclusivo de profissionais de saúde
-            </p>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
