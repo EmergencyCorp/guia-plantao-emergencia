@@ -6,7 +6,8 @@ import {
   ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save, Cloud, CloudOff
 } from 'lucide-react';
 
-// --- FIREBASE IMPORTS ---
+// --- FIREBASE IMPORTS (CORRIGIDO PARA PACOTES PADRÃO) ---
+// Voltamos para os pacotes npm padrão para compatibilidade com o bundler (Vite)
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, getDoc, collection } from 'firebase/firestore';
@@ -305,7 +306,9 @@ export default function EmergencyGuideApp() {
     SEJA PRAGMÁTICO. Doses para adulto 70kg. JSON puro sem markdown.`;
 
     try {
+      // Modificação segura para evitar crash se import.meta.env não estiver definido
       const apiKey = (import.meta && import.meta.env) ? import.meta.env.VITE_GEMINI_API_KEY : "";
+      
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
