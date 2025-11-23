@@ -4,7 +4,7 @@ import {
   Stethoscope, ClipboardCheck, AlertTriangle, ArrowRight, X, User, 
   CheckCircle2, Thermometer, Syringe, Siren, FlaskConical, Tag, Package,
   ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save, Cloud, CloudOff, Settings, Info,
-  HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine, Wind, Droplet, Timer, Skull, Printer, FilePlus
+  HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine, Wind, Droplet, Timer, Skull, Printer, FilePlus, Calculator
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -78,9 +78,10 @@ export default function EmergencyGuideApp() {
   const [showNotepad, setShowNotepad] = useState(false);
   const [userNotes, setUserNotes] = useState('');
 
-  // --- NOVOS ESTADOS PARA RECEITUÁRIO ---
+  // --- ESTADOS PARA RECEITUÁRIO E CÁLCULO ---
   const [selectedPrescriptionItems, setSelectedPrescriptionItems] = useState([]);
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
+  const [patientWeight, setPatientWeight] = useState(''); // Novo estado para peso
 
   useEffect(() => {
     if (!firebaseConfig || !firebaseConfig.apiKey) {
@@ -132,9 +133,10 @@ export default function EmergencyGuideApp() {
     }
   }, [currentUser, isCloudConnected]);
 
-  // Limpa seleção ao mudar de conduta
+  // Limpa seleção e peso ao mudar de conduta
   useEffect(() => {
     setSelectedPrescriptionItems([]);
+    setPatientWeight('');
   }, [conduct]);
 
   const loadHistory = (username) => {
@@ -213,7 +215,6 @@ export default function EmergencyGuideApp() {
     if (activeRoom !== 'verde' || !med.receita) return;
 
     setSelectedPrescriptionItems(prev => {
-      // Identificação única melhorada: Farmaco + Nome Comercial da receita (para diferenciar apresentações)
       const itemId = med.farmaco + (med.receita?.nome_comercial || "");
       const exists = prev.find(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
       
@@ -237,8 +238,10 @@ export default function EmergencyGuideApp() {
     const roomContext = activeRoom === 'verde' ? 'SALA VERDE (AMBULATORIAL)' : 'SALA VERMELHA (EMERGÊNCIA)';
     
     let promptExtra = "";
+    
+    // LÓGICA ESPECÍFICA SALA VERDE (RECEITA)
     if (activeRoom === 'verde') {
-      promptExtra = `
+      promptExtra += `
       IMPORTANTE (SALA VERDE):
       Para cada item em "tratamento_medicamentoso", inclua um objeto "receita" com os dados para prescrição de alta:
       "receita": {
@@ -251,13 +254,25 @@ export default function EmergencyGuideApp() {
       `;
     }
 
+    // LÓGICA ESPECÍFICA SALA VERMELHA (CÁLCULO DE PESO)
+    if (activeRoom === 'vermelha') {
+      promptExtra += `
+      IMPORTANTE (SALA VERMELHA - CÁLCULO DE DOSES):
+      Para medicamentos que exigem ajuste por peso (ex: Sedação, Aminas, Trombolíticos, Antibióticos em choque):
+      1. Defina "usa_peso": true
+      2. Defina "dose_padrao_kg": APENAS O NÚMERO (ex: 0.3 para 0.3mg/kg)
+      3. Defina "unidade_base": A unidade de cálculo (ex: "mg/kg", "mcg/kg/min")
+      4. A "posologia" deve vir como texto genérico (ex: "0.3mg/kg em bolus").
+      `;
+    }
+
     const promptText = `Atue como médico especialista em medicina de emergência.
     Gere conduta clínica para "${searchQuery}" na ${roomContext}.
     ${promptExtra}
     
     REGRAS RÍGIDAS:
     1. JSON puro.
-    2. "tratamento_medicamentoso": ARRAY de objetos. CRUCIAL: Se um mesmo fármaco tiver mais de uma apresentação (ex: Dipirona Comprimido e Dipirona Gotas), crie DOIS OBJETOS DIFERENTES no array, um para cada apresentação com sua posologia específica.
+    2. "tratamento_medicamentoso": ARRAY de objetos. CRUCIAL: Se um mesmo fármaco tiver mais de uma apresentação (ex: Dipirona Comprimido e Dipirona Gotas), crie DOIS OBJETOS DIFERENTES no array.
     3. "criterios_internacao/alta": OBRIGATÓRIOS.
     
     ESTRUTURA JSON:
@@ -283,7 +298,10 @@ export default function EmergencyGuideApp() {
           "modo_admin": "...", 
           "cuidados": "...", 
           "indicacao": "...",
-          "receita": { "uso": "...", "nome_comercial": "Nome + Conc", "quantidade": "...", "instrucoes": "..." } // NULL SE SALA VERMELHA
+          "receita": { ... }, // Apenas Sala Verde
+          "usa_peso": false, // Apenas Sala Vermelha se necessário
+          "dose_padrao_kg": 0, // Numero
+          "unidade_base": "mg/kg" 
         } 
       ],
       "escalonamento_terapeutico": [
@@ -296,7 +314,7 @@ export default function EmergencyGuideApp() {
       "criterios_alta": ["..."],
       "guideline_referencia": "Fonte"
     }
-    Doses adulto 70kg.`;
+    Doses adulto 70kg (base).`;
 
     try {
       const apiKey = (import.meta.env && import.meta.env.VITE_GEMINI_API_KEY) ? import.meta.env.VITE_GEMINI_API_KEY : "";
@@ -473,6 +491,26 @@ export default function EmergencyGuideApp() {
               </div>
             )}
 
+            {/* BARRA DE CÁLCULO DE PESO (SALA VERMELHA) */}
+            {activeRoom === 'vermelha' && (
+              <div className="bg-rose-100 border-l-4 border-rose-600 p-4 rounded shadow-sm flex flex-col md:flex-row items-center gap-4 animate-in slide-in-from-top-2">
+                <div className="flex items-center gap-2 text-rose-900 font-bold">
+                  <Calculator size={20} />
+                  <span>Cálculo de Doses (Peso)</span>
+                </div>
+                <div className="flex items-center gap-2 flex-1 w-full">
+                  <input 
+                    type="number" 
+                    value={patientWeight} 
+                    onChange={(e) => setPatientWeight(e.target.value)} 
+                    placeholder="Peso do paciente (kg)" 
+                    className="px-4 py-2 rounded border border-rose-300 focus:ring-2 focus:ring-rose-500 w-full md:w-48 text-slate-800 font-bold"
+                  />
+                  <span className="text-xs text-rose-700">*Insira o peso para calcular doses automaticamente</span>
+                </div>
+              </div>
+            )}
+
             <div className="grid lg:grid-cols-12 gap-6 items-start">
               <div className="lg:col-span-4 space-y-6">
                 {/* AVALIAÇÃO E ALVOS */}
@@ -509,10 +547,13 @@ export default function EmergencyGuideApp() {
                 <div className="space-y-4">
                    <div className="flex items-center gap-2 text-emerald-800 mb-2 px-2"><div className="bg-emerald-100 p-1.5 rounded"><Pill size={18}/></div><h3 className="font-bold text-lg">Prescrição e Conduta</h3></div>
                    {conduct.tratamento_medicamentoso?.map((med, idx) => {
-                     // Identificação única para seleção (farmaco + nome comercial)
-                     const itemId = med.farmaco + (med.receita?.nome_comercial || "");
-                     const isSelected = selectedPrescriptionItems.some(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
+                     const isSelected = selectedPrescriptionItems.some(item => (item.farmaco + (item.receita?.nome_comercial || "")) === (med.farmaco + (med.receita?.nome_comercial || "")));
                      const canSelect = activeRoom === 'verde' && med.receita;
+
+                     // LÓGICA DE CÁLCULO (SALA VERMELHA)
+                     const doseCalculada = (activeRoom === 'vermelha' && med.usa_peso && patientWeight && med.dose_padrao_kg) 
+                       ? (parseFloat(med.dose_padrao_kg) * parseFloat(patientWeight)).toFixed(1) + " " + med.unidade_base.split('/')[0] 
+                       : null;
 
                      return (
                        <div 
@@ -539,7 +580,25 @@ export default function EmergencyGuideApp() {
                              </div>
                              {med.via && <span className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-100">{med.via}</span>}
                           </div>
-                          <div className="bg-slate-50 rounded-lg p-3 ml-3 mb-3 font-mono text-sm text-slate-700 border border-slate-100"><strong>Dose:</strong> {med.dose || med.posologia}</div>
+                          
+                          {/* DOSE PADRÃO */}
+                          <div className="bg-slate-50 rounded-lg p-3 ml-3 mb-3 font-mono text-sm text-slate-700 border border-slate-100">
+                             <strong>Dose:</strong> {med.dose || med.posologia}
+                          </div>
+
+                          {/* CÁLCULO DE DOSE (SALA VERMELHA) */}
+                          {activeRoom === 'vermelha' && med.usa_peso && (
+                            <div className="bg-rose-50 rounded-lg p-3 ml-3 mb-3 border border-rose-100 flex items-center justify-between">
+                               <div className="text-sm text-rose-800">
+                                 <span className="font-bold block text-xs uppercase">Dose Calculada ({patientWeight || '?'}kg):</span>
+                                 {doseCalculada ? <span className="text-lg font-bold">{doseCalculada}</span> : <span className="italic text-xs">Insira o peso acima</span>}
+                               </div>
+                               <div className="text-right text-xs text-rose-600">
+                                 Ref: {med.dose_padrao_kg} {med.unidade_base}
+                               </div>
+                            </div>
+                          )}
+
                           <div className="grid sm:grid-cols-2 gap-4 ml-3 text-sm">
                              {med.diluicao && <div className="flex gap-2 text-blue-700"><FlaskConical size={16} className="shrink-0 mt-0.5"/><span><strong>Diluição:</strong> {med.diluicao}</span></div>}
                              {med.modo_admin && <div className="flex gap-2 text-purple-700"><Timer size={16} className="shrink-0 mt-0.5"/><span><strong>Infusão:</strong> {med.modo_admin} {med.tempo_infusao ? `(${med.tempo_infusao})` : ''}</span></div>}
