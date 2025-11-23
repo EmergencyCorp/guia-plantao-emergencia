@@ -4,7 +4,7 @@ import {
   Stethoscope, ClipboardCheck, AlertTriangle, ArrowRight, X, User, 
   CheckCircle2, Thermometer, Syringe, Siren, FlaskConical, Tag, Package,
   ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save, Cloud, CloudOff, Settings, Info,
-  HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine, Wind, Droplet, Timer, Skull
+  HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine, Wind, Droplet, Timer, Skull, Printer, FilePlus
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -51,9 +51,9 @@ const appId = (typeof __app_id !== 'undefined') ? __app_id : 'emergency-guide-ap
 const initialToken = (typeof __initial_auth_token !== 'undefined') ? __initial_auth_token : null;
 
 const AUTHORIZED_USERS = [
-  { username: 'admin', password: '123', name: 'Dr. Administrador', role: 'Diretor Clínico' },
-  { username: 'medico', password: 'med', name: 'Dr. Plantonista', role: 'Médico Assistente' },
-  { username: 'interno', password: 'int', name: 'Acadêmico', role: 'Interno' }
+  { username: 'admin', password: '123', name: 'Dr. Administrador', role: 'Diretor Clínico', crm: '12345-MG' },
+  { username: 'medico', password: 'med', name: 'Dr. Plantonista', role: 'Médico Assistente', crm: '67890-SP' },
+  { username: 'interno', password: 'int', name: 'Acadêmico', role: 'Interno', crm: 'Estudante' }
 ];
 
 export default function EmergencyGuideApp() {
@@ -77,6 +77,10 @@ export default function EmergencyGuideApp() {
 
   const [showNotepad, setShowNotepad] = useState(false);
   const [userNotes, setUserNotes] = useState('');
+
+  // --- NOVOS ESTADOS PARA RECEITUÁRIO ---
+  const [selectedPrescriptionItems, setSelectedPrescriptionItems] = useState([]);
+  const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
 
   useEffect(() => {
     if (!firebaseConfig || !firebaseConfig.apiKey) {
@@ -127,6 +131,11 @@ export default function EmergencyGuideApp() {
       if (localNotes) setUserNotes(localNotes);
     }
   }, [currentUser, isCloudConnected]);
+
+  // Limpa seleção ao mudar de conduta
+  useEffect(() => {
+    setSelectedPrescriptionItems([]);
+  }, [conduct]);
 
   const loadHistory = (username) => {
     try {
@@ -200,6 +209,19 @@ export default function EmergencyGuideApp() {
     localStorage.removeItem('emergency_app_user');
   };
 
+  const togglePrescriptionItem = (med) => {
+    if (activeRoom !== 'verde' || !med.receita) return;
+
+    setSelectedPrescriptionItems(prev => {
+      const exists = prev.find(item => item.farmaco === med.farmaco);
+      if (exists) {
+        return prev.filter(item => item.farmaco !== med.farmaco);
+      } else {
+        return [...prev, med];
+      }
+    });
+  };
+
   const generateConduct = async () => {
     if (!searchQuery.trim()) {
       showError('Digite uma condição clínica.');
@@ -210,67 +232,56 @@ export default function EmergencyGuideApp() {
     setErrorMsg('');
 
     const roomContext = activeRoom === 'verde' ? 'SALA VERDE (AMBULATORIAL)' : 'SALA VERMELHA (EMERGÊNCIA)';
-    const lowerQuery = searchQuery.toLowerCase();
-
-    // --- LÓGICA CONDICIONAL DINÂMICA ---
-    let conditionalInstructions = "";
-
-    // 1. Lógica para DENGUE (A, B, C, D)
-    if (lowerQuery.includes('dengue')) {
-      conditionalInstructions += `
-      CONTEXTO ESPECÍFICO - DENGUE (Protocolo MS Brasil):
-      - Classifique em Grupo A (Sem sinais alarme/comorbidades), B (Comorbidades/Sangramento pele), C (Sinais de Alarme) ou D (Choque).
-      - Se o usuário não especificou o grupo na busca, deduza pela gravidade da sala (Verde = A/B, Vermelha = C/D) ou descreva brevemente como diferenciar.
-      - Hidratação: Especifique ML/KG para o grupo selecionado (Ex: Grupo B - SRO frequente; Grupo C - 10ml/kg EV em 2h).
-      `;
-    }
-
-    // 2. Lógica para DESIDRATAÇÃO/GECA (Planos A, B, C)
-    if (lowerQuery.includes('geca') || lowerQuery.includes('diarreia') || lowerQuery.includes('desidrat') || lowerQuery.includes('vomito')) {
-      conditionalInstructions += `
-      CONTEXTO ESPECÍFICO - REIDRATAÇÃO (Protocolo OMS/MS):
-      - Classifique em Plano A (Prevenção - Domiciliar), Plano B (TRO na Unidade) ou Plano C (Venoso - Fase Rápida/Manutenção).
-      - Para Plano C (Sala Vermelha), detalhe fase rápida (100ml/kg divididos por idade).
-      - Para Plano B (Sala Verde), detalhe TRO (50-100ml/kg em 4-6h).
-      `;
-    }
-
-    // 3. Lógica para TRAUMA (ATLS)
-    if (lowerQuery.includes('trauma') || lowerQuery.includes('acid') || lowerQuery.includes('poli')) {
-      conditionalInstructions += `
-      CONTEXTO ESPECÍFICO - TRAUMA (ATLS):
-      - OBRIGATÓRIO preencher o objeto "xabcde_trauma" com o passo a passo.
-      - Priorize a estabilização cervical e controle de hemorragias.
-      `;
-    }
-
-    const promptText = `Atue como médico especialista em emergência.
-    Gere conduta para "${searchQuery}" na ${roomContext}.
-    ${conditionalInstructions}
     
-    REGRAS GERAIS:
+    let promptExtra = "";
+    if (activeRoom === 'verde') {
+      promptExtra = `
+      IMPORTANTE (SALA VERDE):
+      Para cada item em "tratamento_medicamentoso", inclua um objeto "receita" com os dados para prescrição de alta:
+      "receita": {
+         "uso": "USO ORAL, USO TÓPICO, etc",
+         "nome_comercial": "Nome + Concentração (Ex: Dipirona 500mg)",
+         "quantidade": "Ex: 01 caixa, 01 frasco",
+         "instrucoes": "Ex: Tomar 01 comprimido de 6/6h se dor ou febre"
+      }
+      Se o medicamento for apenas de uso hospitalar imediato e não for para casa, "receita": null.
+      `;
+    }
+
+    const promptText = `Atue como médico especialista em medicina de emergência.
+    Gere conduta clínica para "${searchQuery}" na ${roomContext}.
+    ${promptExtra}
+    
+    REGRAS RÍGIDAS:
     1. JSON puro.
     2. "tratamento_medicamentoso": ARRAY de objetos.
     3. "criterios_internacao/alta": OBRIGATÓRIOS.
-    4. "avaliacao_inicial.sinais_vitais_alvos": Especifique alvos (PAS/PAD/PAM, FC, FR, SatO2).
-    5. "achados_exames.imagem": Descreva o padrão radiológico esperado.
     
     ESTRUTURA JSON:
     {
       "condicao": "Nome",
-      "estadiamento": "Classificação (Ex: Dengue C, Plano B)",
+      "estadiamento": "Classificação",
       "classificacao": "${roomContext}",
-      "resumo_clinico": "Texto técnico detalhado, fisiopatologia e apresentação clínica...",
-      "xabcde_trauma": null, // OU objeto {x,a,b,c,d,e} se for trauma
+      "resumo_clinico": "Texto técnico detalhado...",
+      "xabcde_trauma": null, 
       "avaliacao_inicial": { 
-        "sinais_vitais_alvos": ["PAM > 65mmHg", "FC < 100", "SatO2 > 94%"], 
+        "sinais_vitais_alvos": ["PAM > 65mmHg", "SatO2 > 94%"], 
         "exames_prioridade1": ["..."], 
         "exames_complementares": ["..."] 
       },
-      "achados_exames": { "ecg": "...", "laboratorio": "...", "imagem": "Detalhes do padrão de imagem..." },
+      "achados_exames": { "ecg": "...", "laboratorio": "...", "imagem": "..." },
       "criterios_gravidade": ["..."],
       "tratamento_medicamentoso": [ 
-        { "farmaco": "Nome", "apresentacao": "Ex: Ampola 10mg/2ml", "dose": "Ex: 20mg (2 ampolas)", "diluicao": "Ex: Puro ou em 100ml SF", "modo_admin": "Ex: Bolus IV / BIC 30min", "cuidados": "...", "indicacao": "..." } 
+        { 
+          "farmaco": "Nome", 
+          "apresentacao": "Amp/Comp", 
+          "dose": "...", 
+          "diluicao": "...", 
+          "modo_admin": "...", 
+          "cuidados": "...", 
+          "indicacao": "...",
+          "receita": { "uso": "...", "nome_comercial": "...", "quantidade": "...", "instrucoes": "..." } // NULL SE SALA VERMELHA OU USO HOSPITALAR
+        } 
       ],
       "escalonamento_terapeutico": [
         { "passo": "1ª Linha", "descricao": "..." },
@@ -280,7 +291,7 @@ export default function EmergencyGuideApp() {
       "medidas_gerais": ["..."],
       "criterios_internacao": ["..."],
       "criterios_alta": ["..."],
-      "guideline_referencia": "Fonte (Ex: Ministério da Saúde 2024)"
+      "guideline_referencia": "Fonte"
     }
     Doses adulto 70kg.`;
 
@@ -340,6 +351,7 @@ export default function EmergencyGuideApp() {
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans text-slate-800">
+        {/* TELA DE LOGIN (Mantida igual) */}
         <div className="bg-white rounded-3xl shadow-xl border border-gray-100 max-w-md w-full overflow-hidden">
           <div className="bg-gradient-to-br from-blue-900 to-slate-800 p-8 text-center text-white relative">
             <Shield size={40} className="mx-auto mb-3 text-blue-300" />
@@ -376,7 +388,18 @@ export default function EmergencyGuideApp() {
         </div>
       </header>
 
-      <main className="flex-grow max-w-6xl mx-auto px-4 py-8 space-y-8 w-full">
+      <main className="flex-grow max-w-6xl mx-auto px-4 py-8 space-y-8 w-full relative">
+        {/* BOTÃO FLUTUANTE DE RECEITA (SÓ SALA VERDE) */}
+        {activeRoom === 'verde' && selectedPrescriptionItems.length > 0 && (
+          <button 
+            onClick={() => setShowPrescriptionModal(true)}
+            className="fixed bottom-8 right-8 z-50 bg-blue-600 hover:bg-blue-700 text-white px-6 py-4 rounded-full shadow-xl flex items-center gap-3 font-bold transition-all animate-in slide-in-from-bottom-4"
+          >
+            <Printer size={24} />
+            Gerar Receita ({selectedPrescriptionItems.length})
+          </button>
+        )}
+
         <div className="space-y-6">
           <div className="grid md:grid-cols-2 gap-4">
             {Object.entries(roomConfig).map(([key, config]) => {
@@ -393,15 +416,13 @@ export default function EmergencyGuideApp() {
 
           <div className="bg-white p-2 rounded-2xl shadow-lg border border-gray-100 flex items-center gap-2">
             <Search className="ml-3 text-gray-400" size={20} />
-            <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && generateConduct()} placeholder="Digite o quadro clínico (ex: Cetoacidose, Politrauma...)" className="flex-1 py-3 bg-transparent outline-none text-slate-800 font-medium" />
+            <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && generateConduct()} placeholder="Digite o quadro clínico (ex: Cetoacidose, IAM...)" className="flex-1 py-3 bg-transparent outline-none text-slate-800 font-medium" />
             <button onClick={generateConduct} disabled={loading} className={`px-6 py-3 rounded-xl font-bold text-white flex items-center gap-2 transition-all ${loading ? 'bg-slate-300' : 'bg-blue-900 hover:bg-blue-800'}`}>{loading ? <Loader2 className="animate-spin" /> : <>Gerar <ArrowRight size={18} /></>}</button>
           </div>
 
           {recentSearches.length > 0 && (
             <div className="flex flex-wrap gap-2 px-1">
-              <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase mr-2">
-                <History size={14} /> Recentes
-              </div>
+              <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase mr-2"><History size={14} /> Recentes</div>
               {recentSearches.map((search, idx) => (
                 <button 
                   key={idx} 
@@ -423,11 +444,7 @@ export default function EmergencyGuideApp() {
                <div>
                   <div className="flex flex-wrap gap-2 mb-2"><span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase text-white ${activeRoom === 'verde' ? 'bg-emerald-500' : 'bg-rose-600'}`}>{conduct.classificacao}</span>{conduct.estadiamento && <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-800 text-white">{conduct.estadiamento}</span>}</div>
                   <h2 className="text-3xl font-bold text-slate-800">{conduct.condicao}</h2>
-                  {conduct.guideline_referencia && (
-                    <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-                      <BookOpen size={12} /> Fonte: <span className="font-medium">{conduct.guideline_referencia}</span>
-                    </p>
-                  )}
+                  {conduct.guideline_referencia && (<p className="text-xs text-slate-500 mt-1 flex items-center gap-1"><BookOpen size={12} /> Fonte: <span className="font-medium">{conduct.guideline_referencia}</span></p>)}
                </div>
                <button onClick={() => setConduct(null)} className="p-2 hover:bg-gray-200 rounded-full text-gray-500"><X size={24}/></button>
             </div>
@@ -440,23 +457,14 @@ export default function EmergencyGuideApp() {
             {conduct.xabcde_trauma && (
               <div className="bg-orange-50 border border-orange-200 p-5 rounded-2xl">
                 <h3 className="text-orange-900 font-bold flex items-center gap-2 mb-3 uppercase tracking-wide"><Skull size={20}/> Protocolo de Trauma (ATLS - xABCDE)</h3>
-                <div className="space-y-3">
-                  {Object.entries(conduct.xabcde_trauma).map(([key, value]) => (
-                    <div key={key} className="flex gap-3 items-start bg-white/60 p-2 rounded border border-orange-100">
-                      <div className="bg-orange-600 text-white w-6 h-6 rounded flex items-center justify-center font-bold uppercase text-xs shrink-0">{key}</div>
-                      <p className="text-sm text-orange-950">{value}</p>
-                    </div>
-                  ))}
-                </div>
+                <div className="space-y-3">{Object.entries(conduct.xabcde_trauma).map(([key, value]) => (<div key={key} className="flex gap-3 items-start bg-white/60 p-2 rounded border border-orange-100"><div className="bg-orange-600 text-white w-6 h-6 rounded flex items-center justify-center font-bold uppercase text-xs shrink-0">{key}</div><p className="text-sm text-orange-950">{value}</p></div>))}</div>
               </div>
             )}
 
             {conduct.criterios_gravidade?.length > 0 && (
               <div className="bg-rose-50 border border-rose-100 p-5 rounded-2xl">
                 <h3 className="text-rose-800 font-bold flex items-center gap-2 mb-3 text-sm uppercase"><AlertTriangle size={18}/> Sinais de Alarme</h3>
-                <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-3">
-                  {conduct.criterios_gravidade.map((crit, i) => (<div key={i} className="bg-white/80 p-2.5 rounded-lg border border-rose-100/50 text-sm text-rose-900 font-medium flex gap-2"><div className="mt-1 w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"/>{crit}</div>))}
-                </div>
+                <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-3">{conduct.criterios_gravidade.map((crit, i) => (<div key={i} className="bg-white/80 p-2.5 rounded-lg border border-rose-100/50 text-sm text-rose-900 font-medium flex gap-2"><div className="mt-1 w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"/>{crit}</div>))}</div>
               </div>
             )}
 
@@ -465,18 +473,7 @@ export default function EmergencyGuideApp() {
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                    <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center gap-2"><Activity size={18} className="text-slate-500"/><h3 className="font-bold text-slate-700 text-sm uppercase">Avaliação Inicial</h3></div>
                    <div className="p-5 space-y-5 text-sm">
-                      {conduct.avaliacao_inicial?.sinais_vitais_alvos && (
-                        <div>
-                          <span className="text-xs font-bold text-slate-400 uppercase block mb-2">Alvos Terapêuticos</span>
-                          <div className="grid grid-cols-1 gap-2">
-                            {conduct.avaliacao_inicial.sinais_vitais_alvos.map((s,i)=>(
-                              <div key={i} className="bg-indigo-50 p-3 rounded-lg border border-indigo-100 flex items-center gap-3 text-indigo-900">
-                                {getVitalIcon(s)} <span className="font-bold">{s}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                      {conduct.avaliacao_inicial?.sinais_vitais_alvos && (<div><span className="text-xs font-bold text-slate-400 uppercase block mb-2">Alvos Terapêuticos</span><div className="grid grid-cols-1 gap-2">{conduct.avaliacao_inicial.sinais_vitais_alvos.map((s,i)=>(<div key={i} className="bg-indigo-50 p-3 rounded-lg border border-indigo-100 flex items-center gap-3 text-indigo-900">{getVitalIcon(s)} <span className="font-bold">{s}</span></div>))}</div></div>)}
                       <div className="space-y-3">
                          <div><span className="text-xs font-bold text-rose-600 uppercase block mb-1">Prioridade 1 (Obrigatórios)</span><ul className="space-y-1">{conduct.avaliacao_inicial?.exames_prioridade1?.map((ex,i)=><li key={i} className="flex gap-2 items-start font-medium text-slate-700"><div className="mt-1.5 w-1.5 h-1.5 bg-rose-500 rounded-full shrink-0"/>{ex}</li>)}</ul></div>
                          <div><span className="text-xs font-bold text-slate-400 uppercase block mb-1">Complementares</span><ul className="space-y-1">{conduct.avaliacao_inicial?.exames_complementares?.map((ex,i)=><li key={i} className="flex gap-2 items-start text-slate-500"><div className="mt-1.5 w-1.5 h-1.5 bg-slate-300 rounded-full shrink-0"/>{ex}</li>)}</ul></div>
@@ -496,14 +493,8 @@ export default function EmergencyGuideApp() {
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                    <div className="bg-indigo-50 px-5 py-3 border-b border-indigo-100 flex items-center gap-2"><FileText size={18} className="text-indigo-600"/><h3 className="font-bold text-indigo-900 text-sm uppercase">Critérios de Desfecho</h3></div>
                    <div className="p-5 space-y-4 text-sm">
-                      <div className="bg-amber-50 p-3 rounded-lg border border-amber-100">
-                        <span className="text-xs font-bold text-amber-800 uppercase block mb-1">Internação / UTI</span>
-                        <ul className="space-y-1">{conduct.criterios_internacao?.map((c,i)=><li key={i} className="text-amber-900 flex gap-2"><div className="mt-1.5 w-1 h-1 bg-amber-500 rounded-full shrink-0"/>{c}</li>)}</ul>
-                      </div>
-                      <div className="bg-green-50 p-3 rounded-lg border border-green-100">
-                        <span className="text-xs font-bold text-green-800 uppercase block mb-1">Critérios de Alta</span>
-                        <ul className="space-y-1">{conduct.criterios_alta?.map((c,i)=><li key={i} className="text-green-900 flex gap-2"><div className="mt-1.5 w-1 h-1 bg-green-500 rounded-full shrink-0"/>{c}</li>)}</ul>
-                      </div>
+                      <div className="bg-amber-50 p-3 rounded-lg border border-amber-100"><span className="text-xs font-bold text-amber-800 uppercase block mb-1">Internação / UTI</span><ul className="space-y-1">{conduct.criterios_internacao?.map((c,i)=><li key={i} className="text-amber-900 flex gap-2"><div className="mt-1.5 w-1 h-1 bg-amber-500 rounded-full shrink-0"/>{c}</li>)}</ul></div>
+                      <div className="bg-green-50 p-3 rounded-lg border border-green-100"><span className="text-xs font-bold text-green-800 uppercase block mb-1">Critérios de Alta</span><ul className="space-y-1">{conduct.criterios_alta?.map((c,i)=><li key={i} className="text-green-900 flex gap-2"><div className="mt-1.5 w-1 h-1 bg-green-500 rounded-full shrink-0"/>{c}</li>)}</ul></div>
                    </div>
                 </div>
               </div>
@@ -511,29 +502,44 @@ export default function EmergencyGuideApp() {
               <div className="lg:col-span-8 space-y-6">
                 <div className="space-y-4">
                    <div className="flex items-center gap-2 text-emerald-800 mb-2 px-2"><div className="bg-emerald-100 p-1.5 rounded"><Pill size={18}/></div><h3 className="font-bold text-lg">Prescrição e Conduta</h3></div>
-                   {conduct.tratamento_medicamentoso?.map((med, idx) => (
-                     <div key={idx} className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
-                        <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-emerald-500"></div>
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 mb-3 pl-3">
-                           <div>
-                              <div className="flex items-center gap-2">
-                                 <h4 className="text-xl font-bold text-slate-800">{med.farmaco}</h4>
-                                 {med.apresentacao && <span className="text-[10px] font-bold bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-slate-600 flex items-center gap-1"><Package size={10}/> {med.apresentacao}</span>}
-                              </div>
-                              <span className="text-sm text-slate-500 italic">{med.indicacao}</span>
-                           </div>
-                           {med.via && <span className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-100">{med.via}</span>}
-                        </div>
-                        <div className="bg-slate-50 rounded-lg p-3 ml-3 mb-3 font-mono text-sm text-slate-700 border border-slate-100">
-                           <strong>Dose:</strong> {med.dose || med.posologia}
-                        </div>
-                        <div className="grid sm:grid-cols-2 gap-4 ml-3 text-sm">
-                           {med.diluicao && <div className="flex gap-2 text-blue-700"><FlaskConical size={16} className="shrink-0 mt-0.5"/><span><strong>Diluição:</strong> {med.diluicao}</span></div>}
-                           {med.modo_admin && <div className="flex gap-2 text-purple-700"><Timer size={16} className="shrink-0 mt-0.5"/><span><strong>Infusão:</strong> {med.modo_admin} {med.tempo_infusao ? `(${med.tempo_infusao})` : ''}</span></div>}
-                           {med.cuidados && <div className="flex gap-2 text-amber-700 col-span-2"><AlertTriangle size={16} className="shrink-0 mt-0.5"/><span><strong>Atenção:</strong> {med.cuidados}</span></div>}
-                        </div>
-                     </div>
-                   ))}
+                   {conduct.tratamento_medicamentoso?.map((med, idx) => {
+                     const isSelected = selectedPrescriptionItems.find(i => i.farmaco === med.farmaco);
+                     const canSelect = activeRoom === 'verde' && med.receita;
+
+                     return (
+                       <div 
+                         key={idx} 
+                         onClick={() => canSelect && togglePrescriptionItem(med)}
+                         className={`bg-white rounded-xl border p-5 shadow-sm transition-all relative overflow-hidden group ${canSelect ? 'cursor-pointer hover:border-blue-300 hover:shadow-md' : ''} ${isSelected ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50/30' : 'border-gray-200'}`}
+                       >
+                          <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${isSelected ? 'bg-blue-500' : 'bg-emerald-500'}`}></div>
+                          
+                          {/* Checkbox Visual para Sala Verde */}
+                          {canSelect && (
+                            <div className={`absolute top-4 right-4 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-300 text-transparent'}`}>
+                              <CheckCircle2 size={14} />
+                            </div>
+                          )}
+
+                          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 mb-3 pl-3 pr-8">
+                             <div>
+                                <div className="flex items-center gap-2">
+                                   <h4 className="text-xl font-bold text-slate-800">{med.farmaco}</h4>
+                                   {med.apresentacao && <span className="text-[10px] font-bold bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-slate-600 flex items-center gap-1"><Package size={10}/> {med.apresentacao}</span>}
+                                </div>
+                                <span className="text-sm text-slate-500 italic">{med.indicacao}</span>
+                             </div>
+                             {med.via && <span className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-100">{med.via}</span>}
+                          </div>
+                          <div className="bg-slate-50 rounded-lg p-3 ml-3 mb-3 font-mono text-sm text-slate-700 border border-slate-100"><strong>Dose:</strong> {med.dose || med.posologia}</div>
+                          <div className="grid sm:grid-cols-2 gap-4 ml-3 text-sm">
+                             {med.diluicao && <div className="flex gap-2 text-blue-700"><FlaskConical size={16} className="shrink-0 mt-0.5"/><span><strong>Diluição:</strong> {med.diluicao}</span></div>}
+                             {med.modo_admin && <div className="flex gap-2 text-purple-700"><Timer size={16} className="shrink-0 mt-0.5"/><span><strong>Infusão:</strong> {med.modo_admin} {med.tempo_infusao ? `(${med.tempo_infusao})` : ''}</span></div>}
+                             {med.cuidados && <div className="flex gap-2 text-amber-700 col-span-2"><AlertTriangle size={16} className="shrink-0 mt-0.5"/><span><strong>Atenção:</strong> {med.cuidados}</span></div>}
+                          </div>
+                       </div>
+                     );
+                   })}
                 </div>
 
                 <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
@@ -564,8 +570,74 @@ export default function EmergencyGuideApp() {
         </div>
       </footer>
 
+      {/* MODAL DE RECEITUÁRIO */}
+      {showPrescriptionModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 print:p-0 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-3xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] print:max-h-none print:h-full print:rounded-none print:shadow-none">
+            {/* Header da Receita */}
+            <div className="bg-slate-100 p-4 border-b border-slate-200 flex justify-between items-center print:hidden">
+              <h3 className="font-bold text-slate-800 flex items-center gap-2"><FilePlus size={20} /> Gerador de Receituário</h3>
+              <div className="flex gap-2">
+                <button onClick={() => window.print()} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"><Printer size={16}/> Imprimir</button>
+                <button onClick={() => setShowPrescriptionModal(false)} className="bg-gray-200 hover:bg-gray-300 text-gray-600 p-2 rounded-lg"><X size={20}/></button>
+              </div>
+            </div>
+
+            {/* Corpo da Receita (Área Imprimível) */}
+            <div className="p-10 overflow-y-auto print:overflow-visible font-serif text-slate-900 bg-white flex-1">
+              
+              {/* Cabeçalho Médico */}
+              <div className="text-center mb-8 border-b-2 border-slate-800 pb-4">
+                <h1 className="text-2xl font-bold uppercase tracking-widest mb-1">{currentUser?.name || "DR. MÉDICO PLANTONISTA"}</h1>
+                <p className="text-sm font-bold text-slate-600 uppercase">CRM: {currentUser?.crm || "00000-UF"} • CLÍNICA MÉDICA / EMERGÊNCIA</p>
+              </div>
+
+              {/* Corpo */}
+              <div className="space-y-8 min-h-[400px]">
+                {/* Agrupamento por via de uso */}
+                {['USO ORAL', 'USO TÓPICO', 'USO RETAL', 'USO INALATÓRIO'].map((usoType) => {
+                  const items = selectedPrescriptionItems.filter(item => item.receita?.uso?.toUpperCase().includes(usoType.replace('USO ', '')));
+                  if (items.length === 0) return null;
+
+                  return (
+                    <div key={usoType} className="mb-6">
+                      <h3 className="font-bold text-lg underline mb-4">{usoType}</h3>
+                      <ul className="space-y-6 list-none pl-2">
+                        {items.map((item, index) => (
+                          <li key={index} className="text-base">
+                            <div className="flex justify-between items-end mb-1 border-b border-dotted border-slate-300 pb-1">
+                              <span className="font-bold text-lg">{index + 1}) {item.receita.nome_comercial}</span>
+                              <span className="font-bold whitespace-nowrap">---------------- {item.receita.quantidade}</span>
+                            </div>
+                            <p className="pl-6 text-slate-700">{item.receita.instrucoes}</p>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Rodapé e Data */}
+              <div className="mt-16 pt-8 border-t border-slate-200 flex justify-between items-end">
+                <div className="text-sm text-slate-500">
+                  <p>Data: {new Date().toLocaleDateString('pt-BR')}</p>
+                  <p>Hora: {new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</p>
+                </div>
+                <div className="text-center">
+                  <div className="w-64 border-b border-black mb-2"></div>
+                  <p className="font-bold text-sm uppercase">{currentUser?.name}</p>
+                  <p className="text-xs">Assinatura e Carimbo</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE BLOCO DE NOTAS */}
       {showNotepad && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200 print:hidden">
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col h-[80vh] overflow-hidden">
             <div className="bg-gray-50 p-4 border-b border-gray-200 flex justify-between items-center">
               <div className="flex items-center gap-3"><div className="bg-blue-100 p-2 rounded-lg text-blue-600"><Edit size={20} /></div><div><h3 className="font-bold text-slate-800 leading-none">Meu Caderno</h3><div className="flex items-center gap-2 mt-1"><span className="text-xs text-slate-500">Anotações de {currentUser?.name}</span><span className="text-gray-300">•</span>{isCloudConnected ? (<span className="flex items-center gap-1 text-[10px] text-green-600 font-medium"><Cloud size={10} /> Nuvem Ativa</span>) : (<span className="flex items-center gap-1 text-[10px] text-amber-600 font-medium"><CloudOff size={10} /> Offline</span>)}</div></div></div>
