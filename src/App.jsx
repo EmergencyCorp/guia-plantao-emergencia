@@ -3,10 +3,40 @@ import {
   Activity, AlertCircle, Search, Clock, Pill, FileText, Loader2, BookOpen, 
   Stethoscope, ClipboardCheck, AlertTriangle, ArrowRight, X, User, 
   CheckCircle2, Thermometer, Syringe, Siren, FlaskConical, Tag, Package,
-  ShieldAlert
+  ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, FilePenLine, Save
 } from 'lucide-react';
 
+// --- CONFIGURAÇÃO DE ACESSO (Edite aqui) ---
+// Adicione ou remova usuários desta lista para controlar o acesso
+const AUTHORIZED_USERS = [
+  { 
+    username: 'admin', 
+    password: '123', 
+    name: 'Dr. Administrador',
+    role: 'Diretor Clínico'
+  },
+  { 
+    username: 'medico', 
+    password: 'med', 
+    name: 'Dr. Plantonista',
+    role: 'Médico Assistente'
+  },
+  { 
+    username: 'interno', 
+    password: 'int', 
+    name: 'Acadêmico',
+    role: 'Interno'
+  }
+];
+
 export default function EmergencyGuideApp() {
+  // Estados de Autenticação Local
+  const [currentUser, setCurrentUser] = useState(null);
+  const [usernameInput, setUsernameInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [loginError, setLoginError] = useState('');
+
+  // Estados da Aplicação Principal
   const [activeRoom, setActiveRoom] = useState('verde');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
@@ -14,6 +44,90 @@ export default function EmergencyGuideApp() {
   const [recentSearches, setRecentSearches] = useState([]);
   const [errorMsg, setErrorMsg] = useState('');
   const resultsRef = useRef(null);
+
+  // Estados do Bloco de Notas
+  const [showNotepad, setShowNotepad] = useState(false);
+  const [userNotes, setUserNotes] = useState('');
+
+  // Verificar se já existe sessão salva ao carregar
+  useEffect(() => {
+    const savedUser = localStorage.getItem('emergency_app_user');
+    if (savedUser) {
+      try {
+        const parsedUser = JSON.parse(savedUser);
+        setCurrentUser(parsedUser);
+        loadHistory(parsedUser.username);
+        loadNotes(parsedUser.username);
+      } catch (e) {
+        console.error("Erro ao restaurar sessão", e);
+      }
+    }
+  }, []);
+
+  // Função para carregar histórico do LocalStorage
+  const loadHistory = (username) => {
+    try {
+      const history = localStorage.getItem(`history_${username}`);
+      if (history) {
+        setRecentSearches(JSON.parse(history));
+      } else {
+        setRecentSearches([]);
+      }
+    } catch (e) {
+      setRecentSearches([]);
+    }
+  };
+
+  // Função para carregar notas do LocalStorage
+  const loadNotes = (username) => {
+    try {
+      const notes = localStorage.getItem(`notes_${username}`);
+      setUserNotes(notes || '');
+    } catch (e) {
+      setUserNotes('');
+    }
+  };
+
+  // Função para salvar notas (chamada a cada alteração)
+  const handleNoteChange = (e) => {
+    const text = e.target.value;
+    setUserNotes(text);
+    if (currentUser) {
+      localStorage.setItem(`notes_${currentUser.username}`, text);
+    }
+  };
+
+  // Função de Login Baseada na Lista Hardcoded
+  const handleLogin = (e) => {
+    e.preventDefault(); // Previne recarregamento do formulário
+    setLoginError('');
+
+    // Busca o usuário na lista de autorizados
+    const foundUser = AUTHORIZED_USERS.find(
+      u => u.username.toLowerCase() === usernameInput.toLowerCase() && u.password === passwordInput
+    );
+
+    if (foundUser) {
+      // Login com sucesso
+      setCurrentUser(foundUser);
+      localStorage.setItem('emergency_app_user', JSON.stringify(foundUser)); // Persiste sessão
+      loadHistory(foundUser.username);
+      loadNotes(foundUser.username);
+      setUsernameInput('');
+      setPasswordInput('');
+    } else {
+      setLoginError('Usuário ou senha incorretos.');
+    }
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setConduct(null);
+    setSearchQuery('');
+    setRecentSearches([]);
+    setUserNotes('');
+    localStorage.removeItem('emergency_app_user');
+  };
 
   const roomConfig = {
     verde: {
@@ -45,6 +159,24 @@ export default function EmergencyGuideApp() {
     setTimeout(() => setErrorMsg(''), 4000);
   };
 
+  const saveToHistory = (newSearchTerm, room) => {
+    if (!currentUser) return;
+
+    const newEntry = { 
+      query: newSearchTerm, 
+      room: room, 
+      timestamp: new Date().toISOString() 
+    };
+
+    const currentHistory = recentSearches.filter(s => s.query.toLowerCase() !== newSearchTerm.toLowerCase());
+    const updatedHistory = [newEntry, ...currentHistory].slice(0, 10);
+    
+    setRecentSearches(updatedHistory);
+    
+    // Salva no LocalStorage vinculado ao usuário
+    localStorage.setItem(`history_${currentUser.username}`, JSON.stringify(updatedHistory));
+  };
+
   const generateConduct = async () => {
     if (!searchQuery.trim()) {
       showError('Por favor, digite uma condição clínica para buscar.');
@@ -61,7 +193,6 @@ export default function EmergencyGuideApp() {
 
     const roomClassification = activeRoom === 'verde' ? 'Baixa complexidade' : 'Alta complexidade/Emergência';
 
-    // Instrução específica para priorizar VO na sala verde
     const prescriptionGuidance = activeRoom === 'verde'
       ? 'DIRETRIZ IMPORTANTE: Como é Sala Verde, dê PREFERÊNCIA para medicações via ORAL (VO) ou IM na primeira linha de tratamento visando a alta do paciente. Use EV apenas se estritamente necessário para controle álgico intenso ou se houver falha da VO (deixe o EV claro no escalonamento).'
       : 'DIRETRIZ: Priorize a via mais eficaz e rápida para estabilização (geralmente EV).';
@@ -126,7 +257,8 @@ export default function EmergencyGuideApp() {
     SEJA PRAGMÁTICO. Doses para adulto 70kg. JSON puro sem markdown.`;
 
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      const apiKey = (import.meta && import.meta.env) ? import.meta.env.VITE_GEMINI_API_KEY : "";
+      
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -144,13 +276,7 @@ export default function EmergencyGuideApp() {
       if (textResponse) {
         const conductData = JSON.parse(textResponse);
         setConduct(conductData);
-        
-        const newSearch = { query: searchQuery, room: activeRoom, timestamp: new Date().toISOString() };
-        setRecentSearches(prev => {
-          const filtered = prev.filter(s => s.query.toLowerCase() !== searchQuery.toLowerCase());
-          return [newSearch, ...filtered].slice(0, 5);
-        });
-
+        saveToHistory(searchQuery, activeRoom);
         setTimeout(() => {
           resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }, 200);
@@ -170,6 +296,89 @@ export default function EmergencyGuideApp() {
     setSearchQuery(search.query);
   };
 
+  // --- TELA DE LOGIN (Autenticação Local) ---
+
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans text-slate-800">
+        <div className="bg-white rounded-3xl shadow-xl border border-gray-100 max-w-md w-full overflow-hidden">
+          
+          <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-8 text-center text-white relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/medical-icons.png')] opacity-10"></div>
+            <div className="relative z-10 flex flex-col items-center">
+              <div className="bg-white/20 p-3 rounded-2xl mb-4 backdrop-blur-sm shadow-lg">
+                <Shield size={32} className="text-white" />
+              </div>
+              <h1 className="text-2xl font-bold mb-1">Guia de Plantão</h1>
+              <p className="text-blue-100 text-sm font-medium">Acesso Restrito a Profissionais</p>
+            </div>
+          </div>
+
+          <div className="p-8 space-y-6">
+            <div className="text-center space-y-2">
+              <h2 className="text-xl font-bold text-slate-800">Autenticação</h2>
+              <p className="text-slate-500 text-sm">Insira suas credenciais institucionais.</p>
+            </div>
+
+            {loginError && (
+              <div className="bg-red-50 text-red-600 p-3 rounded-lg text-xs flex items-center gap-2 border border-red-100 animate-in fade-in">
+                <AlertCircle size={14} />
+                {loginError}
+              </div>
+            )}
+
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Usuário</label>
+                <div className="relative">
+                  <User className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
+                  <input 
+                    type="text"
+                    value={usernameInput}
+                    onChange={(e) => setUsernameInput(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all font-medium text-slate-700"
+                    placeholder="Ex: admin"
+                    autoCapitalize="none"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Senha</label>
+                <div className="relative">
+                  <KeyRound className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
+                  <input 
+                    type="password"
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all font-medium text-slate-700"
+                    placeholder="••••••"
+                  />
+                </div>
+              </div>
+
+              <button 
+                type="submit"
+                className="w-full flex items-center justify-center gap-3 bg-blue-600 text-white font-bold p-3.5 rounded-xl hover:bg-blue-700 transition-all shadow-md hover:shadow-lg mt-2"
+              >
+                <LogIn className="w-5 h-5" />
+                <span>Entrar</span>
+              </button>
+            </form>
+            
+            <div className="text-center">
+              <p className="text-[10px] text-slate-400">
+                Acesso controlado localmente. Contate o administrador em caso de problemas.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- APP PRINCIPAL ---
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col font-sans text-slate-800 selection:bg-blue-100">
       
@@ -185,11 +394,32 @@ export default function EmergencyGuideApp() {
               <span className="text-[11px] text-slate-500 font-medium tracking-wide uppercase mt-0.5">Suporte Clínico Inteligente</span>
             </div>
           </div>
-          <div className="hidden sm:flex items-center gap-3 text-xs font-medium text-slate-500">
-             <div className="flex items-center gap-1.5 bg-gray-100 px-3 py-1.5 rounded-full">
-               <User size={14} />
-               <span>Uso Profissional</span>
+          
+          <div className="flex items-center gap-4">
+             <div className="hidden sm:flex flex-col items-end mr-2">
+               <span className="text-xs font-bold text-slate-700">{currentUser.name}</span>
+               <span className="text-[10px] text-slate-400 uppercase tracking-wider">{currentUser.role}</span>
              </div>
+             
+             {/* Botão de Bloco de Notas */}
+             <button
+               onClick={() => setShowNotepad(true)}
+               className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all relative group"
+               title="Meu Caderno"
+             >
+                <FilePenLine size={20} />
+                <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+                  Anotações
+                </span>
+             </button>
+
+             <button 
+               onClick={handleLogout}
+               className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-all"
+               title="Sair"
+             >
+               <LogOut size={20} />
+             </button>
           </div>
         </div>
       </header>
@@ -275,7 +505,7 @@ export default function EmergencyGuideApp() {
           {recentSearches.length > 0 && (
             <div className="flex flex-wrap gap-2 px-1">
               <div className="flex items-center gap-2 text-xs font-medium text-gray-400 uppercase tracking-wider mr-2">
-                <Clock size={14} /> Recentes
+                <History size={14} /> Histórico
               </div>
               {recentSearches.map((search, idx) => (
                 <button
@@ -666,6 +896,51 @@ export default function EmergencyGuideApp() {
 
         </div>
       </footer>
+
+      {/* MODAL DE BLOCO DE NOTAS */}
+      {showNotepad && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col h-[80vh] animate-in zoom-in-95 duration-200 overflow-hidden">
+            <div className="bg-gray-50 p-4 border-b border-gray-200 flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                 <div className="bg-blue-100 p-2 rounded-lg text-blue-600">
+                    <FilePenLine size={20} />
+                 </div>
+                 <div>
+                    <h3 className="font-bold text-slate-800 leading-none">Meu Caderno de Plantão</h3>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Anotações privadas de {currentUser?.name}
+                    </p>
+                 </div>
+              </div>
+              <button 
+                onClick={() => setShowNotepad(false)}
+                className="p-2 hover:bg-gray-200 rounded-full text-gray-500 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="flex-1 bg-yellow-50 relative">
+              <textarea
+                className="w-full h-full p-6 resize-none focus:outline-none text-slate-700 leading-relaxed bg-transparent text-lg font-medium font-serif"
+                placeholder="Escreva suas anotações pessoais, pendências ou lembretes aqui..."
+                value={userNotes}
+                onChange={handleNoteChange}
+                style={{ backgroundImage: 'linear-gradient(transparent, transparent 31px, #e5e7eb 31px)', backgroundSize: '100% 32px', lineHeight: '32px' }}
+              />
+            </div>
+            
+            <div className="p-3 bg-white border-t border-gray-200 flex justify-between items-center text-xs text-gray-500">
+               <div className="flex items-center gap-1.5">
+                  <Save size={14} className="text-green-600" />
+                  <span>Salvo automaticamente</span>
+               </div>
+               <span>{userNotes.length} caracteres</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
