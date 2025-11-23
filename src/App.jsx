@@ -211,31 +211,36 @@ export default function EmergencyGuideApp() {
 
     const roomContext = activeRoom === 'verde' ? 'SALA VERDE (AMBULATORIAL)' : 'SALA VERMELHA (EMERGÊNCIA)';
     
-    const promptText = `Atue como médico especialista em emergência.
-    Gere conduta para "${searchQuery}" na ${roomContext}.
+    // PROMPT REFINADO - FONTE E DETALHES
+    const promptText = `Atue como médico especialista em medicina de emergência e terapia intensiva.
+    Gere conduta clínica para "${searchQuery}" na ${roomContext}.
     
-    REGRAS RÍGIDAS:
-    1. JSON puro.
-    2. "tratamento_medicamentoso": ARRAY de objetos.
-    3. "criterios_internacao" e "criterios_alta": OBRIGATÓRIOS.
-    4. "achados_exames": DEVE conter campos "ecg", "laboratorio" e "imagem" com descrições técnicas do que esperar.
+    REGRAS RÍGIDAS DE CONTEÚDO:
+    1. **Fonte Obrigatória:** Cite explicitamente o guideline utilizado no campo "guideline_referencia". Use APENAS fontes de alta credibilidade (ex: SBC, AHA, GINA, GOLD, AMIB, Surviving Sepsis, ATLS, UpToDate).
+    2. **Resumo Clínico:** Detalhado e técnico. Descreva fisiopatologia e achados clássicos.
+    3. **Alvos Terapêuticos:** Na "avaliacao_inicial", para Pressão Arterial, OBRIGATORIAMENTE forneça PAS, PAD e PAM (ex: PAM > 65mmHg). Para FC e FR, dê faixas de segurança.
+    4. **Imagens:** Em "achados_exames.imagem", descreva DETALHADAMENTE o padrão radiológico esperado.
+    5. **Medicamentos:** - "apresentacao": Cite nomes comerciais comuns no Brasil ou apresentações genéricas (ex: Ampola 10mg/2ml, Comp 500mg).
+       - "posologia": Dose exata para adulto 70kg.
+       - "modo_admin": Se injetável, especifique: "Bolus", "Infusão Lenta (X min)", "BIC contínua".
+    6. **Trauma:** SE a condição for trauma, preencha o campo "xabcde_trauma".
     
     ESTRUTURA JSON:
     {
-      "condicao": "Nome",
-      "estadiamento": "Classificação",
+      "condicao": "Nome Completo",
+      "estadiamento": "Classificação (ex: Sepse Grave, IAMCSST)",
       "classificacao": "${roomContext}",
       "resumo_clinico": "Texto técnico detalhado...",
       "xabcde_trauma": null, // OU objeto com chaves x,a,b,c,d,e se for trauma
       "avaliacao_inicial": { 
-        "sinais_vitais_alvos": ["PAM > 65", "SatO2 > 94%"], 
+        "sinais_vitais_alvos": ["PAM > 65mmHg (PAS > 90)", "SatO2 > 94%", "FC < 100bpm", "FR 12-20irpm"], 
         "exames_prioridade1": ["..."], 
         "exames_complementares": ["..."] 
       },
       "achados_exames": {
-         "ecg": "Padrão esperado (ex: Supra ST em DII, DIII, aVF)",
-         "laboratorio": "Alterações esperadas (ex: Troponina elevada)",
-         "imagem": "Descrição radiológica detalhada (ex: Consolidação lobar)"
+         "ecg": "Padrão esperado...",
+         "laboratorio": "Alterações esperadas...",
+         "imagem": "Descrição radiológica detalhada..."
       },
       "criterios_gravidade": ["..."],
       "tratamento_medicamentoso": [ 
@@ -249,7 +254,7 @@ export default function EmergencyGuideApp() {
       "medidas_gerais": ["..."],
       "criterios_internacao": ["..."],
       "criterios_alta": ["..."],
-      "guideline_referencia": "Fonte"
+      "guideline_referencia": "Fonte (Ex: Diretriz SBC 2023)"
     }
     Doses adulto 70kg.`;
 
@@ -366,7 +371,23 @@ export default function EmergencyGuideApp() {
             <button onClick={generateConduct} disabled={loading} className={`px-6 py-3 rounded-xl font-bold text-white flex items-center gap-2 transition-all ${loading ? 'bg-slate-300' : 'bg-blue-900 hover:bg-blue-800'}`}>{loading ? <Loader2 className="animate-spin" /> : <>Gerar <ArrowRight size={18} /></>}</button>
           </div>
 
-          {recentSearches.length > 0 && (<div className="flex flex-wrap gap-2 px-1"><div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase mr-2"><History size={14} /> Recentes</div>{recentSearches.map((search, idx) => (<button key={idx} onClick={() => {setActiveRoom(search.room); setSearchQuery(search.query);}} className="text-xs px-3 py-1 bg-white border border-gray-200 rounded-full hover:border-blue-300 hover:text-blue-700 transition-colors">{search.query}</button>))}</div>)}
+          {recentSearches.length > 0 && (
+            <div className="flex flex-wrap gap-2 px-1">
+              <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase mr-2">
+                <History size={14} /> Recentes
+              </div>
+              {recentSearches.map((search, idx) => (
+                <button 
+                  key={idx} 
+                  onClick={() => {setActiveRoom(search.room); setSearchQuery(search.query);}} 
+                  className="flex items-center gap-2 text-xs px-3 py-1 bg-white border border-gray-200 rounded-full hover:border-blue-300 hover:text-blue-700 transition-colors"
+                >
+                  <div className={`w-2 h-2 rounded-full shrink-0 ${search.room === 'verde' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                  {search.query}
+                </button>
+              ))}
+            </div>
+          )}
           {errorMsg && <div className="bg-red-50 text-red-700 px-4 py-3 rounded-xl border border-red-200 flex items-center gap-3 text-sm font-medium"><AlertCircle size={18} /> {errorMsg}</div>}
         </div>
 
@@ -376,6 +397,12 @@ export default function EmergencyGuideApp() {
                <div>
                   <div className="flex flex-wrap gap-2 mb-2"><span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase text-white ${activeRoom === 'verde' ? 'bg-emerald-500' : 'bg-rose-600'}`}>{conduct.classificacao}</span>{conduct.estadiamento && <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-800 text-white">{conduct.estadiamento}</span>}</div>
                   <h2 className="text-3xl font-bold text-slate-800">{conduct.condicao}</h2>
+                  {/* FONTE / GUIDELINE REFERÊNCIA - AGORA EMBAIXO DO NOME */}
+                  {conduct.guideline_referencia && (
+                    <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                      <BookOpen size={12} /> Fonte: <span className="font-medium">{conduct.guideline_referencia}</span>
+                    </p>
+                  )}
                </div>
                <button onClick={() => setConduct(null)} className="p-2 hover:bg-gray-200 rounded-full text-gray-500"><X size={24}/></button>
             </div>
@@ -491,7 +518,6 @@ export default function EmergencyGuideApp() {
                    ))}
                 </div>
 
-                {/* ESCALONAMENTO TERAPÊUTICO (CORRIGIDO) */}
                 <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
                    <h3 className="font-bold text-slate-800 mb-5 flex items-center gap-2"><ArrowRight className="text-purple-600"/> Fluxo de Escalonamento</h3>
                    <div className="space-y-6 relative">
