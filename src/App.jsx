@@ -78,6 +78,7 @@ export default function EmergencyGuideApp() {
   const [showNotepad, setShowNotepad] = useState(false);
   const [userNotes, setUserNotes] = useState('');
 
+  // --- NOVOS ESTADOS PARA RECEITUÁRIO ---
   const [selectedPrescriptionItems, setSelectedPrescriptionItems] = useState([]);
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
 
@@ -112,36 +113,31 @@ export default function EmergencyGuideApp() {
     return () => unsubscribe();
   }, []);
 
-  // Carregar sessão local
   useEffect(() => {
     const savedUser = localStorage.getItem('emergency_app_user');
     if (savedUser) {
       try {
         const parsedUser = JSON.parse(savedUser);
         setCurrentUser(parsedUser);
-        // Carrega localmente primeiro para rapidez
-        loadLocalHistory(parsedUser.username);
+        loadHistory(parsedUser.username);
       } catch (e) {}
     }
   }, []);
 
-  // Sincronizar Notas E Histórico da Nuvem
   useEffect(() => {
-    if (currentUser && isCloudConnected) {
-      fetchNotesFromCloud(currentUser.username);
-      fetchHistoryFromCloud(currentUser.username); // Nova função de sync
-    } else if (currentUser) {
+    if (currentUser && isCloudConnected) fetchNotesFromCloud(currentUser.username);
+    else if (currentUser) {
       const localNotes = localStorage.getItem(`notes_${currentUser.username}`);
       if (localNotes) setUserNotes(localNotes);
-      loadLocalHistory(currentUser.username);
     }
   }, [currentUser, isCloudConnected]);
 
+  // Limpa seleção ao mudar de conduta
   useEffect(() => {
     setSelectedPrescriptionItems([]);
   }, [conduct]);
 
-  const loadLocalHistory = (username) => {
+  const loadHistory = (username) => {
     try {
       const history = localStorage.getItem(`history_${username}`);
       if (history) setRecentSearches(JSON.parse(history));
@@ -149,56 +145,6 @@ export default function EmergencyGuideApp() {
     } catch (e) { setRecentSearches([]); }
   };
 
-  // --- FUNÇÕES DE NUVEM (HISTÓRICO) ---
-  const fetchHistoryFromCloud = async (username) => {
-    // Carrega local primeiro para não ficar vazio enquanto conecta
-    loadLocalHistory(username);
-
-    if (db && auth?.currentUser) {
-      try {
-        // Documento separado para histórico
-        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', username);
-        const docSnap = await getDoc(docRef);
-        
-        if (docSnap.exists()) {
-          const remoteData = docSnap.data();
-          if (remoteData.searches && Array.isArray(remoteData.searches)) {
-            setRecentSearches(remoteData.searches);
-            // Atualiza o local para manter sincronia offline
-            localStorage.setItem(`history_${username}`, JSON.stringify(remoteData.searches));
-          }
-        }
-      } catch (error) { console.error("Erro sync histórico:", error); }
-    }
-  };
-
-  const saveToHistory = async (term, room) => {
-    if (!currentUser) return;
-    
-    const newEntry = { query: term, room, timestamp: new Date().toISOString() };
-    const hist = recentSearches.filter(s => s.query.toLowerCase() !== term.toLowerCase());
-    const updated = [newEntry, ...hist].slice(0, 10);
-    
-    // 1. Salva no Estado e LocalStorage (Imediato)
-    setRecentSearches(updated);
-    localStorage.setItem(`history_${currentUser.username}`, JSON.stringify(updated));
-
-    // 2. Salva na Nuvem (Background)
-    if (db && auth?.currentUser) {
-      try {
-        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', currentUser.username);
-        await setDoc(docRef, {
-          searches: updated,
-          lastUpdated: new Date().toISOString(),
-          username: currentUser.username
-        }, { merge: true });
-      } catch (error) {
-        console.error("Erro ao salvar histórico na nuvem:", error);
-      }
-    }
-  };
-
-  // --- FUNÇÕES DE NUVEM (NOTAS) ---
   const fetchNotesFromCloud = async (username) => {
     const localNotes = localStorage.getItem(`notes_${username}`);
     if (localNotes) setUserNotes(localNotes);
@@ -211,7 +157,7 @@ export default function EmergencyGuideApp() {
           setUserNotes(docSnap.data().content);
           localStorage.setItem(`notes_${username}`, docSnap.data().content);
         }
-      } catch (error) { console.error("Erro sync notas:", error); }
+      } catch (error) { console.error(error); }
     }
   };
 
@@ -246,7 +192,7 @@ export default function EmergencyGuideApp() {
     if (foundUser) {
       setCurrentUser(foundUser);
       localStorage.setItem('emergency_app_user', JSON.stringify(foundUser));
-      // Sync inicial é feito pelo useEffect quando currentUser muda
+      loadHistory(foundUser.username);
       setUsernameInput('');
       setPasswordInput('');
     } else {
@@ -267,9 +213,12 @@ export default function EmergencyGuideApp() {
     if (activeRoom !== 'verde' || !med.receita) return;
 
     setSelectedPrescriptionItems(prev => {
-      const exists = prev.find(item => item.farmaco === med.farmaco);
+      // Identificação única melhorada: Farmaco + Nome Comercial da receita (para diferenciar apresentações)
+      const itemId = med.farmaco + (med.receita?.nome_comercial || "");
+      const exists = prev.find(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
+      
       if (exists) {
-        return prev.filter(item => item.farmaco !== med.farmaco);
+        return prev.filter(item => (item.farmaco + (item.receita?.nome_comercial || "")) !== itemId);
       } else {
         return [...prev, med];
       }
@@ -308,7 +257,7 @@ export default function EmergencyGuideApp() {
     
     REGRAS RÍGIDAS:
     1. JSON puro.
-    2. "tratamento_medicamentoso": ARRAY de objetos.
+    2. "tratamento_medicamentoso": ARRAY de objetos. CRUCIAL: Se um mesmo fármaco tiver mais de uma apresentação (ex: Dipirona Comprimido e Dipirona Gotas), crie DOIS OBJETOS DIFERENTES no array, um para cada apresentação com sua posologia específica.
     3. "criterios_internacao/alta": OBRIGATÓRIOS.
     
     ESTRUTURA JSON:
@@ -327,14 +276,14 @@ export default function EmergencyGuideApp() {
       "criterios_gravidade": ["..."],
       "tratamento_medicamentoso": [ 
         { 
-          "farmaco": "Nome", 
-          "apresentacao": "Amp/Comp", 
+          "farmaco": "Nome (Apresentação)", 
+          "apresentacao": "Amp/Comp/Gts", 
           "dose": "...", 
           "diluicao": "...", 
           "modo_admin": "...", 
           "cuidados": "...", 
           "indicacao": "...",
-          "receita": { "uso": "...", "nome_comercial": "...", "quantidade": "...", "instrucoes": "..." } // NULL SE SALA VERMELHA OU USO HOSPITALAR
+          "receita": { "uso": "...", "nome_comercial": "Nome + Conc", "quantidade": "...", "instrucoes": "..." } // NULL SE SALA VERMELHA
         } 
       ],
       "escalonamento_terapeutico": [
@@ -376,6 +325,14 @@ export default function EmergencyGuideApp() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const saveToHistory = (term, room) => {
+    const newEntry = { query: term, room, timestamp: new Date().toISOString() };
+    const hist = recentSearches.filter(s => s.query.toLowerCase() !== term.toLowerCase());
+    const updated = [newEntry, ...hist].slice(0, 10);
+    setRecentSearches(updated);
+    localStorage.setItem(`history_${currentUser.username}`, JSON.stringify(updated));
   };
 
   const showError = (msg) => { setErrorMsg(msg); setTimeout(() => setErrorMsg(''), 4000); };
@@ -552,7 +509,9 @@ export default function EmergencyGuideApp() {
                 <div className="space-y-4">
                    <div className="flex items-center gap-2 text-emerald-800 mb-2 px-2"><div className="bg-emerald-100 p-1.5 rounded"><Pill size={18}/></div><h3 className="font-bold text-lg">Prescrição e Conduta</h3></div>
                    {conduct.tratamento_medicamentoso?.map((med, idx) => {
-                     const isSelected = selectedPrescriptionItems.find(i => i.farmaco === med.farmaco);
+                     // Identificação única para seleção (farmaco + nome comercial)
+                     const itemId = med.farmaco + (med.receita?.nome_comercial || "");
+                     const isSelected = selectedPrescriptionItems.some(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
                      const canSelect = activeRoom === 'verde' && med.receita;
 
                      return (
