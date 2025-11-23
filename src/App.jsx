@@ -272,7 +272,7 @@ export default function EmergencyGuideApp() {
       "estadiamento": "Classificação",
       "classificacao": "${roomContext}",
       "resumo_clinico": "Texto técnico...",
-      "xabcde_trauma": null, 
+      "xabcde_trauma": null, // OU objeto {x,a,b,c,d,e} APENAS SE FOR TRAUMA
       "avaliacao_inicial": { 
         "sinais_vitais_alvos": ["PAM > 65mmHg", "SatO2 > 94%"], 
         "exames_prioridade1": ["..."], 
@@ -407,6 +407,7 @@ export default function EmergencyGuideApp() {
       </header>
 
       <main className="flex-grow max-w-6xl mx-auto px-4 py-8 space-y-8 w-full relative">
+        {/* BOTÃO FLUTUANTE DE RECEITA (SÓ SALA VERDE) */}
         {activeRoom === 'verde' && selectedPrescriptionItems.length > 0 && (
           <button 
             onClick={() => setShowPrescriptionModal(true)}
@@ -439,7 +440,9 @@ export default function EmergencyGuideApp() {
 
           {recentSearches.length > 0 && (
             <div className="flex flex-wrap gap-2 px-1">
-              <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase mr-2"><History size={14} /> Recentes</div>
+              <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase mr-2">
+                <History size={14} /> Recentes
+              </div>
               {recentSearches.map((search, idx) => (
                 <button 
                   key={idx} 
@@ -535,7 +538,6 @@ export default function EmergencyGuideApp() {
                      const canSelect = activeRoom === 'verde' && med.receita;
                      const isInjectable = med.tipo && (med.tipo.toLowerCase().includes('injet') || med.tipo.toLowerCase().includes('endoven'));
                      
-                     // Cálculo de dose final (mg) e volume (ml)
                      let doseFinal = null;
                      let volumeFinal = null;
                      
@@ -656,10 +658,12 @@ export default function EmergencyGuideApp() {
             {/* Corpo da Receita (Imprimível) */}
             <div className="p-12 overflow-y-auto print:overflow-visible font-serif text-slate-900 bg-white flex-1 flex flex-col h-full relative">
               
+              {/* Marca d'água opcional */}
               <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none">
                 <Activity size={400} />
               </div>
 
+              {/* Cabeçalho Médico Profissional */}
               <header className="flex flex-col items-center border-b-4 border-double border-slate-800 pb-6 mb-8">
                 <h1 className="text-3xl font-bold tracking-widest uppercase text-slate-900">{currentUser?.name || "NOME DO MÉDICO"}</h1>
                 <div className="flex items-center gap-2 mt-2 text-sm font-bold text-slate-600 uppercase tracking-wide">
@@ -669,6 +673,7 @@ export default function EmergencyGuideApp() {
                 </div>
               </header>
 
+              {/* Lista de Medicamentos Formatada */}
               <div className="flex-1 space-y-8">
                 {['USO ORAL', 'USO TÓPICO', 'USO RETAL', 'USO INALATÓRIO', 'USO OFTÁLMICO', 'USO OTOLÓGICO'].map((usoType) => {
                   const items = selectedPrescriptionItems.filter(item => 
@@ -688,11 +693,15 @@ export default function EmergencyGuideApp() {
                         {items.map((item, index) => (
                           <li key={index} className="relative pl-6">
                             <span className="absolute left-0 top-0 font-bold text-lg">{index + 1}.</span>
+                            
+                            {/* Nome e Quantidade com linha pontilhada CSS */}
                             <div className="flex items-end mb-1 w-full">
                               <span className="font-bold text-xl">{item.receita.nome_comercial}</span>
                               <div className="flex-1 mx-2 border-b-2 border-dotted border-slate-400 mb-1.5"></div>
                               <span className="font-bold text-lg whitespace-nowrap">{item.receita.quantidade}</span>
                             </div>
+                            
+                            {/* Instrução Destacada */}
                             <p className="text-base leading-relaxed text-slate-800 mt-1 pl-2 border-l-4 border-slate-200">
                               {item.receita.instrucoes}
                             </p>
@@ -704,6 +713,7 @@ export default function EmergencyGuideApp() {
                 })}
               </div>
 
+              {/* Rodapé Oficial */}
               <footer className="mt-auto pt-12">
                 <div className="flex justify-between items-end">
                   <div className="text-sm">
