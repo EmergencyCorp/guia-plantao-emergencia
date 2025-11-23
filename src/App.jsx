@@ -17,7 +17,7 @@ import {
   setDoc, 
   getDoc, 
   collection, 
-  query as firestoreQuery, // RENOMEADO PARA EVITAR CONFLITOS
+  query as firestoreQuery, 
   where, 
   orderBy, 
   limit, 
@@ -300,18 +300,23 @@ export default function EmergencyGuideApp() {
     });
   };
 
-  const updateItemDays = (index, days) => {
+  const updateItemDays = (id, days) => {
     const newItems = [...selectedPrescriptionItems];
-    newItems[index].dias_tratamento = days;
+    // Procura pelo ID composto para garantir que é o item certo
+    const index = newItems.findIndex(item => (item.farmaco + (item.receita?.nome_comercial || "")) === id);
     
-    const item = newItems[index];
-    if (item.receita?.calculo_qnt?.frequencia_diaria && days > 0) {
-      const total = Math.ceil(item.receita.calculo_qnt.frequencia_diaria * days);
-      const unidade = item.receita.calculo_qnt.unidade || 'unidades';
-      item.receita.quantidade = `${total} ${unidade}`;
+    if (index !== -1) {
+      newItems[index].dias_tratamento = days;
+      
+      const item = newItems[index];
+      if (item.receita?.calculo_qnt?.frequencia_diaria && days > 0) {
+        const total = Math.ceil(item.receita.calculo_qnt.frequencia_diaria * days);
+        const unidade = item.receita.calculo_qnt.unidade || 'unidades';
+        item.receita.quantidade = `${total} ${unidade}`;
+      }
+      
+      setSelectedPrescriptionItems(newItems);
     }
-    
-    setSelectedPrescriptionItems(newItems);
   };
 
   const getConductDocId = (query, room) => {
@@ -322,7 +327,6 @@ export default function EmergencyGuideApp() {
       if (!db) return;
       
       const favoritesRef = collection(db, 'artifacts', appId, 'users', username, 'conducts');
-      // USANDO firestoreQuery AO INVÉS DE query PARA EVITAR CONFLITO
       const q = firestoreQuery(favoritesRef, where("isFavorite", "==", true));
 
       const unsubscribe = onSnapshot(q, (querySnapshot) => {
@@ -391,7 +395,6 @@ export default function EmergencyGuideApp() {
     if (!db) return;
     try {
       const conductsRef = collection(db, 'artifacts', appId, 'users', username, 'conducts');
-      // USANDO firestoreQuery AO INVÉS DE query
       const q = firestoreQuery(conductsRef, where("isFavorite", "==", false), orderBy("lastAccessed", "desc"));
       
       const snapshot = await getDocs(q);
@@ -440,15 +443,15 @@ export default function EmergencyGuideApp() {
     let promptExtra = "";
     if (activeRoom === 'verde') {
       promptExtra += `
-      IMPORTANTE (SALA VERDE):
+      IMPORTANTE (SALA VERDE - RECEITA INTELIGENTE):
       Para cada item em "tratamento_medicamentoso", inclua um objeto "receita":
       "receita": {
          "uso": "USO ORAL/TÓPICO/etc",
          "nome_comercial": "Nome + Concentração",
          "quantidade": "Qtd total (ex: 1 cx)",
          "instrucoes": "Posologia para o paciente",
-         "dias_sugeridos": 5, // Sugestão de dias padrão para antibióticos/sintomáticos
-         "calculo_qnt": { "frequencia_diaria": 3, "unidade": "comprimidos" } // Para calcular total (freq * dias)
+         "dias_sugeridos": 5, // Sugestão de dias padrão para este tratamento
+         "calculo_qnt": { "frequencia_diaria": 3, "unidade": "comprimidos" } // Para calcular total se o médico mudar os dias (freq * dias)
       }
       `;
     }
@@ -473,7 +476,7 @@ export default function EmergencyGuideApp() {
     1. JSON puro.
     2. "tratamento_medicamentoso": ARRAY de objetos. Se um mesmo fármaco tiver apresentações diferentes (ex: Dipirona Comprimido vs Gotas), crie DOIS OBJETOS DIFERENTES no array.
     3. "tipo": CAMPO OBRIGATÓRIO E RÍGIDO. Escolha EXATAMENTE UM DA LISTA: ['Comprimido', 'Cápsula', 'Xarope', 'Suspensão', 'Gotas', 'Solução Oral', 'Injetável', 'Tópico', 'Inalatório', 'Supositório'].
-    4. "sugestao_uso": Se for Sala Verde, descreva COMO USAR baseado na BULA (ex: "Diluir em meio copo d'água e tomar após refeição"). Se for Sala Vermelha, descreva a administração técnica.
+    4. "sugestao_uso": Se for Sala Verde, descreva COMO USAR baseado na BULA. Se for Sala Vermelha, descreva a administração técnica.
     5. "farmaco": Nome + Concentração (Ex: "Dipirona 500mg").
     6. "criterios_internacao/alta": OBRIGATÓRIOS.
     
@@ -495,7 +498,7 @@ export default function EmergencyGuideApp() {
         { 
           "farmaco": "Nome + Concentração", 
           "tipo": "Comprimido", // USE A LISTA RÍGIDA
-          "sugestao_uso": "Instrução de uso (Bula/Técnica)",
+          "sugestao_uso": "Instrução de uso...",
           "diluicao": "...",
           "modo_admin": "...",
           "cuidados": "...", 
@@ -795,15 +798,19 @@ export default function EmergencyGuideApp() {
                 <div className="space-y-4">
                    <div className="flex items-center gap-2 text-emerald-800 mb-2 px-2"><div className="bg-emerald-100 p-1.5 rounded"><Pill size={18}/></div><h3 className="font-bold text-lg">Prescrição e Conduta</h3></div>
                    {conduct.tratamento_medicamentoso?.map((med, idx) => {
+                     // Identificador único para o checkbox
                      const itemId = med.farmaco + (med.receita?.nome_comercial || "");
                      const isSelected = selectedPrescriptionItems.some(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
                      const canSelect = activeRoom === 'verde' && med.receita;
+                     
+                     // Detalhes visuais do card
                      const medType = inferMedType(med); 
                      const isInjectable = medType.toLowerCase().includes('injet');
                      
                      let doseFinal = null;
                      let volumeFinal = null;
                      
+                     // Cálculo automático para Sala Vermelha
                      if (activeRoom === 'vermelha' && med.usa_peso && patientWeight && med.dose_padrao_kg) {
                        const doseNum = parseFloat(med.dose_padrao_kg) * parseFloat(patientWeight);
                        doseFinal = doseNum.toFixed(1) + " " + med.unidade_base.split('/')[0];
@@ -813,6 +820,10 @@ export default function EmergencyGuideApp() {
                          volumeFinal = vol.toFixed(1) + " ml";
                        }
                      }
+
+                     // Encontrar o item selecionado para pegar os dias atuais (se selecionado)
+                     const selectedItemState = selectedPrescriptionItems.find(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
+                     const currentDays = selectedItemState ? selectedItemState.dias_tratamento : (med.receita?.dias_sugeridos || 5);
 
                      return (
                        <div 
@@ -849,9 +860,9 @@ export default function EmergencyGuideApp() {
                              {med.sugestao_uso || med.dose}
                           </div>
                           
-                          {/* INPUT DE DIAS PARA RECEITA (SALA VERDE) */}
+                          {/* CAMPO DE DIAS (SÓ APARECE SE SELECIONADO NA SALA VERDE) */}
                           {canSelect && isSelected && (
-                            <div className="ml-3 mb-3 animate-in slide-in-from-top-1">
+                            <div className="ml-3 mb-3 animate-in slide-in-from-top-1" onClick={(e) => e.stopPropagation()}>
                                <label className="text-xs font-bold text-blue-700 flex items-center gap-1 mb-1">
                                  <CalendarDays size={12} /> Duração do Tratamento (Dias):
                                </label>
@@ -859,9 +870,8 @@ export default function EmergencyGuideApp() {
                                  type="number" 
                                  min="1" 
                                  className="w-20 px-2 py-1 text-sm border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-blue-900 font-bold"
-                                 value={med.dias_tratamento || 5}
-                                 onClick={(e) => e.stopPropagation()}
-                                 onChange={(e) => updateItemDays(selectedPrescriptionItems.findIndex(i => i.farmaco === med.farmaco), parseInt(e.target.value))}
+                                 value={currentDays}
+                                 onChange={(e) => updateItemDays(itemId, parseInt(e.target.value))}
                                />
                             </div>
                           )}
@@ -922,7 +932,7 @@ export default function EmergencyGuideApp() {
         </div>
       </footer>
 
-      {/* MODAL DE RECEITUÁRIO (VISUAL PROFISSIONAL) */}
+      {/* MODAL DE RECEITUÁRIO */}
       {showPrescriptionModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 print:p-0 animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-3xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] print:max-h-none print:h-full print:rounded-none print:shadow-none">
@@ -952,6 +962,7 @@ export default function EmergencyGuideApp() {
                             <span className="absolute left-0 top-0 font-bold text-lg">{index + 1}.</span>
                             <div className="flex items-end mb-1 w-full"><span className="font-bold text-xl">{item.receita.nome_comercial}</span><div className="flex-1 mx-2 border-b-2 border-dotted border-slate-400 mb-1.5"></div><span className="font-bold text-lg whitespace-nowrap">{item.receita.quantidade}</span></div>
                             <p className="text-base leading-relaxed text-slate-800 mt-1 pl-2 border-l-4 border-slate-200">{item.receita.instrucoes}</p>
+                            {item.dias_tratamento && <p className="text-xs text-slate-500 italic pl-3 mt-0.5">(Tratamento por {item.dias_tratamento} dias)</p>}
                           </li>
                         ))}
                       </ul>
