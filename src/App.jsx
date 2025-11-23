@@ -125,7 +125,7 @@ export default function EmergencyGuideApp() {
     SEJA PRAGMÁTICO. Doses para adulto 70kg. JSON puro sem markdown.`;
 
     try {
-      const apiKey = "AIzaSyCRv7GVR5txtZrsIZFeH5aGVS490v4TJlM"; 
+      const apiKey = "AIzaSyCe6mlLQYzAwjYXdHzYcudMvA5ArA827xE"; 
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
