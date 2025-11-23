@@ -126,15 +126,12 @@ export default function EmergencyGuideApp() {
 
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY; 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-thinking-exp-01-21:generateContent?key=${apiKey}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: promptText }] }],
-          generationConfig: { 
-            responseMimeType: "application/json",
-            thinkingConfig: { "mode": "THINKING_MODE_ENABLED" }
-          }
+          generationConfig: { responseMimeType: "application/json" }
         })
       });
 
@@ -184,7 +181,7 @@ export default function EmergencyGuideApp() {
             </div>
             <div className="flex flex-col">
               <h1 className="text-lg font-bold text-slate-800 leading-none">Guia de Plantão</h1>
-              <span className="text-[11px] text-slate-500 font-medium tracking-wide uppercase mt-0.5">Gemini 2.0 Thinking Mode</span>
+              <span className="text-[11px] text-slate-500 font-medium tracking-wide uppercase mt-0.5">Suporte Clínico Inteligente</span>
             </div>
           </div>
           <div className="hidden sm:flex items-center gap-3 text-xs font-medium text-slate-500">
