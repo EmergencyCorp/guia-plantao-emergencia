@@ -5,7 +5,7 @@ import {
   CheckCircle2, Thermometer, Syringe, Siren, FlaskConical, Tag, Package,
   ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save, Cloud, CloudOff, Settings, Info,
   HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine, Wind, Droplet, Timer, Skull, Printer, FilePlus, Calculator,
-  Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2, SprayCan, CalendarDays
+  Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2, SprayCan, CalendarDays, Users, UserPlus, Calendar
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -64,10 +64,9 @@ if (firebaseConfig && firebaseConfig.apiKey) {
 const appId = (typeof __app_id !== 'undefined') ? __app_id : 'emergency-guide-app';
 const initialToken = (typeof __initial_auth_token !== 'undefined') ? __initial_auth_token : null;
 
-const AUTHORIZED_USERS = [
-  { username: 'admin', password: '123', name: 'Dr. Administrador', role: 'Diretor Clínico', crm: '12345-MG' },
-  { username: 'medico', password: 'med', name: 'Dr. Plantonista', role: 'Médico Assistente', crm: '67890-SP' },
-  { username: 'interno', password: 'int', name: 'Acadêmico', role: 'Interno', crm: 'Estudante' }
+// Usuários "Hardcoded" (Backdoor / Super Admins)
+const HARDCODED_USERS = [
+  { username: 'admin', password: '123', name: 'Administrador Master', role: 'Super Admin', crm: '00000-MG' }
 ];
 
 export default function EmergencyGuideApp() {
@@ -75,6 +74,7 @@ export default function EmergencyGuideApp() {
   const [usernameInput, setUsernameInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [loginError, setLoginError] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   
   const [firebaseUser, setFirebaseUser] = useState(null); 
   const [isCloudConnected, setIsCloudConnected] = useState(false);
@@ -97,8 +97,12 @@ export default function EmergencyGuideApp() {
   const [selectedPrescriptionItems, setSelectedPrescriptionItems] = useState([]);
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
   const [patientWeight, setPatientWeight] = useState('');
-
   const [isCurrentConductFavorite, setIsCurrentConductFavorite] = useState(false);
+
+  // --- ESTADOS DE GESTÃO DE USUÁRIOS (ADMIN) ---
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [registeredUsers, setRegisteredUsers] = useState([]);
+  const [newUser, setNewUser] = useState({ username: '', password: '', name: '', role: 'Assinante', crm: '', validityDays: 30 });
 
   useEffect(() => {
     if (!firebaseConfig || !firebaseConfig.apiKey) {
@@ -136,6 +140,15 @@ export default function EmergencyGuideApp() {
     if (savedUser) {
       try {
         const parsedUser = JSON.parse(savedUser);
+        // Verifica validade ao recarregar página se não for hardcoded
+        if (!HARDCODED_USERS.find(u => u.username === parsedUser.username)) {
+          const expires = new Date(parsedUser.expiresAt);
+          if (new Date() > expires) {
+            localStorage.removeItem('emergency_app_user');
+            setLoginError('Sua sessão expirou. Entre novamente.');
+            return;
+          }
+        }
         setCurrentUser(parsedUser);
         loadHistory(parsedUser.username);
       } catch (e) {}
@@ -146,8 +159,12 @@ export default function EmergencyGuideApp() {
     if (currentUser && isCloudConnected) {
       fetchNotesFromCloud(currentUser.username);
       fetchHistoryFromCloud(currentUser.username);
-      const unsubFavs = subscribeToFavorites(currentUser.username);
-      return () => { if(unsubFavs) unsubFavs(); };
+      subscribeToFavorites(currentUser.username);
+      
+      // Se for admin, carrega a lista de usuários
+      if (currentUser.role === 'Super Admin') {
+        fetchRegisteredUsers();
+      }
     } else if (currentUser) {
       const localNotes = localStorage.getItem(`notes_${currentUser.username}`);
       if (localNotes) setUserNotes(localNotes);
@@ -261,18 +278,67 @@ export default function EmergencyGuideApp() {
 
   const handleNoteChange = (e) => setUserNotes(e.target.value);
 
-  const handleLogin = (e) => {
+  // --- LÓGICA DE LOGIN HÍBRIDA (LOCAL + CLOUD) ---
+  const handleLogin = async (e) => {
     e.preventDefault();
     setLoginError('');
-    const foundUser = AUTHORIZED_USERS.find(u => u.username.toLowerCase() === usernameInput.toLowerCase() && u.password === passwordInput);
-    if (foundUser) {
-      setCurrentUser(foundUser);
-      localStorage.setItem('emergency_app_user', JSON.stringify(foundUser));
-      setUsernameInput('');
-      setPasswordInput('');
-    } else {
-      setLoginError('Credenciais inválidas.');
+    setIsLoggingIn(true);
+
+    try {
+      // 1. Verifica Hardcoded (Admin Master)
+      const hardcodedUser = HARDCODED_USERS.find(
+        u => u.username.toLowerCase() === usernameInput.toLowerCase() && u.password === passwordInput
+      );
+
+      if (hardcodedUser) {
+        loginSuccess(hardcodedUser);
+        setIsLoggingIn(false);
+        return;
+      }
+
+      // 2. Verifica no Firestore (Usuários Assinantes)
+      if (db && isCloudConnected) {
+        // Nota: Em um app real, a senha deveria ser hash. Aqui é texto plano para o protótipo.
+        // Usamos 'public/data/registered_users' para simular uma tabela de usuários acessível ao login anônimo
+        const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'registered_users', usernameInput.toLowerCase());
+        const userSnap = await getDoc(userDocRef);
+
+        if (userSnap.exists()) {
+          const userData = userSnap.data();
+          if (userData.password === passwordInput) {
+            // Verifica Validade
+            const expirationDate = new Date(userData.expiresAt);
+            const now = new Date();
+            
+            if (now > expirationDate) {
+              setLoginError(`Assinatura expirada em ${expirationDate.toLocaleDateString()}. Contate o suporte.`);
+            } else {
+              // Login Sucesso
+              loginSuccess({ ...userData, username: usernameInput.toLowerCase() });
+            }
+          } else {
+            setLoginError('Senha incorreta.');
+          }
+        } else {
+          setLoginError('Usuário não encontrado.');
+        }
+      } else {
+        setLoginError('Sem conexão com servidor para verificar usuário.');
+      }
+
+    } catch (err) {
+      console.error("Erro login:", err);
+      setLoginError('Erro ao tentar login.');
+    } finally {
+      setIsLoggingIn(false);
     }
+  };
+
+  const loginSuccess = (user) => {
+    setCurrentUser(user);
+    localStorage.setItem('emergency_app_user', JSON.stringify(user));
+    setUsernameInput('');
+    setPasswordInput('');
   };
 
   const handleLogout = () => {
@@ -283,8 +349,66 @@ export default function EmergencyGuideApp() {
     setUserNotes('');
     setFavorites([]);
     localStorage.removeItem('emergency_app_user');
+    setShowAdminPanel(false);
   };
 
+  // --- GESTÃO DE USUÁRIOS (ADMIN) ---
+  const fetchRegisteredUsers = async () => {
+    if (!db) return;
+    try {
+      const usersRef = collection(db, 'artifacts', appId, 'public', 'data', 'registered_users');
+      const snapshot = await getDocs(usersRef);
+      const users = [];
+      snapshot.forEach(doc => users.push({ id: doc.id, ...doc.data() }));
+      setRegisteredUsers(users);
+    } catch (e) {
+      console.error("Erro ao buscar usuários:", e);
+    }
+  };
+
+  const handleAddUser = async () => {
+    if (!newUser.username || !newUser.password || !newUser.name) {
+      alert("Preencha todos os campos obrigatórios");
+      return;
+    }
+    
+    if (!db) return;
+
+    const expirationDate = new Date();
+    expirationDate.setDate(expirationDate.getDate() + parseInt(newUser.validityDays));
+
+    const userData = {
+      password: newUser.password,
+      name: newUser.name,
+      role: newUser.role,
+      crm: newUser.crm,
+      createdAt: new Date().toISOString(),
+      expiresAt: expirationDate.toISOString()
+    };
+
+    try {
+      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'registered_users', newUser.username.toLowerCase()), userData);
+      alert("Usuário criado/atualizado com sucesso!");
+      setNewUser({ username: '', password: '', name: '', role: 'Assinante', crm: '', validityDays: 30 });
+      fetchRegisteredUsers();
+    } catch (e) {
+      console.error("Erro ao criar usuário:", e);
+      alert("Erro ao criar usuário.");
+    }
+  };
+
+  const handleDeleteUser = async (userId) => {
+    if (confirm(`Tem certeza que deseja remover o usuário ${userId}?`)) {
+      try {
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'registered_users', userId));
+        fetchRegisteredUsers();
+      } catch (e) {
+        console.error("Erro ao deletar:", e);
+      }
+    }
+  };
+
+  // --- OUTRAS FUNÇÕES ---
   const togglePrescriptionItem = (med) => {
     if (activeRoom !== 'verde' || !med.receita) return;
 
@@ -302,7 +426,6 @@ export default function EmergencyGuideApp() {
 
   const updateItemDays = (id, days) => {
     const newItems = [...selectedPrescriptionItems];
-    // Procura pelo ID composto para garantir que é o item certo
     const index = newItems.findIndex(item => (item.farmaco + (item.receita?.nome_comercial || "")) === id);
     
     if (index !== -1) {
@@ -443,7 +566,7 @@ export default function EmergencyGuideApp() {
     let promptExtra = "";
     if (activeRoom === 'verde') {
       promptExtra += `
-      IMPORTANTE (SALA VERDE - RECEITA INTELIGENTE):
+      IMPORTANTE (SALA VERDE):
       Para cada item em "tratamento_medicamentoso", inclua um objeto "receita":
       "receita": {
          "uso": "USO ORAL/TÓPICO/etc",
@@ -476,7 +599,7 @@ export default function EmergencyGuideApp() {
     1. JSON puro.
     2. "tratamento_medicamentoso": ARRAY de objetos. Se um mesmo fármaco tiver apresentações diferentes (ex: Dipirona Comprimido vs Gotas), crie DOIS OBJETOS DIFERENTES no array.
     3. "tipo": CAMPO OBRIGATÓRIO E RÍGIDO. Escolha EXATAMENTE UM DA LISTA: ['Comprimido', 'Cápsula', 'Xarope', 'Suspensão', 'Gotas', 'Solução Oral', 'Injetável', 'Tópico', 'Inalatório', 'Supositório'].
-    4. "sugestao_uso": Se for Sala Verde, descreva COMO USAR baseado na BULA. Se for Sala Vermelha, descreva a administração técnica.
+    4. "sugestao_uso": Se for Sala Verde, descreva COMO USAR baseado na BULA (ex: "Diluir em meio copo d'água e tomar após refeição"). Se for Sala Vermelha, descreva a administração técnica.
     5. "farmaco": Nome + Concentração (Ex: "Dipirona 500mg").
     6. "criterios_internacao/alta": OBRIGATÓRIOS.
     
@@ -651,6 +774,11 @@ export default function EmergencyGuideApp() {
           <div className="flex items-center gap-3">
              <div className="hidden sm:flex flex-col items-end mr-2"><span className="text-xs font-bold text-slate-700">{currentUser.name}</span><span className="text-[10px] text-slate-400 uppercase">{currentUser.role}</span></div>
              
+             {/* BOTÃO ADMIN (VISÍVEL APENAS PARA ADMIN) */}
+             {currentUser.role === 'Super Admin' && (
+                <button onClick={() => setShowAdminPanel(true)} className="p-2 text-blue-600 hover:bg-blue-100 rounded-full" title="Painel Admin"><Users size={20} /></button>
+             )}
+
              {/* BOTÃO MEUS FAVORITOS */}
              <button onClick={() => setShowFavoritesModal(true)} className="p-2 text-yellow-500 hover:bg-yellow-50 rounded-full transition-colors" title="Meus Favoritos"><Star size={20} /></button>
              
@@ -798,19 +926,15 @@ export default function EmergencyGuideApp() {
                 <div className="space-y-4">
                    <div className="flex items-center gap-2 text-emerald-800 mb-2 px-2"><div className="bg-emerald-100 p-1.5 rounded"><Pill size={18}/></div><h3 className="font-bold text-lg">Prescrição e Conduta</h3></div>
                    {conduct.tratamento_medicamentoso?.map((med, idx) => {
-                     // Identificador único para o checkbox
                      const itemId = med.farmaco + (med.receita?.nome_comercial || "");
                      const isSelected = selectedPrescriptionItems.some(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
                      const canSelect = activeRoom === 'verde' && med.receita;
-                     
-                     // Detalhes visuais do card
                      const medType = inferMedType(med); 
                      const isInjectable = medType.toLowerCase().includes('injet');
                      
                      let doseFinal = null;
                      let volumeFinal = null;
                      
-                     // Cálculo automático para Sala Vermelha
                      if (activeRoom === 'vermelha' && med.usa_peso && patientWeight && med.dose_padrao_kg) {
                        const doseNum = parseFloat(med.dose_padrao_kg) * parseFloat(patientWeight);
                        doseFinal = doseNum.toFixed(1) + " " + med.unidade_base.split('/')[0];
@@ -932,10 +1056,12 @@ export default function EmergencyGuideApp() {
         </div>
       </footer>
 
-      {/* MODAL DE RECEITUÁRIO */}
+      {/* MODAL DE RECEITUÁRIO (VISUAL PROFISSIONAL) */}
       {showPrescriptionModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 print:p-0 animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-3xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] print:max-h-none print:h-full print:rounded-none print:shadow-none">
+            
+            {/* Toolbar (Visível apenas na tela) */}
             <div className="bg-slate-100 p-4 border-b border-slate-200 flex justify-between items-center print:hidden">
               <h3 className="font-bold text-slate-800 flex items-center gap-2"><FilePlus size={20} /> Gerador de Receituário</h3>
               <div className="flex gap-2">
@@ -943,26 +1069,57 @@ export default function EmergencyGuideApp() {
                 <button onClick={() => setShowPrescriptionModal(false)} className="bg-gray-200 hover:bg-gray-300 text-gray-600 p-2 rounded-lg transition-colors"><X size={20}/></button>
               </div>
             </div>
+
+            {/* Corpo da Receita (Imprimível) */}
             <div className="p-12 overflow-y-auto print:overflow-visible font-serif text-slate-900 bg-white flex-1 flex flex-col h-full relative">
-              <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none"><Activity size={400} /></div>
+              
+              {/* Marca d'água opcional */}
+              <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none">
+                <Activity size={400} />
+              </div>
+
+              {/* Cabeçalho Médico Profissional */}
               <header className="flex flex-col items-center border-b-4 border-double border-slate-800 pb-6 mb-8">
                 <h1 className="text-3xl font-bold tracking-widest uppercase text-slate-900">{currentUser?.name || "NOME DO MÉDICO"}</h1>
-                <div className="flex items-center gap-2 mt-2 text-sm font-bold text-slate-600 uppercase tracking-wide"><span>CRM: {currentUser?.crm || "00000/UF"}</span><span>•</span><span>CLÍNICA MÉDICA</span></div>
+                <div className="flex items-center gap-2 mt-2 text-sm font-bold text-slate-600 uppercase tracking-wide">
+                  <span>CRM: {currentUser?.crm || "00000/UF"}</span>
+                  <span>•</span>
+                  <span>CLÍNICA MÉDICA</span>
+                </div>
               </header>
+
+              {/* Lista de Medicamentos Formatada */}
               <div className="flex-1 space-y-8">
                 {['USO ORAL', 'USO TÓPICO', 'USO RETAL', 'USO INALATÓRIO', 'USO OFTÁLMICO', 'USO OTOLÓGICO'].map((usoType) => {
-                  const items = selectedPrescriptionItems.filter(item => item.receita?.uso?.toUpperCase().includes(usoType.replace('USO ', '')) || (usoType === 'USO ORAL' && !item.receita?.uso));
+                  const items = selectedPrescriptionItems.filter(item => 
+                    item.receita?.uso?.toUpperCase().includes(usoType.replace('USO ', '')) ||
+                    (usoType === 'USO ORAL' && !item.receita?.uso) // Default
+                  );
+                  
                   if (items.length === 0) return null;
+
                   return (
                     <div key={usoType}>
-                      <div className="flex items-center gap-4 mb-4"><h3 className="font-bold text-lg underline decoration-2 underline-offset-4">{usoType}</h3></div>
+                      <div className="flex items-center gap-4 mb-4">
+                         <h3 className="font-bold text-lg underline decoration-2 underline-offset-4">{usoType}</h3>
+                      </div>
+                      
                       <ul className="space-y-6 list-none">
                         {items.map((item, index) => (
                           <li key={index} className="relative pl-6">
                             <span className="absolute left-0 top-0 font-bold text-lg">{index + 1}.</span>
-                            <div className="flex items-end mb-1 w-full"><span className="font-bold text-xl">{item.receita.nome_comercial}</span><div className="flex-1 mx-2 border-b-2 border-dotted border-slate-400 mb-1.5"></div><span className="font-bold text-lg whitespace-nowrap">{item.receita.quantidade}</span></div>
-                            <p className="text-base leading-relaxed text-slate-800 mt-1 pl-2 border-l-4 border-slate-200">{item.receita.instrucoes}</p>
-                            {item.dias_tratamento && <p className="text-xs text-slate-500 italic pl-3 mt-0.5">(Tratamento por {item.dias_tratamento} dias)</p>}
+                            
+                            {/* Nome e Quantidade com linha pontilhada CSS */}
+                            <div className="flex items-end mb-1 w-full">
+                              <span className="font-bold text-xl">{item.receita.nome_comercial}</span>
+                              <div className="flex-1 mx-2 border-b-2 border-dotted border-slate-400 mb-1.5"></div>
+                              <span className="font-bold text-lg whitespace-nowrap">{item.receita.quantidade}</span>
+                            </div>
+                            
+                            {/* Instrução Destacada */}
+                            <p className="text-base leading-relaxed text-slate-800 mt-1 pl-2 border-l-4 border-slate-200">
+                              {item.receita.instrucoes}
+                            </p>
                           </li>
                         ))}
                       </ul>
@@ -970,13 +1127,29 @@ export default function EmergencyGuideApp() {
                   )
                 })}
               </div>
+
+              {/* Rodapé Oficial */}
               <footer className="mt-auto pt-12">
                 <div className="flex justify-between items-end">
-                  <div className="text-sm"><p className="font-bold">Data:</p><div className="w-40 border-b border-slate-800 mt-4 text-center relative top-1">{new Date().toLocaleDateString('pt-BR')}</div></div>
-                  <div className="text-center"><div className="w-64 border-b border-slate-800 mb-2"></div><p className="font-bold uppercase text-sm">{currentUser?.name}</p><p className="text-xs text-slate-500">Assinatura e Carimbo</p></div>
+                  <div className="text-sm">
+                    <p className="font-bold">Data:</p>
+                    <div className="w-40 border-b border-slate-800 mt-4 text-center relative top-1">
+                      {new Date().toLocaleDateString('pt-BR')}
+                    </div>
+                  </div>
+
+                  <div className="text-center">
+                    <div className="w-64 border-b border-slate-800 mb-2"></div>
+                    <p className="font-bold uppercase text-sm">{currentUser?.name}</p>
+                    <p className="text-xs text-slate-500">Assinatura e Carimbo</p>
+                  </div>
                 </div>
-                <div className="text-center mt-8 pt-4 border-t border-slate-200 text-[10px] text-slate-400 uppercase">Rua da Medicina, 123 • Centro • Cidade/UF • Tel: (00) 1234-5678</div>
+                
+                <div className="text-center mt-8 pt-4 border-t border-slate-200 text-[10px] text-slate-400 uppercase">
+                  Rua da Medicina, 123 • Centro • Cidade/UF • Tel: (00) 1234-5678
+                </div>
               </footer>
+
             </div>
           </div>
         </div>
@@ -1007,6 +1180,63 @@ export default function EmergencyGuideApp() {
             </div>
             <div className="flex-1 bg-yellow-50 relative"><textarea className="w-full h-full p-6 resize-none focus:outline-none text-slate-700 leading-relaxed bg-transparent text-lg font-medium font-serif" placeholder="Escreva suas anotações..." value={userNotes} onChange={handleNoteChange} style={{ backgroundImage: 'linear-gradient(transparent, transparent 31px, #e5e7eb 31px)', backgroundSize: '100% 32px', lineHeight: '32px' }} /></div>
             <div className="p-3 bg-white border-t border-gray-200 flex justify-between items-center text-xs text-gray-500"><div className="flex items-center gap-1.5">{isSaving ? (<><Loader2 size={14} className="text-blue-600 animate-spin" /><span className="text-blue-600">Salvando...</span></>) : (<><Save size={14} className="text-green-600" /><span>{isCloudConnected ? "Salvo na nuvem" : "Salvo localmente"}</span></>)}</div><span>{userNotes.length} caracteres</span></div>
+          </div>
+        </div>
+      )}
+      {/* ADMIN PANEL */}
+      {showAdminPanel && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold text-slate-800">Gestão de Usuários</h3>
+              <button onClick={() => setShowAdminPanel(false)}><X size={24} /></button>
+            </div>
+            
+            {/* Form to add user */}
+            <div className="bg-gray-50 p-4 rounded-lg mb-6">
+              <h4 className="font-bold text-sm mb-3">Adicionar Novo Usuário</h4>
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <input placeholder="Usuário (Login)" className="p-2 border rounded" value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})} />
+                <input placeholder="Senha" className="p-2 border rounded" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} />
+                <input placeholder="Nome Completo" className="p-2 border rounded" value={newUser.name} onChange={e => setNewUser({...newUser, name: e.target.value})} />
+                <input placeholder="CRM" className="p-2 border rounded" value={newUser.crm} onChange={e => setNewUser({...newUser, crm: e.target.value})} />
+                <select className="p-2 border rounded" value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})}>
+                  <option value="Assinante">Assinante</option>
+                  <option value="VIP">VIP</option>
+                </select>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold">Validade (dias):</span>
+                  <input type="number" className="p-2 border rounded w-20" value={newUser.validityDays} onChange={e => setNewUser({...newUser, validityDays: e.target.value})} />
+                </div>
+              </div>
+              <button onClick={handleAddUser} className="bg-green-600 text-white px-4 py-2 rounded font-bold text-sm hover:bg-green-700 w-full">Criar Usuário</button>
+            </div>
+
+            {/* List of users */}
+            <div className="max-h-64 overflow-y-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-gray-100 text-gray-600 uppercase text-xs">
+                  <tr>
+                    <th className="p-2">Usuário</th>
+                    <th className="p-2">Nome</th>
+                    <th className="p-2">Validade</th>
+                    <th className="p-2">Ação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {registeredUsers.map(u => (
+                    <tr key={u.id} className="border-b hover:bg-gray-50">
+                      <td className="p-2 font-bold">{u.id}</td>
+                      <td className="p-2">{u.name}</td>
+                      <td className="p-2">{new Date(u.expiresAt).toLocaleDateString()}</td>
+                      <td className="p-2">
+                        <button onClick={() => handleDeleteUser(u.id)} className="text-red-500 hover:text-red-700"><Trash2 size={16} /></button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
