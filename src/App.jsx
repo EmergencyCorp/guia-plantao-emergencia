@@ -4,7 +4,7 @@ import {
   Stethoscope, ClipboardCheck, AlertTriangle, ArrowRight, X, User, 
   CheckCircle2, Thermometer, Syringe, Siren, FlaskConical, Tag, Package,
   ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save, Cloud, CloudOff, Settings, Info,
-  HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine
+  HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine, Wind, Droplet
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -92,7 +92,6 @@ export default function EmergencyGuideApp() {
 
   // 1. Inicialização Robusta da Autenticação do Firebase
   useEffect(() => {
-    // Verifica se a config existe para dar feedback visual na tela de login
     if (!firebaseConfig || !firebaseConfig.apiKey) {
       setConfigStatus('missing');
       return;
@@ -142,7 +141,7 @@ export default function EmergencyGuideApp() {
     }
   }, []);
 
-  // 3. Sincronizar notas quando conectar
+  // 3. Sincronizar notas
   useEffect(() => {
     if (currentUser && isCloudConnected) {
       fetchNotesFromCloud(currentUser.username);
@@ -260,28 +259,33 @@ export default function EmergencyGuideApp() {
       ? 'DIRETRIZ: Preferência absoluta por VIA ORAL (VO) ou IM. Visar alta hospitalar.'
       : 'DIRETRIZ: Preferência por VIA ENDOVENOSA (EV). Visar estabilização imediata.';
 
-    // PROMPT REFINADO PARA FORÇAR ESTRUTURA CORRETA
+    // PROMPT REFINADO PARA VITAIS DETALHADOS
     const promptText = `Atue como médico especialista em medicina de emergência.
     Gere conduta clínica para "${searchQuery}" na ${roomContext}.
     ${prescriptionGuidance}
     
     REGRAS OBRIGATÓRIAS:
     1. Retorne APENAS JSON válido.
-    2. "tratamento_medicamentoso": Deve ser um ARRAY de objetos. Separe cada medicamento.
-    3. "criterios_internacao" e "criterios_alta": SÃO OBRIGATÓRIOS. Se não houver, escreva "A critério clínico", mas preencha o array.
+    2. "tratamento_medicamentoso": ARRAY de objetos.
+    3. "criterios_internacao" e "criterios_alta": OBRIGATÓRIOS.
+    4. "avaliacao_inicial.sinais_vitais_especificos": Forneça alvos numéricos claros para FC, FR, PA (Sistólica/Diastólica e PAM entre parênteses quando relevante) e SatO2. Se a condição for benigna, coloque 'Sinais estáveis'.
     
     ESTRUTURA DO JSON:
     {
       "condicao": "Nome da Doença",
-      "estadiamento": "Estágio (ex: Dengue C, Sepse Grave). Se não aplicável, null",
+      "estadiamento": "Estágio (ex: Dengue C). Se não aplicável, null",
       "classificacao": "${roomContext}",
-      "resumo_clinico": "Resumo sucinto do quadro.",
+      "resumo_clinico": "Resumo sucinto.",
       "apresentacao_tipica": { "sintomas_principais": [], "sinais_fisicos": [], "tempo_evolucao": "..." },
       "achados_exames": { "ecg": "...", "raio_x": "...", "laboratorio": "...", "outros_exames": "..." },
-      "avaliacao_inicial": { "sinais_vitais_especificos": ["PA Alvo", "SatO2 Alvo"], "exames_obrigatorios": ["..."], "exames_complementares": ["..."] },
-      "criterios_gravidade": ["Sinal de Alarme 1", "..."],
+      "avaliacao_inicial": { 
+        "sinais_vitais_especificos": ["FC: < 100bpm", "PA: > 90mmHg (PAM > 65)", "SatO2: > 92%", "FR: 12-20 ipm"], 
+        "exames_obrigatorios": ["..."], 
+        "exames_complementares": ["..."] 
+      },
+      "criterios_gravidade": ["Red flag 1", "..."],
       "tratamento_medicamentoso": [ 
-        { "farmaco": "Nome", "posologia": "Dose", "via": "EV/VO", "diluicao": "Ex: Diluir em 100ml SF0.9%", "cuidados": "...", "indicacao": "..." } 
+        { "farmaco": "Nome", "posologia": "Dose", "via": "EV/VO", "diluicao": "...", "cuidados": "...", "indicacao": "..." } 
       ],
       "escalonamento_terapeutico": [
         { "passo": "1ª Linha", "descricao": "..." },
@@ -289,8 +293,8 @@ export default function EmergencyGuideApp() {
         { "passo": "Resgate", "descricao": "..." }
       ],
       "medidas_gerais": ["..."],
-      "criterios_internacao": ["Critério 1", "..."],
-      "criterios_alta": ["Critério 1", "..."],
+      "criterios_internacao": ["..."],
+      "criterios_alta": ["..."],
       "guideline_referencia": "Fonte"
     }
     Doses para adulto 70kg.`;
@@ -348,6 +352,17 @@ export default function EmergencyGuideApp() {
     setTimeout(() => setErrorMsg(''), 4000);
   };
 
+  // --- HELPER PARA ÍCONES DE VITAIS ---
+  const getVitalIcon = (text) => {
+    const t = text.toLowerCase();
+    if (t.includes('fc') || t.includes('bpm') || t.includes('freq')) return <HeartPulse size={16} className="text-rose-500" />;
+    if (t.includes('pa') || t.includes('mmhg') || t.includes('pam') || t.includes('press')) return <Activity size={16} className="text-blue-500" />;
+    if (t.includes('sat') || t.includes('%') || t.includes('o2')) return <Droplet size={16} className="text-cyan-500" />;
+    if (t.includes('fr') || t.includes('ipm') || t.includes('resp')) return <Wind size={16} className="text-teal-500" />;
+    if (t.includes('temp') || t.includes('tax') || t.includes('°')) return <Thermometer size={16} className="text-orange-500" />;
+    return <Activity size={16} className="text-slate-400" />;
+  };
+
   // --- INTERFACE ---
   const roomConfig = {
     verde: { name: 'Sala Verde', color: 'emerald', accent: 'bg-emerald-500', border: 'border-emerald-500', text: 'text-emerald-800', light: 'bg-emerald-50', icon: <Stethoscope className="w-5 h-5" />, description: 'Ambulatorial / Baixa Complexidade', examples: ['Cefaleia', 'Lombalgia', 'IVAS'] },
@@ -384,7 +399,7 @@ export default function EmergencyGuideApp() {
               <button type="submit" className="w-full flex items-center justify-center gap-3 bg-blue-900 text-white font-bold p-3.5 rounded-xl hover:bg-blue-800 transition-all shadow-lg mt-2"><LogIn className="w-5 h-5" /> Acessar Sistema</button>
             </form>
             <div className="text-center flex flex-col items-center gap-3 pt-2 border-t border-gray-100">
-              <div className={`flex items-center gap-2 text-[10px] px-3 py-1.5 rounded-full ${configStatus === 'missing' ? 'bg-red-50 text-red-700' : isCloudConnected ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+              <div className={`flex items-center justify-center gap-2 text-[10px] px-3 py-1.5 rounded-full mx-auto w-fit ${configStatus === 'missing' ? 'bg-red-50 text-red-700' : isCloudConnected ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
                 {configStatus === 'missing' ? <Settings size={12}/> : isCloudConnected ? <Cloud size={12}/> : <CloudOff size={12}/>}
                 <span>{configStatus === 'missing' ? 'Erro: Variáveis de Ambiente' : isCloudConnected ? 'Banco de Dados Conectado' : 'Modo Offline (Dados Locais)'}</span>
               </div>
@@ -398,7 +413,7 @@ export default function EmergencyGuideApp() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800 selection:bg-blue-100">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="bg-blue-900 p-2 rounded-lg text-white shadow-sm"><ClipboardCheck size={20} /></div>
@@ -476,8 +491,16 @@ export default function EmergencyGuideApp() {
                    <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center gap-2"><Activity size={18} className="text-slate-500"/><h3 className="font-bold text-slate-700 text-sm uppercase">Avaliação Inicial</h3></div>
                    <div className="p-5 space-y-5 text-sm">
                       {conduct.avaliacao_inicial?.sinais_vitais_especificos && (
-                        <div><span className="text-xs font-bold text-slate-400 uppercase block mb-2">Alvos Terapêuticos</span>
-                        <div className="grid grid-cols-2 gap-2">{conduct.avaliacao_inicial.sinais_vitais_especificos.map((s,i)=>(<div key={i} className="bg-indigo-50 p-2 rounded-lg border border-indigo-100 flex items-center gap-2 text-indigo-800"><HeartPulse size={14} className="shrink-0 opacity-60"/> <span className="font-bold text-xs">{s}</span></div>))}</div></div>
+                        <div>
+                          <span className="text-xs font-bold text-slate-400 uppercase block mb-2">Alvos Terapêuticos</span>
+                          <div className="grid grid-cols-1 gap-2">
+                            {conduct.avaliacao_inicial.sinais_vitais_especificos.map((s,i)=>(
+                              <div key={i} className="bg-indigo-50 p-3 rounded-lg border border-indigo-100 flex items-center gap-3 text-indigo-900">
+                                {getVitalIcon(s)} <span className="font-bold">{s}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       )}
                       {(conduct.avaliacao_inicial?.exames_obrigatorios || conduct.avaliacao_inicial?.exames_complementares) && (
                         <div className="space-y-3">
