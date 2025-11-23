@@ -210,41 +210,67 @@ export default function EmergencyGuideApp() {
     setErrorMsg('');
 
     const roomContext = activeRoom === 'verde' ? 'SALA VERDE (AMBULATORIAL)' : 'SALA VERMELHA (EMERGÊNCIA)';
+    const lowerQuery = searchQuery.toLowerCase();
+
+    // --- LÓGICA CONDICIONAL DINÂMICA ---
+    let conditionalInstructions = "";
+
+    // 1. Lógica para DENGUE (A, B, C, D)
+    if (lowerQuery.includes('dengue')) {
+      conditionalInstructions += `
+      CONTEXTO ESPECÍFICO - DENGUE (Protocolo MS Brasil):
+      - Classifique em Grupo A (Sem sinais alarme/comorbidades), B (Comorbidades/Sangramento pele), C (Sinais de Alarme) ou D (Choque).
+      - Se o usuário não especificou o grupo na busca, deduza pela gravidade da sala (Verde = A/B, Vermelha = C/D) ou descreva brevemente como diferenciar.
+      - Hidratação: Especifique ML/KG para o grupo selecionado (Ex: Grupo B - SRO frequente; Grupo C - 10ml/kg EV em 2h).
+      `;
+    }
+
+    // 2. Lógica para DESIDRATAÇÃO/GECA (Planos A, B, C)
+    if (lowerQuery.includes('geca') || lowerQuery.includes('diarreia') || lowerQuery.includes('desidrat') || lowerQuery.includes('vomito')) {
+      conditionalInstructions += `
+      CONTEXTO ESPECÍFICO - REIDRATAÇÃO (Protocolo OMS/MS):
+      - Classifique em Plano A (Prevenção - Domiciliar), Plano B (TRO na Unidade) ou Plano C (Venoso - Fase Rápida/Manutenção).
+      - Para Plano C (Sala Vermelha), detalhe fase rápida (100ml/kg divididos por idade).
+      - Para Plano B (Sala Verde), detalhe TRO (50-100ml/kg em 4-6h).
+      `;
+    }
+
+    // 3. Lógica para TRAUMA (ATLS)
+    if (lowerQuery.includes('trauma') || lowerQuery.includes('acid') || lowerQuery.includes('poli')) {
+      conditionalInstructions += `
+      CONTEXTO ESPECÍFICO - TRAUMA (ATLS):
+      - OBRIGATÓRIO preencher o objeto "xabcde_trauma" com o passo a passo.
+      - Priorize a estabilização cervical e controle de hemorragias.
+      `;
+    }
+
+    const promptText = `Atue como médico especialista em emergência.
+    Gere conduta para "${searchQuery}" na ${roomContext}.
+    ${conditionalInstructions}
     
-    // PROMPT REFINADO - FONTE E DETALHES
-    const promptText = `Atue como médico especialista em medicina de emergência e terapia intensiva.
-    Gere conduta clínica para "${searchQuery}" na ${roomContext}.
-    
-    REGRAS RÍGIDAS DE CONTEÚDO:
-    1. **Fonte Obrigatória:** Cite explicitamente o guideline utilizado no campo "guideline_referencia". Use APENAS fontes de alta credibilidade (ex: SBC, AHA, GINA, GOLD, AMIB, Surviving Sepsis, ATLS, UpToDate).
-    2. **Resumo Clínico:** Detalhado e técnico. Descreva fisiopatologia e achados clássicos.
-    3. **Alvos Terapêuticos:** Na "avaliacao_inicial", para Pressão Arterial, OBRIGATORIAMENTE forneça PAS, PAD e PAM (ex: PAM > 65mmHg). Para FC e FR, dê faixas de segurança.
-    4. **Imagens:** Em "achados_exames.imagem", descreva DETALHADAMENTE o padrão radiológico esperado.
-    5. **Medicamentos:** - "apresentacao": Cite nomes comerciais comuns no Brasil ou apresentações genéricas (ex: Ampola 10mg/2ml, Comp 500mg).
-       - "posologia": Dose exata para adulto 70kg.
-       - "modo_admin": Se injetável, especifique: "Bolus", "Infusão Lenta (X min)", "BIC contínua".
-    6. **Trauma:** SE a condição for trauma, preencha o campo "xabcde_trauma".
+    REGRAS GERAIS:
+    1. JSON puro.
+    2. "tratamento_medicamentoso": ARRAY de objetos.
+    3. "criterios_internacao/alta": OBRIGATÓRIOS.
+    4. "avaliacao_inicial.sinais_vitais_alvos": Especifique alvos (PAS/PAD/PAM, FC, FR, SatO2).
+    5. "achados_exames.imagem": Descreva o padrão radiológico esperado.
     
     ESTRUTURA JSON:
     {
-      "condicao": "Nome Completo",
-      "estadiamento": "Classificação (ex: Sepse Grave, IAMCSST)",
+      "condicao": "Nome",
+      "estadiamento": "Classificação (Ex: Dengue C, Plano B)",
       "classificacao": "${roomContext}",
-      "resumo_clinico": "Texto técnico detalhado...",
-      "xabcde_trauma": null, // OU objeto com chaves x,a,b,c,d,e se for trauma
+      "resumo_clinico": "Texto técnico detalhado, fisiopatologia e apresentação clínica...",
+      "xabcde_trauma": null, // OU objeto {x,a,b,c,d,e} se for trauma
       "avaliacao_inicial": { 
-        "sinais_vitais_alvos": ["PAM > 65mmHg (PAS > 90)", "SatO2 > 94%", "FC < 100bpm", "FR 12-20irpm"], 
+        "sinais_vitais_alvos": ["PAM > 65mmHg", "FC < 100", "SatO2 > 94%"], 
         "exames_prioridade1": ["..."], 
         "exames_complementares": ["..."] 
       },
-      "achados_exames": {
-         "ecg": "Padrão esperado...",
-         "laboratorio": "Alterações esperadas...",
-         "imagem": "Descrição radiológica detalhada..."
-      },
+      "achados_exames": { "ecg": "...", "laboratorio": "...", "imagem": "Detalhes do padrão de imagem..." },
       "criterios_gravidade": ["..."],
       "tratamento_medicamentoso": [ 
-        { "farmaco": "Nome", "apresentacao": "Amp/Comp", "dose": "...", "diluicao": "...", "modo_admin": "BIC/Bolus", "tempo_infusao": "...", "cuidados": "...", "indicacao": "..." } 
+        { "farmaco": "Nome", "apresentacao": "Ex: Ampola 10mg/2ml", "dose": "Ex: 20mg (2 ampolas)", "diluicao": "Ex: Puro ou em 100ml SF", "modo_admin": "Ex: Bolus IV / BIC 30min", "cuidados": "...", "indicacao": "..." } 
       ],
       "escalonamento_terapeutico": [
         { "passo": "1ª Linha", "descricao": "..." },
@@ -254,7 +280,7 @@ export default function EmergencyGuideApp() {
       "medidas_gerais": ["..."],
       "criterios_internacao": ["..."],
       "criterios_alta": ["..."],
-      "guideline_referencia": "Fonte (Ex: Diretriz SBC 2023)"
+      "guideline_referencia": "Fonte (Ex: Ministério da Saúde 2024)"
     }
     Doses adulto 70kg.`;
 
@@ -397,7 +423,6 @@ export default function EmergencyGuideApp() {
                <div>
                   <div className="flex flex-wrap gap-2 mb-2"><span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase text-white ${activeRoom === 'verde' ? 'bg-emerald-500' : 'bg-rose-600'}`}>{conduct.classificacao}</span>{conduct.estadiamento && <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-800 text-white">{conduct.estadiamento}</span>}</div>
                   <h2 className="text-3xl font-bold text-slate-800">{conduct.condicao}</h2>
-                  {/* FONTE / GUIDELINE REFERÊNCIA - AGORA EMBAIXO DO NOME */}
                   {conduct.guideline_referencia && (
                     <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
                       <BookOpen size={12} /> Fonte: <span className="font-medium">{conduct.guideline_referencia}</span>
@@ -407,13 +432,11 @@ export default function EmergencyGuideApp() {
                <button onClick={() => setConduct(null)} className="p-2 hover:bg-gray-200 rounded-full text-gray-500"><X size={24}/></button>
             </div>
 
-            {/* RESUMO CLÍNICO */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex gap-4">
                <div className="bg-blue-50 p-2 rounded-full h-fit text-blue-600"><User size={24} /></div>
                <div><h3 className="font-bold text-slate-900 mb-1">Resumo Clínico e Fisiopatologia</h3><p className="text-slate-700 leading-relaxed text-sm">{conduct.resumo_clinico}</p></div>
             </div>
 
-            {/* TRAUMA xABCDE */}
             {conduct.xabcde_trauma && (
               <div className="bg-orange-50 border border-orange-200 p-5 rounded-2xl">
                 <h3 className="text-orange-900 font-bold flex items-center gap-2 mb-3 uppercase tracking-wide"><Skull size={20}/> Protocolo de Trauma (ATLS - xABCDE)</h3>
@@ -428,7 +451,6 @@ export default function EmergencyGuideApp() {
               </div>
             )}
 
-            {/* SINAIS DE ALARME */}
             {conduct.criterios_gravidade?.length > 0 && (
               <div className="bg-rose-50 border border-rose-100 p-5 rounded-2xl">
                 <h3 className="text-rose-800 font-bold flex items-center gap-2 mb-3 text-sm uppercase"><AlertTriangle size={18}/> Sinais de Alarme</h3>
@@ -440,7 +462,6 @@ export default function EmergencyGuideApp() {
 
             <div className="grid lg:grid-cols-12 gap-6 items-start">
               <div className="lg:col-span-4 space-y-6">
-                {/* AVALIAÇÃO E ALVOS */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                    <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center gap-2"><Activity size={18} className="text-slate-500"/><h3 className="font-bold text-slate-700 text-sm uppercase">Avaliação Inicial</h3></div>
                    <div className="p-5 space-y-5 text-sm">
@@ -463,7 +484,6 @@ export default function EmergencyGuideApp() {
                    </div>
                 </div>
                 
-                {/* INVESTIGAÇÃO COMPLEMENTAR (ECG, LAB, IMAGEM) */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                    <div className="bg-blue-50 px-5 py-3 border-b border-blue-100 flex items-center gap-2"><Search size={18} className="text-blue-600"/><h3 className="font-bold text-blue-900 text-sm uppercase">Investigação Diagnóstica</h3></div>
                    <div className="p-5 space-y-4 text-sm">
@@ -473,7 +493,6 @@ export default function EmergencyGuideApp() {
                    </div>
                 </div>
 
-                {/* CRITÉRIOS DE DESFECHO */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                    <div className="bg-indigo-50 px-5 py-3 border-b border-indigo-100 flex items-center gap-2"><FileText size={18} className="text-indigo-600"/><h3 className="font-bold text-indigo-900 text-sm uppercase">Critérios de Desfecho</h3></div>
                    <div className="p-5 space-y-4 text-sm">
@@ -489,7 +508,6 @@ export default function EmergencyGuideApp() {
                 </div>
               </div>
 
-              {/* DIREITA: CONDUTA E MEDICAMENTOS */}
               <div className="lg:col-span-8 space-y-6">
                 <div className="space-y-4">
                    <div className="flex items-center gap-2 text-emerald-800 mb-2 px-2"><div className="bg-emerald-100 p-1.5 rounded"><Pill size={18}/></div><h3 className="font-bold text-lg">Prescrição e Conduta</h3></div>
