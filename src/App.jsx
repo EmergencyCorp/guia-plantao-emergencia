@@ -5,7 +5,7 @@ import {
   CheckCircle2, Thermometer, Syringe, Siren, FlaskConical, Tag, Package,
   ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save, Cloud, CloudOff, Settings, Info,
   HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine, Wind, Droplet, Timer, Skull, Printer, FilePlus, Calculator,
-  Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star
+  Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -22,7 +22,8 @@ import {
   orderBy, 
   limit, 
   getDocs, 
-  deleteDoc 
+  deleteDoc,
+  onSnapshot
 } from 'firebase/firestore';
 
 // --- LÓGICA DE CONFIGURAÇÃO DO FIREBASE ---
@@ -85,17 +86,18 @@ export default function EmergencyGuideApp() {
   const [loading, setLoading] = useState(false);
   const [conduct, setConduct] = useState(null);
   const [recentSearches, setRecentSearches] = useState([]);
+  const [favorites, setFavorites] = useState([]); // Estado para lista de favoritos
   const [errorMsg, setErrorMsg] = useState('');
   const resultsRef = useRef(null);
 
   const [showNotepad, setShowNotepad] = useState(false);
+  const [showFavoritesModal, setShowFavoritesModal] = useState(false); // Modal de favoritos
   const [userNotes, setUserNotes] = useState('');
 
   const [selectedPrescriptionItems, setSelectedPrescriptionItems] = useState([]);
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
   const [patientWeight, setPatientWeight] = useState('');
 
-  // Estado para controle de favorito da conduta atual
   const [isCurrentConductFavorite, setIsCurrentConductFavorite] = useState(false);
 
   useEffect(() => {
@@ -141,17 +143,31 @@ export default function EmergencyGuideApp() {
   }, []);
 
   useEffect(() => {
-    if (currentUser && isCloudConnected) fetchNotesFromCloud(currentUser.username);
-    else if (currentUser) {
+    if (currentUser && isCloudConnected) {
+      fetchNotesFromCloud(currentUser.username);
+      fetchHistoryFromCloud(currentUser.username);
+      subscribeToFavorites(currentUser.username); // Listener em tempo real para favoritos
+    } else if (currentUser) {
       const localNotes = localStorage.getItem(`notes_${currentUser.username}`);
       if (localNotes) setUserNotes(localNotes);
+      loadLocalHistory(currentUser.username);
     }
   }, [currentUser, isCloudConnected]);
 
   useEffect(() => {
     setSelectedPrescriptionItems([]);
     setPatientWeight('');
-  }, [conduct]);
+    
+    // Verifica se a conduta atual está nos favoritos para pintar a estrelinha
+    if (conduct && favorites.length > 0) {
+      const docId = getConductDocId(conduct.condicao || searchQuery, activeRoom);
+      // A busca pode ser imprecisa se o nome mudou, mas tentamos pelo ID ou query
+      const isFav = favorites.some(f => f.id === docId || f.query === searchQuery);
+      setIsCurrentConductFavorite(isFav);
+    } else {
+      setIsCurrentConductFavorite(false);
+    }
+  }, [conduct, favorites]);
 
   const loadHistory = (username) => {
     try {
@@ -159,6 +175,51 @@ export default function EmergencyGuideApp() {
       if (history) setRecentSearches(JSON.parse(history));
       else setRecentSearches([]);
     } catch (e) { setRecentSearches([]); }
+  };
+  
+  const loadLocalHistory = (username) => {
+      try {
+        const history = localStorage.getItem(`history_${username}`);
+        if (history) setRecentSearches(JSON.parse(history));
+        else setRecentSearches([]);
+      } catch (e) { setRecentSearches([]); }
+  };
+
+  const fetchHistoryFromCloud = async (username) => {
+      loadLocalHistory(username);
+      if (db && auth?.currentUser) {
+        try {
+          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', username);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            const remoteData = docSnap.data();
+            if (remoteData.searches && Array.isArray(remoteData.searches)) {
+              setRecentSearches(remoteData.searches);
+              localStorage.setItem(`history_${username}`, JSON.stringify(remoteData.searches));
+            }
+          }
+        } catch (error) { console.error("Erro sync histórico:", error); }
+      }
+  };
+
+  const saveToHistory = async (term, room) => {
+      if (!currentUser) return;
+      const newEntry = { query: term, room, timestamp: new Date().toISOString() };
+      const hist = recentSearches.filter(s => s.query.toLowerCase() !== term.toLowerCase());
+      const updated = [newEntry, ...hist].slice(0, 10);
+      setRecentSearches(updated);
+      localStorage.setItem(`history_${currentUser.username}`, JSON.stringify(updated));
+  
+      if (db && auth?.currentUser) {
+        try {
+          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', currentUser.username);
+          await setDoc(docRef, {
+            searches: updated,
+            lastUpdated: new Date().toISOString(),
+            username: currentUser.username
+          }, { merge: true });
+        } catch (error) { console.error("Erro ao salvar histórico na nuvem:", error); }
+      }
   };
 
   const fetchNotesFromCloud = async (username) => {
@@ -208,7 +269,6 @@ export default function EmergencyGuideApp() {
     if (foundUser) {
       setCurrentUser(foundUser);
       localStorage.setItem('emergency_app_user', JSON.stringify(foundUser));
-      loadHistory(foundUser.username);
       setUsernameInput('');
       setPasswordInput('');
     } else {
@@ -222,6 +282,7 @@ export default function EmergencyGuideApp() {
     setSearchQuery('');
     setRecentSearches([]);
     setUserNotes('');
+    setFavorites([]);
     localStorage.removeItem('emergency_app_user');
   };
 
@@ -241,10 +302,27 @@ export default function EmergencyGuideApp() {
   };
 
   // --- LÓGICA DE CACHE E FAVORITOS ---
-
-  // Gera um ID único e seguro para o documento no Firestore
   const getConductDocId = (query, room) => {
     return `${query.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}_${room}`;
+  };
+
+  // Listener em tempo real para a lista de favoritos
+  const subscribeToFavorites = (username) => {
+      if (!db) return;
+      
+      const favoritesRef = collection(db, 'artifacts', appId, 'users', username, 'conducts');
+      const q = query(favoritesRef, where("isFavorite", "==", true));
+
+      const unsubscribe = onSnapshot(q, (querySnapshot) => {
+          const favs = [];
+          querySnapshot.forEach((doc) => {
+              favs.push({ id: doc.id, ...doc.data() });
+          });
+          setFavorites(favs);
+      }, (error) => {
+          console.error("Erro ao buscar favoritos:", error);
+      });
+      return unsubscribe;
   };
 
   const toggleFavorite = async () => {
@@ -257,41 +335,65 @@ export default function EmergencyGuideApp() {
     setIsCurrentConductFavorite(newStatus);
 
     try {
+      // Usa o nome da condição da conduta para ID se possível, ou a busca original
       const docId = getConductDocId(searchQuery, activeRoom);
       const docRef = doc(db, 'artifacts', appId, 'users', currentUser.username, 'conducts', docId);
       
-      await setDoc(docRef, { 
-        isFavorite: newStatus,
-        lastAccessed: new Date().toISOString() // Atualiza data para não ser deletado se for desfavoritado depois
-      }, { merge: true });
+      if (newStatus) {
+          // Salvar como favorito
+          await setDoc(docRef, { 
+            query: searchQuery,
+            room: activeRoom,
+            conductData: conduct,
+            isFavorite: true,
+            lastAccessed: new Date().toISOString()
+          }, { merge: true });
+      } else {
+          // Remover dos favoritos (pode deletar o doc se não quiser manter cache)
+          // Como a lógica anterior usava cache, vamos apenas setar isFavorite false
+          // O 'manageCacheLimit' limpará depois se ficar velho
+          await setDoc(docRef, { isFavorite: false }, { merge: true });
+      }
 
     } catch (error) {
       console.error("Erro ao favoritar:", error);
-      setIsCurrentConductFavorite(!newStatus); // Reverte em caso de erro
-      showError("Erro ao salvar favorito.");
+      setIsCurrentConductFavorite(!newStatus);
+      showError("Erro ao atualizar favorito.");
     }
+  };
+  
+  const removeFavoriteFromList = async (docId) => {
+      if (!currentUser || !isCloudConnected) return;
+      try {
+          const docRef = doc(db, 'artifacts', appId, 'users', currentUser.username, 'conducts', docId);
+          // Ao remover da lista, definimos como false. Se quiser apagar totalmente, use deleteDoc(docRef)
+          await setDoc(docRef, { isFavorite: false }, { merge: true });
+      } catch (e) {
+          console.error("Erro ao remover favorito", e);
+      }
+  };
+
+  const loadFavoriteConduct = (fav) => {
+      setConduct(fav.conductData);
+      setSearchQuery(fav.query);
+      setActiveRoom(fav.room);
+      setShowFavoritesModal(false);
+      setIsCurrentConductFavorite(true);
   };
 
   const manageCacheLimit = async (username) => {
     if (!db) return;
     try {
       const conductsRef = collection(db, 'artifacts', appId, 'users', username, 'conducts');
-      // Busca apenas os NÃO favoritos, ordenados por data (mais antigos primeiro)
       const q = query(conductsRef, where("isFavorite", "==", false), orderBy("lastAccessed", "desc"));
       
       const snapshot = await getDocs(q);
-      
-      // Se tiver mais que 10, deleta os excedentes (que são os últimos da lista no snapshot invertido ou lógica manual)
-      // Ajuste: orderBy 'desc' traz os mais recentes primeiro. Então se size > 10, deletamos do índice 10 para frente.
       if (snapshot.size > 10) {
         const docsToDelete = snapshot.docs.slice(10);
         const deletePromises = docsToDelete.map(d => deleteDoc(d.ref));
         await Promise.all(deletePromises);
-        console.log(`Limpeza de cache: ${docsToDelete.length} condutas antigas removidas.`);
       }
-    } catch (error) {
-      console.error("Erro ao limpar cache:", error);
-    }
+    } catch (error) { console.error("Erro ao limpar cache:", error); }
   };
 
   const generateConduct = async () => {
@@ -300,7 +402,6 @@ export default function EmergencyGuideApp() {
       return;
     }
     
-    // Resetar estados de UI
     setLoading(true);
     setConduct(null);
     setErrorMsg('');
@@ -308,7 +409,7 @@ export default function EmergencyGuideApp() {
 
     const docId = getConductDocId(searchQuery, activeRoom);
 
-    // 1. TENTAR PEGAR DO CACHE (FIRESTORE)
+    // 1. TENTAR PEGAR DO CACHE/FAVORITOS
     if (isCloudConnected && currentUser) {
       try {
         const docRef = doc(db, 'artifacts', appId, 'users', currentUser.username, 'conducts', docId);
@@ -316,38 +417,31 @@ export default function EmergencyGuideApp() {
 
         if (docSnap.exists()) {
           const data = docSnap.data();
-          console.log("Cache hit! Carregando do banco...");
           setConduct(data.conductData);
           setIsCurrentConductFavorite(data.isFavorite || false);
-          
-          // Atualiza timestamp de acesso (para não ser deletado na limpeza)
           await setDoc(docRef, { lastAccessed: new Date().toISOString() }, { merge: true });
           
           setLoading(false);
-          saveToHistory(searchQuery, activeRoom); // Atualiza histórico de busca
+          saveToHistory(searchQuery, activeRoom);
           setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
-          return; // Encerra aqui, não chama a IA
+          return;
         }
-      } catch (error) {
-        console.error("Erro ao verificar cache:", error);
-      }
+      } catch (error) { console.error("Erro cache:", error); }
     }
 
-    // 2. SE NÃO ESTIVER NO CACHE, CHAMA A IA
     const roomContext = activeRoom === 'verde' ? 'SALA VERDE (AMBULATORIAL)' : 'SALA VERMELHA (EMERGÊNCIA)';
     
     let promptExtra = "";
     if (activeRoom === 'verde') {
       promptExtra += `
       IMPORTANTE (SALA VERDE):
-      Para cada item em "tratamento_medicamentoso", inclua um objeto "receita" com os dados para prescrição de alta:
+      Para cada item em "tratamento_medicamentoso", inclua um objeto "receita":
       "receita": {
-         "uso": "USO ORAL, USO TÓPICO, etc",
-         "nome_comercial": "Nome + Concentração (Ex: Dipirona 500mg)",
-         "quantidade": "Ex: 01 caixa, 01 frasco",
-         "instrucoes": "Ex: Tomar 01 comprimido de 6/6h se dor ou febre"
+         "uso": "USO ORAL/TÓPICO/etc",
+         "nome_comercial": "Nome + Concentração",
+         "quantidade": "Qtd total (ex: 1 cx)",
+         "instrucoes": "Posologia para o paciente"
       }
-      Se o medicamento for apenas de uso hospitalar imediato e não for para casa, "receita": null.
       `;
     }
 
@@ -356,10 +450,10 @@ export default function EmergencyGuideApp() {
       IMPORTANTE (SALA VERMELHA - CÁLCULO DE VOLUME):
       Para drogas tituláveis por peso (ex: Sedação, Aminas, Trombólise):
       1. "usa_peso": true
-      2. "dose_padrao_kg": número (ex: 0.3 para 0.3mg/kg)
-      3. "unidade_base": "mg/kg" ou "mcg/kg/min"
-      4. "concentracao_mg_ml": NÚMERO (ex: 2 para Etomidato 2mg/ml, ou a concentração final da diluição padrão sugerida)
-      5. "diluicao_contexto": Texto explicativo da concentração (ex: "Ampola pura 2mg/ml" ou "Solução padrão: 1 amp em 100ml = 0.5mg/ml")
+      2. "dose_padrao_kg": número (ex: 0.3)
+      3. "unidade_base": "mg/kg"
+      4. "concentracao_mg_ml": NÚMERO (ex: 5 para 5mg/ml)
+      5. "diluicao_contexto": Texto explicativo (ex: "1 amp em 100ml")
       `;
     }
 
@@ -369,15 +463,17 @@ export default function EmergencyGuideApp() {
     
     REGRAS RÍGIDAS:
     1. JSON puro.
-    2. "tratamento_medicamentoso": ARRAY de objetos. CRUCIAL: Se um mesmo fármaco tiver mais de uma apresentação (ex: Dipirona Comprimido e Dipirona Gotas), crie OBJETOS SEPARADOS no array.
-    3. "criterios_internacao/alta": OBRIGATÓRIOS.
+    2. "tratamento_medicamentoso": ARRAY de objetos. CRUCIAL: Se um fármaco tiver mais de uma apresentação útil (ex: Comprimido e Gotas), crie DOIS OBJETOS DIFERENTES no array (um para cada).
+    3. "tipo": OBRIGATÓRIO. Use: 'Comprimido', 'Xarope', 'Gotas', 'Injetável', 'Tópico', 'Inalatório'.
+    4. "farmaco": Nome + Concentração (Ex: "Dipirona 500mg").
+    5. "criterios_internacao/alta": OBRIGATÓRIOS.
     
     ESTRUTURA JSON:
     {
       "condicao": "Nome",
       "estadiamento": "Classificação",
       "classificacao": "${roomContext}",
-      "resumo_clinico": "Texto técnico detalhado...",
+      "resumo_clinico": "Texto técnico...",
       "xabcde_trauma": null, 
       "avaliacao_inicial": { 
         "sinais_vitais_alvos": ["PAM > 65mmHg", "SatO2 > 94%"], 
@@ -388,15 +484,15 @@ export default function EmergencyGuideApp() {
       "criterios_gravidade": ["..."],
       "tratamento_medicamentoso": [ 
         { 
-          "farmaco": "Nome (Apresentação)", 
-          "apresentacao": "Amp/Comp/Gts", 
-          "dose": "...", 
-          "diluicao": "...", 
-          "modo_admin": "...", 
+          "farmaco": "Nome + Concentração", 
+          "tipo": "Injetável/Comprimido/Gotas", // TIPO OBRIGATÓRIO
+          "sugestao_uso": "Texto descritivo...",
+          "diluicao": "...",
+          "modo_admin": "...",
           "cuidados": "...", 
           "indicacao": "...",
-          "receita": { ... }, // Sala Verde
-          "usa_peso": false, // Sala Vermelha
+          "receita": { ... }, 
+          "usa_peso": false, 
           "dose_padrao_kg": 0,
           "unidade_base": "mg/kg",
           "concentracao_mg_ml": 0,
@@ -432,18 +528,15 @@ export default function EmergencyGuideApp() {
         const parsedConduct = JSON.parse(text);
         setConduct(parsedConduct);
         
-        // 3. SALVAR NO CACHE (SE TIVER USUARIO LOGADO)
         if (isCloudConnected && currentUser) {
           const docRef = doc(db, 'artifacts', appId, 'users', currentUser.username, 'conducts', docId);
           await setDoc(docRef, {
             query: searchQuery,
             room: activeRoom,
             conductData: parsedConduct,
-            isFavorite: false, // Padrão false ao criar
+            isFavorite: false,
             lastAccessed: new Date().toISOString()
           });
-          
-          // Limpa cache antigo (mantém apenas 10 recentes não favoritos)
           manageCacheLimit(currentUser.username);
         }
 
@@ -456,14 +549,6 @@ export default function EmergencyGuideApp() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const saveToHistory = (term, room) => {
-    const newEntry = { query: term, room, timestamp: new Date().toISOString() };
-    const hist = recentSearches.filter(s => s.query.toLowerCase() !== term.toLowerCase());
-    const updated = [newEntry, ...hist].slice(0, 10);
-    setRecentSearches(updated);
-    localStorage.setItem(`history_${currentUser.username}`, JSON.stringify(updated));
   };
 
   const showError = (msg) => { setErrorMsg(msg); setTimeout(() => setErrorMsg(''), 4000); };
@@ -480,9 +565,10 @@ export default function EmergencyGuideApp() {
   const getMedTypeIcon = (type) => {
     if (!type) return <Pill size={14} />;
     const t = type.toLowerCase();
-    if (t.includes('injet')) return <SyringeIcon size={14} className="text-rose-500" />;
-    if (t.includes('gota') || t.includes('solu')) return <Droplets size={14} className="text-blue-500" />;
-    if (t.includes('comp') || t.includes('cap')) return <Tablets size={14} className="text-emerald-500" />;
+    if (t.includes('injet') || t.includes('amp') || t.includes('ev') || t.includes('im')) return <SyringeIcon size={14} className="text-rose-500" />;
+    if (t.includes('gota') || t.includes('solu') || t.includes('xarope') || t.includes('susp')) return <Droplets size={14} className="text-blue-500" />;
+    if (t.includes('comp') || t.includes('cap') || t.includes('oral')) return <Tablets size={14} className="text-emerald-500" />;
+    if (t.includes('tópi') || t.includes('pomada') || t.includes('creme')) return <Pipette size={14} className="text-amber-500" />;
     return <Pill size={14} className="text-slate-500" />;
   };
 
@@ -494,7 +580,6 @@ export default function EmergencyGuideApp() {
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans text-slate-800">
-        {/* TELA DE LOGIN */}
         <div className="bg-white rounded-3xl shadow-xl border border-gray-100 max-w-md w-full overflow-hidden">
           <div className="bg-gradient-to-br from-blue-900 to-slate-800 p-8 text-center text-white relative">
             <Shield size={40} className="mx-auto mb-3 text-blue-300" />
@@ -510,7 +595,7 @@ export default function EmergencyGuideApp() {
             </form>
             <div className="text-center flex flex-col items-center gap-3 pt-2 border-t border-gray-100">
               <div className={`flex items-center justify-center gap-2 text-[10px] px-3 py-1.5 rounded-full mx-auto w-fit ${configStatus === 'missing' ? 'bg-red-50 text-red-700' : isCloudConnected ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>{configStatus === 'missing' ? <Settings size={12}/> : isCloudConnected ? <Cloud size={12}/> : <CloudOff size={12}/>}<span>{configStatus === 'missing' ? 'Erro: Variáveis de Ambiente' : isCloudConnected ? 'Banco de Dados Conectado' : 'Modo Offline (Dados Locais)'}</span></div>
-              <p className="text-[10px] text-slate-400 leading-tight max-w-xs">ATENÇÃO: Ferramenta auxiliar. Não substitui o julgamento clínico. O autor isenta-se de responsabilidade. Uso proibido para leigos.</p>
+              <p className="text-[10px] text-slate-400 leading-tight max-w-xs">ATENÇÃO: Ferramenta auxiliar. Não substitui o julgamento clínico. O autor isenta-se de responsabilidade.</p>
             </div>
           </div>
         </div>
@@ -525,6 +610,10 @@ export default function EmergencyGuideApp() {
           <div className="flex items-center gap-3"><div className="bg-blue-900 p-2 rounded-lg text-white"><ClipboardCheck size={20} /></div><div><h1 className="text-lg font-bold text-slate-800 leading-none">Guia de Plantão</h1><span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Suporte Médico</span></div></div>
           <div className="flex items-center gap-3">
              <div className="hidden sm:flex flex-col items-end mr-2"><span className="text-xs font-bold text-slate-700">{currentUser.name}</span><span className="text-[10px] text-slate-400 uppercase">{currentUser.role}</span></div>
+             
+             {/* BOTÃO MEUS FAVORITOS (NOVO) */}
+             <button onClick={() => setShowFavoritesModal(true)} className="p-2 text-yellow-500 hover:bg-yellow-50 rounded-full" title="Meus Favoritos"><Star size={20} /></button>
+             
              <button onClick={() => setShowNotepad(true)} className="p-2 text-slate-600 hover:bg-slate-100 rounded-full"><Edit size={20} /></button>
              <button onClick={handleLogout} className="p-2 text-red-400 hover:bg-red-50 rounded-full"><LogOut size={20} /></button>
           </div>
@@ -532,7 +621,7 @@ export default function EmergencyGuideApp() {
       </header>
 
       <main className="flex-grow max-w-6xl mx-auto px-4 py-8 space-y-8 w-full relative">
-        {/* BOTÃO FLUTUANTE DE RECEITA (SÓ SALA VERDE) */}
+        {/* BOTÃO FLUTUANTE DE RECEITA */}
         {activeRoom === 'verde' && selectedPrescriptionItems.length > 0 && (
           <button 
             onClick={() => setShowPrescriptionModal(true)}
@@ -565,9 +654,7 @@ export default function EmergencyGuideApp() {
 
           {recentSearches.length > 0 && (
             <div className="flex flex-wrap gap-2 px-1">
-              <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase mr-2">
-                <History size={14} /> Recentes
-              </div>
+              <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase mr-2"><History size={14} /> Recentes</div>
               {recentSearches.map((search, idx) => (
                 <button 
                   key={idx} 
@@ -592,7 +679,7 @@ export default function EmergencyGuideApp() {
                   {conduct.guideline_referencia && (<p className="text-xs text-slate-500 mt-1 flex items-center gap-1"><BookOpen size={12} /> Fonte: <span className="font-medium">{conduct.guideline_referencia}</span></p>)}
                </div>
                <div className="flex gap-2">
-                 {/* BOTÃO FAVORITAR */}
+                 {/* BOTÃO FAVORITAR CONDUTA ATUAL */}
                  <button 
                     onClick={toggleFavorite} 
                     className={`p-2 rounded-full transition-colors ${isCurrentConductFavorite ? 'bg-yellow-100 text-yellow-500 hover:bg-yellow-200' : 'text-gray-400 hover:bg-gray-100 hover:text-yellow-400'}`}
@@ -604,6 +691,7 @@ export default function EmergencyGuideApp() {
                </div>
             </div>
 
+            {/* RESUMO CLÍNICO */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex gap-4">
                <div className="bg-blue-50 p-2 rounded-full h-fit text-blue-600"><User size={24} /></div>
                <div><h3 className="font-bold text-slate-900 mb-1">Resumo Clínico e Fisiopatologia</h3><p className="text-slate-700 leading-relaxed text-sm">{conduct.resumo_clinico}</p></div>
@@ -635,6 +723,7 @@ export default function EmergencyGuideApp() {
 
             <div className="grid lg:grid-cols-12 gap-6 items-start">
               <div className="lg:col-span-4 space-y-6">
+                {/* AVALIAÇÃO E ALVOS */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                    <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center gap-2"><Activity size={18} className="text-slate-500"/><h3 className="font-bold text-slate-700 text-sm uppercase">Avaliação Inicial</h3></div>
                    <div className="p-5 space-y-5 text-sm">
@@ -780,8 +869,6 @@ export default function EmergencyGuideApp() {
       {showPrescriptionModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 print:p-0 animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-3xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] print:max-h-none print:h-full print:rounded-none print:shadow-none">
-            
-            {/* Toolbar (Visível apenas na tela) */}
             <div className="bg-slate-100 p-4 border-b border-slate-200 flex justify-between items-center print:hidden">
               <h3 className="font-bold text-slate-800 flex items-center gap-2"><FilePlus size={20} /> Gerador de Receituário</h3>
               <div className="flex gap-2">
@@ -789,57 +876,25 @@ export default function EmergencyGuideApp() {
                 <button onClick={() => setShowPrescriptionModal(false)} className="bg-gray-200 hover:bg-gray-300 text-gray-600 p-2 rounded-lg transition-colors"><X size={20}/></button>
               </div>
             </div>
-
-            {/* Corpo da Receita (Imprimível) */}
             <div className="p-12 overflow-y-auto print:overflow-visible font-serif text-slate-900 bg-white flex-1 flex flex-col h-full relative">
-              
-              {/* Marca d'água opcional */}
-              <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none">
-                <Activity size={400} />
-              </div>
-
-              {/* Cabeçalho Médico Profissional */}
+              <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none"><Activity size={400} /></div>
               <header className="flex flex-col items-center border-b-4 border-double border-slate-800 pb-6 mb-8">
                 <h1 className="text-3xl font-bold tracking-widest uppercase text-slate-900">{currentUser?.name || "NOME DO MÉDICO"}</h1>
-                <div className="flex items-center gap-2 mt-2 text-sm font-bold text-slate-600 uppercase tracking-wide">
-                  <span>CRM: {currentUser?.crm || "00000/UF"}</span>
-                  <span>•</span>
-                  <span>CLÍNICA MÉDICA</span>
-                </div>
+                <div className="flex items-center gap-2 mt-2 text-sm font-bold text-slate-600 uppercase tracking-wide"><span>CRM: {currentUser?.crm || "00000/UF"}</span><span>•</span><span>CLÍNICA MÉDICA</span></div>
               </header>
-
-              {/* Lista de Medicamentos Formatada */}
               <div className="flex-1 space-y-8">
                 {['USO ORAL', 'USO TÓPICO', 'USO RETAL', 'USO INALATÓRIO', 'USO OFTÁLMICO', 'USO OTOLÓGICO'].map((usoType) => {
-                  const items = selectedPrescriptionItems.filter(item => 
-                    item.receita?.uso?.toUpperCase().includes(usoType.replace('USO ', '')) ||
-                    (usoType === 'USO ORAL' && !item.receita?.uso) // Default
-                  );
-                  
+                  const items = selectedPrescriptionItems.filter(item => item.receita?.uso?.toUpperCase().includes(usoType.replace('USO ', '')) || (usoType === 'USO ORAL' && !item.receita?.uso));
                   if (items.length === 0) return null;
-
                   return (
                     <div key={usoType}>
-                      <div className="flex items-center gap-4 mb-4">
-                         <h3 className="font-bold text-lg underline decoration-2 underline-offset-4">{usoType}</h3>
-                      </div>
-                      
+                      <div className="flex items-center gap-4 mb-4"><h3 className="font-bold text-lg underline decoration-2 underline-offset-4">{usoType}</h3></div>
                       <ul className="space-y-6 list-none">
                         {items.map((item, index) => (
                           <li key={index} className="relative pl-6">
                             <span className="absolute left-0 top-0 font-bold text-lg">{index + 1}.</span>
-                            
-                            {/* Nome e Quantidade com linha pontilhada CSS */}
-                            <div className="flex items-end mb-1 w-full">
-                              <span className="font-bold text-xl">{item.receita.nome_comercial}</span>
-                              <div className="flex-1 mx-2 border-b-2 border-dotted border-slate-400 mb-1.5"></div>
-                              <span className="font-bold text-lg whitespace-nowrap">{item.receita.quantidade}</span>
-                            </div>
-                            
-                            {/* Instrução Destacada */}
-                            <p className="text-base leading-relaxed text-slate-800 mt-1 pl-2 border-l-4 border-slate-200">
-                              {item.receita.instrucoes}
-                            </p>
+                            <div className="flex items-end mb-1 w-full"><span className="font-bold text-xl">{item.receita.nome_comercial}</span><div className="flex-1 mx-2 border-b-2 border-dotted border-slate-400 mb-1.5"></div><span className="font-bold text-lg whitespace-nowrap">{item.receita.quantidade}</span></div>
+                            <p className="text-base leading-relaxed text-slate-800 mt-1 pl-2 border-l-4 border-slate-200">{item.receita.instrucoes}</p>
                           </li>
                         ))}
                       </ul>
@@ -847,29 +902,53 @@ export default function EmergencyGuideApp() {
                   )
                 })}
               </div>
-
-              {/* Rodapé Oficial */}
               <footer className="mt-auto pt-12">
                 <div className="flex justify-between items-end">
-                  <div className="text-sm">
-                    <p className="font-bold">Data:</p>
-                    <div className="w-40 border-b border-slate-800 mt-4 text-center relative top-1">
-                      {new Date().toLocaleDateString('pt-BR')}
-                    </div>
-                  </div>
-
-                  <div className="text-center">
-                    <div className="w-64 border-b border-slate-800 mb-2"></div>
-                    <p className="font-bold uppercase text-sm">{currentUser?.name}</p>
-                    <p className="text-xs text-slate-500">Assinatura e Carimbo</p>
-                  </div>
+                  <div className="text-sm"><p className="font-bold">Data:</p><div className="w-40 border-b border-slate-800 mt-4 text-center relative top-1">{new Date().toLocaleDateString('pt-BR')}</div></div>
+                  <div className="text-center"><div className="w-64 border-b border-slate-800 mb-2"></div><p className="font-bold uppercase text-sm">{currentUser?.name}</p><p className="text-xs text-slate-500">Assinatura e Carimbo</p></div>
                 </div>
-                
-                <div className="text-center mt-8 pt-4 border-t border-slate-200 text-[10px] text-slate-400 uppercase">
-                  Rua da Medicina, 123 • Centro • Cidade/UF • Tel: (00) 1234-5678
-                </div>
+                <div className="text-center mt-8 pt-4 border-t border-slate-200 text-[10px] text-slate-400 uppercase">Rua da Medicina, 123 • Centro • Cidade/UF • Tel: (00) 1234-5678</div>
               </footer>
+            </div>
+          </div>
+        </div>
+      )}
 
+      {/* MODAL DE FAVORITOS (NOVO) */}
+      {showFavoritesModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
+            <div className="bg-yellow-50 p-4 border-b border-yellow-100 flex justify-between items-center">
+              <div className="flex items-center gap-2 text-yellow-800 font-bold">
+                <Star size={20} fill="currentColor" /> Meus Favoritos
+              </div>
+              <button onClick={() => setShowFavoritesModal(false)} className="p-2 hover:bg-yellow-100 rounded-full text-yellow-700 transition-colors"><X size={20} /></button>
+            </div>
+            <div className="p-2 max-h-[60vh] overflow-y-auto bg-slate-50">
+              {favorites.length === 0 ? (
+                <div className="text-center p-8 text-slate-400 text-sm">Você ainda não tem favoritos.</div>
+              ) : (
+                <div className="space-y-2">
+                  {favorites.map((fav) => (
+                    <div key={fav.id} className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm flex items-center justify-between group hover:border-blue-300 transition-colors">
+                      <button onClick={() => loadFavoriteConduct(fav)} className="flex-1 text-left">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full shrink-0 ${fav.room === 'verde' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                          <span className="font-bold text-slate-700 text-sm">{fav.query}</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400 ml-4">{new Date(fav.lastAccessed).toLocaleDateString()}</span>
+                      </button>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); removeFavoriteFromList(fav.id); }}
+                        className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                        title="Remover"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
