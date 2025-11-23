@@ -5,26 +5,13 @@ import {
   CheckCircle2, Thermometer, Syringe, Siren, FlaskConical, Tag, Package,
   ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save, Cloud, CloudOff, Settings, Info,
   HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine, Wind, Droplet, Timer, Skull, Printer, FilePlus, Calculator,
-  Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2, SprayCan
+  Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2, SprayCan, CalendarDays
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-import { 
-  getFirestore, 
-  doc, 
-  setDoc, 
-  getDoc, 
-  collection, 
-  query, 
-  where, 
-  orderBy, 
-  limit, 
-  getDocs, 
-  deleteDoc,
-  onSnapshot
-} from 'firebase/firestore';
+import { getFirestore, doc, setDoc, getDoc, collection } from 'firebase/firestore';
 
 // --- LÓGICA DE CONFIGURAÇÃO DO FIREBASE ---
 const getFirebaseConfig = () => {
@@ -284,6 +271,7 @@ export default function EmergencyGuideApp() {
     localStorage.removeItem('emergency_app_user');
   };
 
+  // --- MANIPULAÇÃO DE ITENS DO RECEITUÁRIO ---
   const togglePrescriptionItem = (med) => {
     if (activeRoom !== 'verde' || !med.receita) return;
 
@@ -294,9 +282,25 @@ export default function EmergencyGuideApp() {
       if (exists) {
         return prev.filter(item => (item.farmaco + (item.receita?.nome_comercial || "")) !== itemId);
       } else {
-        return [...prev, med];
+        // Inicializa com 5 dias padrão se não houver
+        return [...prev, { ...med, dias_tratamento: med.receita.dias_sugeridos || 5 }];
       }
     });
+  };
+
+  const updateItemDays = (index, days) => {
+    const newItems = [...selectedPrescriptionItems];
+    newItems[index].dias_tratamento = days;
+    
+    // Recalcula quantidade se tiver dados matemáticos
+    const item = newItems[index];
+    if (item.receita?.calculo_qnt?.frequencia_diaria && days > 0) {
+      const total = Math.ceil(item.receita.calculo_qnt.frequencia_diaria * days);
+      const unidade = item.receita.calculo_qnt.unidade || 'unidades';
+      item.receita.quantidade = `${total} ${unidade}`;
+    }
+    
+    setSelectedPrescriptionItems(newItems);
   };
 
   // --- LÓGICA DE CACHE E FAVORITOS ---
@@ -424,13 +428,15 @@ export default function EmergencyGuideApp() {
     let promptExtra = "";
     if (activeRoom === 'verde') {
       promptExtra += `
-      IMPORTANTE (SALA VERDE):
+      IMPORTANTE (SALA VERDE - RECEITA INTELIGENTE):
       Para cada item em "tratamento_medicamentoso", inclua um objeto "receita":
       "receita": {
          "uso": "USO ORAL/TÓPICO/etc",
          "nome_comercial": "Nome + Concentração",
          "quantidade": "Qtd total (ex: 1 cx)",
-         "instrucoes": "Posologia para o paciente (Ex: 'Tomar 1 comprimido de 8/8h'). Use linguagem de receita."
+         "instrucoes": "Posologia para o paciente",
+         "dias_sugeridos": 5, // Sugestão de dias padrão para antibióticos/sintomáticos
+         "calculo_qnt": { "frequencia_diaria": 3, "unidade": "comprimidos" } // Para calcular total (freq * dias)
       }
       `;
     }
@@ -453,9 +459,9 @@ export default function EmergencyGuideApp() {
     
     REGRAS RÍGIDAS:
     1. JSON puro.
-    2. "tratamento_medicamentoso": ARRAY de objetos. CRUCIAL: Se um mesmo fármaco tiver mais de uma apresentação útil (ex: Comprimido e Gotas), crie DOIS OBJETOS DIFERENTES no array.
+    2. "tratamento_medicamentoso": ARRAY de objetos. Se um mesmo fármaco tiver apresentações diferentes (ex: Dipirona Comprimido vs Gotas), crie DOIS OBJETOS DIFERENTES no array.
     3. "tipo": CAMPO OBRIGATÓRIO E RÍGIDO. Escolha EXATAMENTE UM DA LISTA: ['Comprimido', 'Cápsula', 'Xarope', 'Suspensão', 'Gotas', 'Solução Oral', 'Injetável', 'Tópico', 'Inalatório', 'Supositório'].
-    4. "sugestao_uso": Se for Sala Verde, descreva COMO USAR baseado na BULA (ex: "Diluir em meio copo d'água e tomar após refeição"). Se for Sala Vermelha, descreva a administração técnica (ex: "Bolus lento").
+    4. "sugestao_uso": Se for Sala Verde, descreva COMO USAR baseado na BULA. Se for Sala Vermelha, descreva a administração técnica.
     5. "farmaco": Nome + Concentração (Ex: "Dipirona 500mg").
     6. "criterios_internacao/alta": OBRIGATÓRIOS.
     
@@ -477,7 +483,7 @@ export default function EmergencyGuideApp() {
         { 
           "farmaco": "Nome + Concentração", 
           "tipo": "Comprimido", // USE A LISTA RÍGIDA
-          "sugestao_uso": "Instrução de uso (Bula/Técnica)",
+          "sugestao_uso": "Instrução de uso...",
           "diluicao": "...",
           "modo_admin": "...",
           "cuidados": "...", 
@@ -556,7 +562,7 @@ export default function EmergencyGuideApp() {
   const getMedTypeIcon = (type) => {
     if (!type) return <Pill size={14} />;
     const t = type.toLowerCase();
-    if (t.includes('injet') || t.includes('amp')) return <SyringeIcon size={14} className="text-rose-500" />;
+    if (t.includes('injet')) return <SyringeIcon size={14} className="text-rose-500" />;
     if (t.includes('gota') || t.includes('solu') || t.includes('xarope') || t.includes('susp')) return <Droplets size={14} className="text-blue-500" />;
     if (t.includes('comp') || t.includes('cap')) return <Tablets size={14} className="text-emerald-500" />;
     if (t.includes('tópi') || t.includes('pomada') || t.includes('creme')) return <Pipette size={14} className="text-amber-500" />;
@@ -810,7 +816,6 @@ export default function EmergencyGuideApp() {
                             </div>
                           )}
                           
-                          {/* BADGE DE TIPO CORRIGIDA E COLORIDA */}
                           <div className="absolute top-4 right-12">
                              <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${getMedTypeColor(medType)}`}>
                                 {getMedTypeIcon(medType)} {medType}
@@ -828,8 +833,26 @@ export default function EmergencyGuideApp() {
                           </div>
                           
                           <div className="bg-slate-50 rounded-lg p-3 ml-3 mb-3 font-mono text-sm text-slate-700 border border-slate-100">
-                             <strong>Sugestão de Uso:</strong> {med.sugestao_uso || med.dose}
+                             <strong className="text-slate-500 block text-xs uppercase mb-1">Sugestão de Uso / Dose:</strong>
+                             {med.sugestao_uso || med.dose}
                           </div>
+                          
+                          {/* INPUT DE DIAS PARA RECEITA (SALA VERDE) */}
+                          {canSelect && isSelected && (
+                            <div className="ml-3 mb-3 animate-in slide-in-from-top-1">
+                               <label className="text-xs font-bold text-blue-700 flex items-center gap-1 mb-1">
+                                 <CalendarDays size={12} /> Duração do Tratamento (Dias):
+                               </label>
+                               <input 
+                                 type="number" 
+                                 min="1" 
+                                 className="w-20 px-2 py-1 text-sm border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-blue-900 font-bold"
+                                 value={med.dias_tratamento || 5}
+                                 onClick={(e) => e.stopPropagation()}
+                                 onChange={(e) => updateItemDays(selectedPrescriptionItems.findIndex(i => i.farmaco === med.farmaco), parseInt(e.target.value))}
+                               />
+                            </div>
+                          )}
 
                           {activeRoom === 'vermelha' && med.usa_peso && (
                             <div className="bg-rose-50 rounded-lg p-3 ml-3 mb-3 border border-rose-100">
@@ -936,41 +959,16 @@ export default function EmergencyGuideApp() {
         </div>
       )}
 
-      {/* MODAL DE FAVORITOS (NOVO) */}
+      {/* MODAL DE FAVORITOS */}
       {showFavoritesModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
             <div className="bg-yellow-50 p-4 border-b border-yellow-100 flex justify-between items-center">
-              <div className="flex items-center gap-2 text-yellow-800 font-bold">
-                <Star size={20} fill="currentColor" /> Meus Favoritos
-              </div>
+              <div className="flex items-center gap-2 text-yellow-800 font-bold"><Star size={20} fill="currentColor" /> Meus Favoritos</div>
               <button onClick={() => setShowFavoritesModal(false)} className="p-2 hover:bg-yellow-100 rounded-full text-yellow-700 transition-colors"><X size={20} /></button>
             </div>
             <div className="p-2 max-h-[60vh] overflow-y-auto bg-slate-50">
-              {favorites.length === 0 ? (
-                <div className="text-center p-8 text-slate-400 text-sm">Você ainda não tem favoritos.</div>
-              ) : (
-                <div className="space-y-2">
-                  {favorites.map((fav) => (
-                    <div key={fav.id} className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm flex items-center justify-between group hover:border-blue-300 transition-colors">
-                      <button onClick={() => loadFavoriteConduct(fav)} className="flex-1 text-left">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-2 h-2 rounded-full shrink-0 ${fav.room === 'verde' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                          <span className="font-bold text-slate-700 text-sm">{fav.query}</span>
-                        </div>
-                        <span className="text-[10px] text-slate-400 ml-4">{new Date(fav.lastAccessed).toLocaleDateString()}</span>
-                      </button>
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); removeFavoriteFromList(fav.id); }}
-                        className="p-2 text-slate-300 hover:text-red-500 transition-colors"
-                        title="Remover"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
+              {favorites.length === 0 ? (<div className="text-center p-8 text-slate-400 text-sm">Você ainda não tem favoritos.</div>) : (<div className="space-y-2">{favorites.map((fav) => (<div key={fav.id} className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm flex items-center justify-between group hover:border-blue-300 transition-colors"><button onClick={() => loadFavoriteConduct(fav)} className="flex-1 text-left"><div className="flex items-center gap-2"><div className={`w-2 h-2 rounded-full shrink-0 ${fav.room === 'verde' ? 'bg-emerald-500' : 'bg-rose-500'}`} /><span className="font-bold text-slate-700 text-sm">{fav.query}</span></div><span className="text-[10px] text-slate-400 ml-4">{new Date(fav.lastAccessed).toLocaleDateString()}</span></button><button onClick={(e) => { e.stopPropagation(); removeFavoriteFromList(fav.id); }} className="p-2 text-slate-300 hover:text-red-500 transition-colors" title="Remover"><Trash2 size={16} /></button></div>))}</div>)}
             </div>
           </div>
         </div>
