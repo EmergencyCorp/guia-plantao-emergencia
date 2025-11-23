@@ -2,8 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   Activity, AlertCircle, Search, Clock, Pill, FileText, Loader2, BookOpen, 
   Stethoscope, ClipboardCheck, AlertTriangle, ArrowRight, X, User, 
-  CheckCircle2, Thermometer, Syringe, Siren, FlaskConical, Tag, Package,
-  ShieldAlert
+  CheckCircle2, Thermometer, Syringe, Siren, FlaskConical, Tag, Package 
 } from 'lucide-react';
 
 export default function EmergencyGuideApp() {
@@ -61,7 +60,6 @@ export default function EmergencyGuideApp() {
 
     const roomClassification = activeRoom === 'verde' ? 'Baixa complexidade' : 'Alta complexidade/Emergência';
 
-    // Instrução específica para priorizar VO na sala verde
     const prescriptionGuidance = activeRoom === 'verde'
       ? 'DIRETRIZ IMPORTANTE: Como é Sala Verde, dê PREFERÊNCIA para medicações via ORAL (VO) ou IM na primeira linha de tratamento visando a alta do paciente. Use EV apenas se estritamente necessário para controle álgico intenso ou se houver falha da VO (deixe o EV claro no escalonamento).'
       : 'DIRETRIZ: Priorize a via mais eficaz e rápida para estabilização (geralmente EV).';
@@ -171,7 +169,7 @@ export default function EmergencyGuideApp() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col font-sans text-slate-800 selection:bg-blue-100">
+    <div className="min-h-screen bg-gray-50 font-sans text-slate-800 selection:bg-blue-100">
       
       {/* Top Navigation */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
@@ -194,7 +192,7 @@ export default function EmergencyGuideApp() {
         </div>
       </header>
 
-      <main className="flex-grow max-w-6xl mx-auto px-4 py-8 space-y-8 w-full">
+      <main className="max-w-6xl mx-auto px-4 py-8 space-y-8">
         
         {/* Context & Search Section */}
         <div className="space-y-6">
@@ -402,23 +400,23 @@ export default function EmergencyGuideApp() {
                       
                       {/* Exams List */}
                       {(conduct.avaliacao_inicial?.exames_obrigatorios || conduct.avaliacao_inicial?.exames_complementares) && (
-                          <div className="space-y-3">
-                             <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Solicitação de Exames</span>
-                             <ul className="space-y-2">
-                               {conduct.avaliacao_inicial?.exames_obrigatorios?.map((ex, i) => (
-                                 <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
-                                   <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
-                                   <span className="font-medium">{ex}</span>
-                                 </li>
-                               ))}
-                               {conduct.avaliacao_inicial?.exames_complementares?.map((ex, i) => (
-                                 <li key={i} className="flex items-start gap-2 text-sm text-slate-500">
-                                   <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
-                                   <span>{ex} (opcional)</span>
-                                 </li>
-                               ))}
-                             </ul>
-                          </div>
+                         <div className="space-y-3">
+                            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Solicitação de Exames</span>
+                            <ul className="space-y-2">
+                              {conduct.avaliacao_inicial?.exames_obrigatorios?.map((ex, i) => (
+                                <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
+                                  <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                                  <span className="font-medium">{ex}</span>
+                                </li>
+                              ))}
+                              {conduct.avaliacao_inicial?.exames_complementares?.map((ex, i) => (
+                                <li key={i} className="flex items-start gap-2 text-sm text-slate-500">
+                                  <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
+                                  <span>{ex} (opcional)</span>
+                                </li>
+                              ))}
+                            </ul>
+                         </div>
                       )}
                    </div>
                 </div>
@@ -431,14 +429,14 @@ export default function EmergencyGuideApp() {
                    </div>
                    <div className="p-5 space-y-4">
                       {Object.entries(conduct.achados_exames || {}).map(([key, value]) => {
-                          if(!value) return null;
-                          const map = { ecg: 'ECG', raio_x: 'Imagem', laboratorio: 'Laboratório', outros_exames: 'Outros' };
-                          return (
-                            <div key={key} className="text-sm">
-                              <span className="font-bold text-slate-700 block mb-1">{map[key]}</span>
-                              <p className="text-slate-600 leading-snug bg-gray-50 p-3 rounded-lg border border-gray-100">{value}</p>
-                            </div>
-                          )
+                         if(!value) return null;
+                         const map = { ecg: 'ECG', raio_x: 'Imagem', laboratorio: 'Laboratório', outros_exames: 'Outros' };
+                         return (
+                           <div key={key} className="text-sm">
+                             <span className="font-bold text-slate-700 block mb-1">{map[key]}</span>
+                             <p className="text-slate-600 leading-snug bg-gray-50 p-3 rounded-lg border border-gray-100">{value}</p>
+                           </div>
+                         )
                       })}
                       
                       {/* Signs & Symptoms in Diagnostics Card to save space */}
@@ -564,22 +562,22 @@ export default function EmergencyGuideApp() {
                          <div className="absolute left-2.5 top-2 bottom-2 w-0.5 bg-gray-100" />
                          
                          <StepItem 
-                           number="1" 
-                           title="Primeira Linha" 
-                           content={conduct.escalonamento_terapeutico?.primeira_linha} 
-                           color="purple" 
+                            number="1" 
+                            title="Primeira Linha" 
+                            content={conduct.escalonamento_terapeutico?.primeira_linha} 
+                            color="purple" 
                          />
                          <StepItem 
-                           number="2" 
-                           title="Se Falha Terapêutica" 
-                           content={conduct.escalonamento_terapeutico?.se_falha} 
-                           color="amber" 
+                            number="2" 
+                            title="Se Falha Terapêutica" 
+                            content={conduct.escalonamento_terapeutico?.se_falha} 
+                            color="amber" 
                          />
                          <StepItem 
-                           number="3" 
-                           title="Resgate / Avançado" 
-                           content={conduct.escalonamento_terapeutico?.resgate} 
-                           color="rose" 
+                            number="3" 
+                            title="Resgate / Avançado" 
+                            content={conduct.escalonamento_terapeutico?.resgate} 
+                            color="rose" 
                          />
                       </div>
                    </div>
@@ -634,36 +632,38 @@ export default function EmergencyGuideApp() {
         )}
       </main>
 
-      {/* Footer / Copyright / Disclaimer Section */}
-      <footer className="bg-white border-t border-gray-200 mt-auto">
-        <div className="max-w-4xl mx-auto px-4 py-8">
-          
-          {/* AI Warning Box */}
-          <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 mb-6 flex gap-4 items-start">
-             <ShieldAlert className="text-amber-600 shrink-0 w-6 h-6 mt-1" />
-             <div className="space-y-2">
-               <h4 className="text-sm font-bold text-amber-800 uppercase tracking-wide">Aviso Legal Importante</h4>
-               <p className="text-xs text-amber-900/80 leading-relaxed text-justify">
-                 Esta ferramenta utiliza <strong>Inteligência Artificial</strong> para fornecer suporte rápido à decisão clínica. 
-                 Embora baseada em protocolos médicos, <strong>o conteúdo gerado pode conter imprecisões</strong> e não substitui o julgamento clínico profissional, 
-                 a anamnese detalhada, o exame físico ou os protocolos institucionais locais.
-               </p>
-               <p className="text-xs font-bold text-amber-800">
-                 O uso é estritamente restrito a médicos e profissionais de saúde. Não utilize para autodiagnóstico.
-                 O autor e a EmergencyCorp não se responsabilizam por condutas tomadas com base unicamente nesta ferramenta.
-               </p>
-             </div>
+      {/* Footer with Copyright and Medical Disclaimer */}
+      <footer className="bg-slate-900 text-slate-300 py-8 mt-16 border-t-4 border-blue-600">
+        <div className="max-w-6xl mx-auto px-4">
+          {/* Medical Warning */}
+          <div className="bg-amber-900/30 border border-amber-700/50 rounded-xl p-5 mb-6">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-6 h-6 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-amber-400 font-bold text-sm uppercase tracking-wide mb-2">
+                  Aviso Médico Importante
+                </h3>
+                <p className="text-slate-300 text-sm leading-relaxed">
+                  Esta é uma <strong>ferramenta de suporte clínico por inteligência artificial</strong>. 
+                  As condutas apresentadas <strong>NÃO devem ser aplicadas por leigos</strong> e servem apenas como 
+                  referência para <strong>profissionais de saúde qualificados</strong>. Toda conduta médica deve ser 
+                  precedida de <strong>raciocínio clínico individualizado</strong>, avaliação completa do paciente e 
+                  julgamento profissional experiente. Este sistema não substitui a avaliação médica presencial nem a 
+                  responsabilidade profissional.
+                </p>
+              </div>
+            </div>
           </div>
 
-          <div className="text-center space-y-2">
-            <p className="text-sm font-semibold text-slate-500">
-              &copy; {new Date().getFullYear()} EmergencyCorp. Todos os direitos reservados.
+          {/* Copyright */}
+          <div className="text-center border-t border-slate-800 pt-6">
+            <p className="text-slate-400 text-sm">
+              © {new Date().getFullYear()} <span className="font-bold text-slate-200">EmergencyCorp</span>. Todos os direitos reservados.
             </p>
-            <p className="text-[10px] text-slate-400 uppercase tracking-widest">
-              Emergency Clinical Support System v2.0
+            <p className="text-slate-500 text-xs mt-2">
+              Desenvolvido para uso exclusivo de profissionais de saúde
             </p>
           </div>
-
         </div>
       </footer>
     </div>
