@@ -3,7 +3,7 @@ import {
   Activity, AlertCircle, Search, Clock, Pill, FileText, Loader2, BookOpen, 
   Stethoscope, ClipboardCheck, AlertTriangle, ArrowRight, X, User, 
   CheckCircle2, Thermometer, Syringe, Siren, FlaskConical, Tag, Package,
-  ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, FilePenLine, Save
+  ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save
 } from 'lucide-react';
 
 // --- CONFIGURAÇÃO DE ACESSO (Edite aqui) ---
@@ -257,7 +257,7 @@ export default function EmergencyGuideApp() {
     SEJA PRAGMÁTICO. Doses para adulto 70kg. JSON puro sem markdown.`;
 
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      const apiKey = (import.meta && import.meta.env) ? import.meta.env.VITE_GEMINI_API_KEY : "";
       
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
         method: 'POST',
@@ -407,7 +407,7 @@ export default function EmergencyGuideApp() {
                className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all relative group"
                title="Meu Caderno"
              >
-                <FilePenLine size={20} />
+                <Edit size={20} />
                 <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
                   Anotações
                 </span>
@@ -904,7 +904,7 @@ export default function EmergencyGuideApp() {
             <div className="bg-gray-50 p-4 border-b border-gray-200 flex justify-between items-center">
               <div className="flex items-center gap-3">
                  <div className="bg-blue-100 p-2 rounded-lg text-blue-600">
-                    <FilePenLine size={20} />
+                    <Edit size={20} />
                  </div>
                  <div>
                     <h3 className="font-bold text-slate-800 leading-none">Meu Caderno de Plantão</h3>
