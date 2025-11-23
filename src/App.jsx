@@ -4,7 +4,7 @@ import {
   Stethoscope, ClipboardCheck, AlertTriangle, ArrowRight, X, User, 
   CheckCircle2, Thermometer, Syringe, Siren, FlaskConical, Tag, Package,
   ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save, Cloud, CloudOff, Settings, Info,
-  HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine, Wind, Droplet
+  HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine, Wind, Droplet, Timer, Skull
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -12,10 +12,9 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, getDoc, collection } from 'firebase/firestore';
 
-// --- LÓGICA DE CONFIGURAÇÃO DO FIREBASE (À PROVA DE FALHAS) ---
+// --- LÓGICA DE CONFIGURAÇÃO DO FIREBASE ---
 const getFirebaseConfig = () => {
   try {
-    // 1. Prioridade: Variáveis de Ambiente do Vite (Netlify/Vercel)
     if (import.meta.env && import.meta.env.VITE_FIREBASE_API_KEY) {
       return {
         apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -26,38 +25,31 @@ const getFirebaseConfig = () => {
         appId: import.meta.env.VITE_FIREBASE_APP_ID
       };
     }
-    // 2. Fallback: Variável Global Injetada (Ambiente de Teste/Preview)
     if (typeof __firebase_config !== 'undefined') {
       return JSON.parse(__firebase_config);
     }
   } catch (e) {
-    console.error("Erro ao carregar configuração do Firebase:", e);
+    console.error("Erro config firebase:", e);
   }
   return null;
 };
 
-// Inicializa as variáveis globais do Firebase
 const firebaseConfig = getFirebaseConfig();
-let app = null;
-let auth = null;
-let db = null;
+let app, auth, db;
 
-// Só inicializa se tivermos uma configuração válida
 if (firebaseConfig && firebaseConfig.apiKey) {
   try {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
   } catch (e) {
-    console.error("Falha na inicialização do Firebase:", e);
+    console.error("Erro init firebase:", e);
   }
 }
 
-// IDs e Tokens com verificação de segurança
 const appId = (typeof __app_id !== 'undefined') ? __app_id : 'emergency-guide-app';
 const initialToken = (typeof __initial_auth_token !== 'undefined') ? __initial_auth_token : null;
 
-// --- CONFIGURAÇÃO DE ACESSO (LOGIN LOCAL) ---
 const AUTHORIZED_USERS = [
   { username: 'admin', password: '123', name: 'Dr. Administrador', role: 'Diretor Clínico' },
   { username: 'medico', password: 'med', name: 'Dr. Plantonista', role: 'Médico Assistente' },
@@ -65,19 +57,16 @@ const AUTHORIZED_USERS = [
 ];
 
 export default function EmergencyGuideApp() {
-  // Estados de Autenticação Local (App)
   const [currentUser, setCurrentUser] = useState(null);
   const [usernameInput, setUsernameInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [loginError, setLoginError] = useState('');
   
-  // Estados de Conexão com Banco (Firebase)
   const [firebaseUser, setFirebaseUser] = useState(null); 
   const [isCloudConnected, setIsCloudConnected] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [configStatus, setConfigStatus] = useState('verificando'); // 'ok', 'missing'
+  const [configStatus, setConfigStatus] = useState('verificando');
 
-  // Estados da Aplicação Principal
   const [activeRoom, setActiveRoom] = useState('verde');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
@@ -86,11 +75,9 @@ export default function EmergencyGuideApp() {
   const [errorMsg, setErrorMsg] = useState('');
   const resultsRef = useRef(null);
 
-  // Estados do Bloco de Notas
   const [showNotepad, setShowNotepad] = useState(false);
   const [userNotes, setUserNotes] = useState('');
 
-  // 1. Inicialização Robusta da Autenticação do Firebase
   useEffect(() => {
     if (!firebaseConfig || !firebaseConfig.apiKey) {
       setConfigStatus('missing');
@@ -102,16 +89,12 @@ export default function EmergencyGuideApp() {
 
     const initAuth = async () => {
       try {
-        if (initialToken) {
-          await signInWithCustomToken(auth, initialToken);
-        } else {
-          await signInAnonymously(auth);
-        }
+        if (initialToken) await signInWithCustomToken(auth, initialToken);
+        else await signInAnonymously(auth);
       } catch (error) {
-        console.error("Falha na autenticação anônima:", error);
+        console.error("Auth error:", error);
       }
     };
-
     initAuth();
 
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -123,11 +106,9 @@ export default function EmergencyGuideApp() {
         setIsCloudConnected(false);
       }
     });
-
     return () => unsubscribe();
   }, []);
 
-  // 2. Carregar sessão local
   useEffect(() => {
     const savedUser = localStorage.getItem('emergency_app_user');
     if (savedUser) {
@@ -135,17 +116,13 @@ export default function EmergencyGuideApp() {
         const parsedUser = JSON.parse(savedUser);
         setCurrentUser(parsedUser);
         loadHistory(parsedUser.username);
-      } catch (e) {
-        console.error("Sessão inválida", e);
-      }
+      } catch (e) {}
     }
   }, []);
 
-  // 3. Sincronizar notas
   useEffect(() => {
-    if (currentUser && isCloudConnected) {
-      fetchNotesFromCloud(currentUser.username);
-    } else if (currentUser) {
+    if (currentUser && isCloudConnected) fetchNotesFromCloud(currentUser.username);
+    else if (currentUser) {
       const localNotes = localStorage.getItem(`notes_${currentUser.username}`);
       if (localNotes) setUserNotes(localNotes);
     }
@@ -156,12 +133,9 @@ export default function EmergencyGuideApp() {
       const history = localStorage.getItem(`history_${username}`);
       if (history) setRecentSearches(JSON.parse(history));
       else setRecentSearches([]);
-    } catch (e) {
-      setRecentSearches([]);
-    }
+    } catch (e) { setRecentSearches([]); }
   };
 
-  // --- LÓGICA DE ANOTAÇÕES REMOTAS ---
   const fetchNotesFromCloud = async (username) => {
     const localNotes = localStorage.getItem(`notes_${username}`);
     if (localNotes) setUserNotes(localNotes);
@@ -170,17 +144,11 @@ export default function EmergencyGuideApp() {
       try {
         const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'notes', username);
         const docSnap = await getDoc(docRef);
-        
-        if (docSnap.exists()) {
-          const remoteData = docSnap.data();
-          if (remoteData.content) {
-            setUserNotes(remoteData.content);
-            localStorage.setItem(`notes_${username}`, remoteData.content);
-          }
+        if (docSnap.exists() && docSnap.data().content) {
+          setUserNotes(docSnap.data().content);
+          localStorage.setItem(`notes_${username}`, docSnap.data().content);
         }
-      } catch (error) {
-        console.error("Erro sync nuvem:", error);
-      }
+      } catch (error) { console.error(error); }
     }
   };
 
@@ -188,7 +156,6 @@ export default function EmergencyGuideApp() {
     const delayDebounceFn = setTimeout(async () => {
       if (currentUser) {
         localStorage.setItem(`notes_${currentUser.username}`, userNotes);
-
         if (db && auth?.currentUser) {
           setIsSaving(true);
           try {
@@ -199,27 +166,20 @@ export default function EmergencyGuideApp() {
               author: currentUser.name,
               username: currentUser.username
             }, { merge: true });
-          } catch (error) {
-            console.error("Erro save nuvem:", error);
-          } finally {
-            setIsSaving(false);
-          }
+          } catch (error) { console.error(error); } 
+          finally { setIsSaving(false); }
         }
       }
     }, 1500);
-
     return () => clearTimeout(delayDebounceFn);
   }, [userNotes, currentUser]);
 
   const handleNoteChange = (e) => setUserNotes(e.target.value);
 
-  // --- LÓGICA DE LOGIN ---
   const handleLogin = (e) => {
     e.preventDefault();
     setLoginError('');
-    const foundUser = AUTHORIZED_USERS.find(
-      u => u.username.toLowerCase() === usernameInput.toLowerCase() && u.password === passwordInput
-    );
+    const foundUser = AUTHORIZED_USERS.find(u => u.username.toLowerCase() === usernameInput.toLowerCase() && u.password === passwordInput);
     if (foundUser) {
       setCurrentUser(foundUser);
       localStorage.setItem('emergency_app_user', JSON.stringify(foundUser));
@@ -227,7 +187,7 @@ export default function EmergencyGuideApp() {
       setUsernameInput('');
       setPasswordInput('');
     } else {
-      setLoginError('Credenciais inválidas. Verifique usuário e senha.');
+      setLoginError('Credenciais inválidas.');
     }
   };
 
@@ -240,71 +200,68 @@ export default function EmergencyGuideApp() {
     localStorage.removeItem('emergency_app_user');
   };
 
-  // --- LÓGICA DA FERRAMENTA (GEMINI) ---
   const generateConduct = async () => {
     if (!searchQuery.trim()) {
-      showError('Por favor, digite uma condição clínica para buscar.');
+      showError('Digite uma condição clínica.');
       return;
     }
-
     setLoading(true);
     setConduct(null);
     setErrorMsg('');
 
-    const roomContext = activeRoom === 'verde' 
-      ? 'SALA VERDE (AMBULATORIAL/BAIXA COMPLEXIDADE)' 
-      : 'SALA VERMELHA (EMERGÊNCIA/RISCO DE VIDA)';
-
-    const prescriptionGuidance = activeRoom === 'verde'
-      ? 'DIRETRIZ: Preferência absoluta por VIA ORAL (VO) ou IM. Visar alta hospitalar.'
-      : 'DIRETRIZ: Preferência por VIA ENDOVENOSA (EV). Visar estabilização imediata.';
-
-    // PROMPT REFINADO PARA VITAIS DETALHADOS
-    const promptText = `Atue como médico especialista em medicina de emergência.
+    const roomContext = activeRoom === 'verde' ? 'SALA VERDE (AMBULATORIAL)' : 'SALA VERMELHA (EMERGÊNCIA)';
+    
+    // PROMPT SUPER DETALHADO
+    const promptText = `Atue como médico especialista em medicina de emergência e terapia intensiva.
     Gere conduta clínica para "${searchQuery}" na ${roomContext}.
-    ${prescriptionGuidance}
     
-    REGRAS OBRIGATÓRIAS:
-    1. Retorne APENAS JSON válido.
-    2. "tratamento_medicamentoso": ARRAY de objetos.
-    3. "criterios_internacao" e "criterios_alta": OBRIGATÓRIOS.
-    4. "avaliacao_inicial.sinais_vitais_especificos": Forneça alvos numéricos claros para FC, FR, PA (Sistólica/Diastólica e PAM entre parênteses quando relevante) e SatO2. Se a condição for benigna, coloque 'Sinais estáveis'.
+    REGRAS RÍGIDAS DE CONTEÚDO:
+    1. **Resumo Clínico:** Deve ser detalhado e técnico. Descreva a fisiopatologia breve e os achados clássicos para que o plantonista confirme se o quadro é real. Evite resumos genéricos.
+    2. **Alvos Terapêuticos:** Na "avaliacao_inicial", para Pressão Arterial, OBRIGATORIAMENTE forneça PAS, PAD e PAM (ex: PAM > 65mmHg). Para FC e FR, dê faixas de segurança.
+    3. **Imagens:** Em "achados_exames.raio_x" (ou TC/USG), descreva DETALHADAMENTE o padrão radiológico esperado (ex: "consolidação lobar com broncograma aéreo", "padrão de vidro fosco periférico"). Não diga apenas "Raio X de tórax".
+    4. **Medicamentos:** - "apresentacao": Cite nomes comerciais comuns no Brasil ou apresentações genéricas disponíveis (ex: Ampola 10mg/2ml, Comp 500mg).
+       - "posologia": Dose exata para adulto 70kg.
+       - "modo_admin": Se injetável, especifique: "Bolus", "Infusão Lenta (X min)", "BIC contínua".
+    5. **Trauma:** SE a condição for trauma, preencha o campo "xabcde_trauma" detalhando cada etapa do ATLS.
     
-    ESTRUTURA DO JSON:
+    ESTRUTURA JSON:
     {
-      "condicao": "Nome da Doença",
-      "estadiamento": "Estágio (ex: Dengue C). Se não aplicável, null",
+      "condicao": "Nome Completo",
+      "estadiamento": "Classificação (ex: Sepse Grave, IAMCSST)",
       "classificacao": "${roomContext}",
-      "resumo_clinico": "Resumo sucinto.",
-      "apresentacao_tipica": { "sintomas_principais": [], "sinais_fisicos": [], "tempo_evolucao": "..." },
-      "achados_exames": { "ecg": "...", "raio_x": "...", "laboratorio": "...", "outros_exames": "..." },
+      "resumo_clinico": "Texto técnico detalhado...",
+      "xabcde_trauma": { // PREENCHER APENAS SE FOR TRAUMA, SENAO NULL
+         "x": "Controle de hemorragia exsanguinante...",
+         "a": "Vias aéreas e controle cervical...",
+         "b": "Respiração e ventilação...",
+         "c": "Circulação e controle de hemorragia...",
+         "d": "Disfunção neurológica...",
+         "e": "Exposição e controle ambiente..."
+      },
       "avaliacao_inicial": { 
-        "sinais_vitais_especificos": ["FC: < 100bpm", "PA: > 90mmHg (PAM > 65)", "SatO2: > 92%", "FR: 12-20 ipm"], 
-        "exames_obrigatorios": ["..."], 
+        "sinais_vitais_alvos": ["PAM > 65mmHg (PAS > 90)", "SatO2 > 94%", "FC < 100bpm", "FR 12-20irpm"], 
+        "exames_prioridade1": ["..."], 
         "exames_complementares": ["..."] 
       },
-      "criterios_gravidade": ["Red flag 1", "..."],
+      "achados_imagem_detalhes": "Descrição rica dos achados radiológicos...",
+      "criterios_gravidade": ["..."],
       "tratamento_medicamentoso": [ 
-        { "farmaco": "Nome", "posologia": "Dose", "via": "EV/VO", "diluicao": "...", "cuidados": "...", "indicacao": "..." } 
+        { "farmaco": "Nome", "apresentacao": "Amp/Comp", "dose": "...", "diluicao": "...", "modo_admin": "BIC/Bolus", "tempo_infusao": "...", "cuidados": "..." } 
       ],
-      "escalonamento_terapeutico": [
+      "escalonamento": [
         { "passo": "1ª Linha", "descricao": "..." },
-        { "passo": "Se falha", "descricao": "..." },
+        { "passo": "Falha", "descricao": "..." },
         { "passo": "Resgate", "descricao": "..." }
       ],
       "medidas_gerais": ["..."],
       "criterios_internacao": ["..."],
       "criterios_alta": ["..."],
       "guideline_referencia": "Fonte"
-    }
-    Doses para adulto 70kg.`;
+    }`;
 
     try {
       const apiKey = (import.meta.env && import.meta.env.VITE_GEMINI_API_KEY) ? import.meta.env.VITE_GEMINI_API_KEY : "";
-      
-      if (!apiKey) {
-        throw new Error("Chave de API do Gemini não configurada.");
-      }
+      if(!apiKey) throw new Error("API Key do Gemini não configurada.");
 
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
         method: 'POST',
@@ -315,58 +272,44 @@ export default function EmergencyGuideApp() {
         })
       });
 
-      if (!response.ok) throw new Error('Falha na API do Gemini');
-
+      if (!response.ok) throw new Error('Erro na API');
       const data = await response.json();
-      const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      
-      if (textResponse) {
-        const conductData = JSON.parse(textResponse);
-        setConduct(conductData);
-        saveToHistory(searchQuery, activeRoom);
-        setTimeout(() => {
-          resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, 200);
-      } else {
-        throw new Error('Sem resposta válida da IA');
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text) {
+        setConduct(JSON.parse(text));
+        if(currentUser) saveToHistory(searchQuery, activeRoom);
+        setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
       }
     } catch (error) {
-      console.error('Erro:', error);
-      showError(`Erro: ${error.message}`);
+      console.error(error);
+      showError(error.message);
     } finally {
       setLoading(false);
     }
   };
 
   const saveToHistory = (term, room) => {
-    if (!currentUser) return;
     const newEntry = { query: term, room, timestamp: new Date().toISOString() };
-    const currentHistory = recentSearches.filter(s => s.query.toLowerCase() !== term.toLowerCase());
-    const updatedHistory = [newEntry, ...currentHistory].slice(0, 10);
-    setRecentSearches(updatedHistory);
-    localStorage.setItem(`history_${currentUser.username}`, JSON.stringify(updatedHistory));
+    const hist = recentSearches.filter(s => s.query.toLowerCase() !== term.toLowerCase());
+    const updated = [newEntry, ...hist].slice(0, 10);
+    setRecentSearches(updated);
+    localStorage.setItem(`history_${currentUser.username}`, JSON.stringify(updated));
   };
 
-  const showError = (msg) => {
-    setErrorMsg(msg);
-    setTimeout(() => setErrorMsg(''), 4000);
-  };
+  const showError = (msg) => { setErrorMsg(msg); setTimeout(() => setErrorMsg(''), 4000); };
 
-  // --- HELPER PARA ÍCONES DE VITAIS ---
   const getVitalIcon = (text) => {
     const t = text.toLowerCase();
-    if (t.includes('fc') || t.includes('bpm') || t.includes('freq')) return <HeartPulse size={16} className="text-rose-500" />;
-    if (t.includes('pa') || t.includes('mmhg') || t.includes('pam') || t.includes('press')) return <Activity size={16} className="text-blue-500" />;
-    if (t.includes('sat') || t.includes('%') || t.includes('o2')) return <Droplet size={16} className="text-cyan-500" />;
-    if (t.includes('fr') || t.includes('ipm') || t.includes('resp')) return <Wind size={16} className="text-teal-500" />;
-    if (t.includes('temp') || t.includes('tax') || t.includes('°')) return <Thermometer size={16} className="text-orange-500" />;
+    if (t.includes('fc') || t.includes('bpm')) return <HeartPulse size={16} className="text-rose-500" />;
+    if (t.includes('pa') || t.includes('mmhg') || t.includes('pam')) return <Activity size={16} className="text-blue-500" />;
+    if (t.includes('sat') || t.includes('o2')) return <Droplet size={16} className="text-cyan-500" />;
+    if (t.includes('fr') || t.includes('resp')) return <Wind size={16} className="text-teal-500" />;
     return <Activity size={16} className="text-slate-400" />;
   };
 
-  // --- INTERFACE ---
   const roomConfig = {
-    verde: { name: 'Sala Verde', color: 'emerald', accent: 'bg-emerald-500', border: 'border-emerald-500', text: 'text-emerald-800', light: 'bg-emerald-50', icon: <Stethoscope className="w-5 h-5" />, description: 'Ambulatorial / Baixa Complexidade', examples: ['Cefaleia', 'Lombalgia', 'IVAS'] },
-    vermelha: { name: 'Sala Vermelha', color: 'rose', accent: 'bg-rose-600', border: 'border-rose-600', text: 'text-rose-800', light: 'bg-rose-50', icon: <Siren className="w-5 h-5" />, description: 'Emergência / Risco de Vida', examples: ['Sepse', 'IAM', 'AVC'] }
+    verde: { name: 'Sala Verde', color: 'emerald', accent: 'bg-emerald-500', border: 'border-emerald-500', text: 'text-emerald-800', light: 'bg-emerald-50', icon: <Stethoscope className="w-5 h-5" />, description: 'Ambulatorial / Baixa Complexidade' },
+    vermelha: { name: 'Sala Vermelha', color: 'rose', accent: 'bg-rose-600', border: 'border-rose-600', text: 'text-rose-800', light: 'bg-rose-50', icon: <Siren className="w-5 h-5" />, description: 'Emergência / Risco de Vida' }
   };
 
   if (!currentUser) {
@@ -374,35 +317,19 @@ export default function EmergencyGuideApp() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans text-slate-800">
         <div className="bg-white rounded-3xl shadow-xl border border-gray-100 max-w-md w-full overflow-hidden">
           <div className="bg-gradient-to-br from-blue-900 to-slate-800 p-8 text-center text-white relative">
-            <div className="absolute inset-0 bg-black/10"></div>
-            <div className="relative z-10 flex flex-col items-center">
-              <Shield size={40} className="mx-auto mb-3 text-blue-300" />
-              <h1 className="text-2xl font-bold mb-1">Guia de Plantão</h1>
-              <p className="text-blue-200 text-sm font-medium">Acesso Exclusivo Médico</p>
-            </div>
+            <Shield size={40} className="mx-auto mb-3 text-blue-300" />
+            <h1 className="text-2xl font-bold mb-1">Guia de Plantão</h1>
+            <p className="text-blue-200 text-sm font-medium">Acesso Exclusivo Médico</p>
           </div>
           <div className="p-8 space-y-6">
-            {loginError && (
-              <div className="bg-red-50 text-red-600 p-3 rounded-lg text-xs flex items-center gap-2 border border-red-100 animate-in fade-in">
-                <AlertCircle size={14} /> {loginError}
-              </div>
-            )}
+            {loginError && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-xs flex items-center gap-2 border border-red-100"><AlertCircle size={14} /> {loginError}</div>}
             <form onSubmit={handleLogin} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500 uppercase ml-1">Usuário</label>
-                <div className="relative"><User className="absolute left-3 top-3 text-gray-400 w-5 h-5" /><input type="text" value={usernameInput} onChange={(e)=>setUsernameInput(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-900 focus:outline-none transition-all" placeholder="Ex: admin" autoCapitalize="none" /></div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500 uppercase ml-1">Senha</label>
-                <div className="relative"><KeyRound className="absolute left-3 top-3 text-gray-400 w-5 h-5" /><input type="password" value={passwordInput} onChange={(e)=>setPasswordInput(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-900 focus:outline-none transition-all" placeholder="••••••" /></div>
-              </div>
+              <div><label className="text-xs font-bold text-slate-500 uppercase ml-1">Usuário</label><div className="relative"><User className="absolute left-3 top-3 text-gray-400 w-5 h-5" /><input type="text" value={usernameInput} onChange={(e)=>setUsernameInput(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-900" placeholder="Ex: admin" /></div></div>
+              <div><label className="text-xs font-bold text-slate-500 uppercase ml-1">Senha</label><div className="relative"><KeyRound className="absolute left-3 top-3 text-gray-400 w-5 h-5" /><input type="password" value={passwordInput} onChange={(e)=>setPasswordInput(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-900" placeholder="••••••" /></div></div>
               <button type="submit" className="w-full flex items-center justify-center gap-3 bg-blue-900 text-white font-bold p-3.5 rounded-xl hover:bg-blue-800 transition-all shadow-lg mt-2"><LogIn className="w-5 h-5" /> Acessar Sistema</button>
             </form>
             <div className="text-center flex flex-col items-center gap-3 pt-2 border-t border-gray-100">
-              <div className={`flex items-center justify-center gap-2 text-[10px] px-3 py-1.5 rounded-full mx-auto w-fit ${configStatus === 'missing' ? 'bg-red-50 text-red-700' : isCloudConnected ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
-                {configStatus === 'missing' ? <Settings size={12}/> : isCloudConnected ? <Cloud size={12}/> : <CloudOff size={12}/>}
-                <span>{configStatus === 'missing' ? 'Erro: Variáveis de Ambiente' : isCloudConnected ? 'Banco de Dados Conectado' : 'Modo Offline (Dados Locais)'}</span>
-              </div>
+              <div className={`flex items-center justify-center gap-2 text-[10px] px-3 py-1.5 rounded-full mx-auto w-fit ${configStatus === 'missing' ? 'bg-red-50 text-red-700' : isCloudConnected ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>{configStatus === 'missing' ? <Settings size={12}/> : isCloudConnected ? <Cloud size={12}/> : <CloudOff size={12}/>}<span>{configStatus === 'missing' ? 'Erro: Variáveis de Ambiente' : isCloudConnected ? 'Banco de Dados Conectado' : 'Modo Offline (Dados Locais)'}</span></div>
               <p className="text-[10px] text-slate-400 leading-tight max-w-xs">ATENÇÃO: Ferramenta auxiliar. Não substitui o julgamento clínico. O autor isenta-se de responsabilidade. Uso proibido para leigos.</p>
             </div>
           </div>
@@ -415,14 +342,11 @@ export default function EmergencyGuideApp() {
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800 selection:bg-blue-100">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-blue-900 p-2 rounded-lg text-white shadow-sm"><ClipboardCheck size={20} /></div>
-            <div><h1 className="text-lg font-bold text-slate-800 leading-none">Guia de Plantão</h1><span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Suporte Médico</span></div>
-          </div>
+          <div className="flex items-center gap-3"><div className="bg-blue-900 p-2 rounded-lg text-white"><ClipboardCheck size={20} /></div><div><h1 className="text-lg font-bold text-slate-800 leading-none">Guia de Plantão</h1><span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Suporte Médico</span></div></div>
           <div className="flex items-center gap-3">
              <div className="hidden sm:flex flex-col items-end mr-2"><span className="text-xs font-bold text-slate-700">{currentUser.name}</span><span className="text-[10px] text-slate-400 uppercase">{currentUser.role}</span></div>
-             <button onClick={() => setShowNotepad(true)} className="p-2 text-slate-600 hover:bg-slate-100 rounded-full" title="Caderno"><Edit size={20} /></button>
-             <button onClick={handleLogout} className="p-2 text-red-400 hover:bg-red-50 rounded-full" title="Sair"><LogOut size={20} /></button>
+             <button onClick={() => setShowNotepad(true)} className="p-2 text-slate-600 hover:bg-slate-100 rounded-full"><Edit size={20} /></button>
+             <button onClick={handleLogout} className="p-2 text-red-400 hover:bg-red-50 rounded-full"><LogOut size={20} /></button>
           </div>
         </div>
       </header>
@@ -444,16 +368,11 @@ export default function EmergencyGuideApp() {
 
           <div className="bg-white p-2 rounded-2xl shadow-lg border border-gray-100 flex items-center gap-2">
             <Search className="ml-3 text-gray-400" size={20} />
-            <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && generateConduct()} placeholder="Digite o quadro clínico (ex: Cetoacidose, IAM...)" className="flex-1 py-3 bg-transparent outline-none text-slate-800 font-medium" />
+            <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && generateConduct()} placeholder="Digite o quadro clínico (ex: Cetoacidose, Politrauma...)" className="flex-1 py-3 bg-transparent outline-none text-slate-800 font-medium" />
             <button onClick={generateConduct} disabled={loading} className={`px-6 py-3 rounded-xl font-bold text-white flex items-center gap-2 transition-all ${loading ? 'bg-slate-300' : 'bg-blue-900 hover:bg-blue-800'}`}>{loading ? <Loader2 className="animate-spin" /> : <>Gerar <ArrowRight size={18} /></>}</button>
           </div>
 
-          {recentSearches.length > 0 && (
-            <div className="flex flex-wrap gap-2 px-1">
-              <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase mr-2"><History size={14} /> Recentes</div>
-              {recentSearches.map((search, idx) => (<button key={idx} onClick={() => {setActiveRoom(search.room); setSearchQuery(search.query);}} className="text-xs px-3 py-1 bg-white border border-gray-200 rounded-full hover:border-blue-300 hover:text-blue-700 transition-colors">{search.query}</button>))}
-            </div>
-          )}
+          {recentSearches.length > 0 && (<div className="flex flex-wrap gap-2 px-1"><div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase mr-2"><History size={14} /> Recentes</div>{recentSearches.map((search, idx) => (<button key={idx} onClick={() => {setActiveRoom(search.room); setSearchQuery(search.query);}} className="text-xs px-3 py-1 bg-white border border-gray-200 rounded-full hover:border-blue-300 hover:text-blue-700 transition-colors">{search.query}</button>))}</div>)}
           {errorMsg && <div className="bg-red-50 text-red-700 px-4 py-3 rounded-xl border border-red-200 flex items-center gap-3 text-sm font-medium"><AlertCircle size={18} /> {errorMsg}</div>}
         </div>
 
@@ -461,23 +380,37 @@ export default function EmergencyGuideApp() {
           <div ref={resultsRef} className="animate-in slide-in-from-bottom-4 fade-in duration-500 space-y-6">
             <div className="flex justify-between items-start">
                <div>
-                  <div className="flex flex-wrap gap-2 mb-2">
-                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase text-white ${activeRoom === 'verde' ? 'bg-emerald-500' : 'bg-rose-600'}`}>{conduct.classificacao}</span>
-                     {conduct.estadiamento && <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-800 text-white">{conduct.estadiamento}</span>}
-                  </div>
+                  <div className="flex flex-wrap gap-2 mb-2"><span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase text-white ${activeRoom === 'verde' ? 'bg-emerald-500' : 'bg-rose-600'}`}>{conduct.classificacao}</span>{conduct.estadiamento && <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-800 text-white">{conduct.estadiamento}</span>}</div>
                   <h2 className="text-3xl font-bold text-slate-800">{conduct.condicao}</h2>
                </div>
                <button onClick={() => setConduct(null)} className="p-2 hover:bg-gray-200 rounded-full text-gray-500"><X size={24}/></button>
             </div>
 
+            {/* RESUMO CLÍNICO REFINADO */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex gap-4">
                <div className="bg-blue-50 p-2 rounded-full h-fit text-blue-600"><User size={24} /></div>
-               <div><h3 className="font-bold text-slate-900 mb-1">Resumo Clínico</h3><p className="text-slate-600 leading-relaxed">{conduct.resumo_clinico}</p></div>
+               <div><h3 className="font-bold text-slate-900 mb-1">Resumo Clínico e Fisiopatologia</h3><p className="text-slate-700 leading-relaxed text-sm">{conduct.resumo_clinico}</p></div>
             </div>
 
+            {/* SEÇÃO TRAUMA xABCDE (SÓ APARECE SE FOR TRAUMA) */}
+            {conduct.xabcde_trauma && (
+              <div className="bg-orange-50 border border-orange-200 p-5 rounded-2xl">
+                <h3 className="text-orange-900 font-bold flex items-center gap-2 mb-3 uppercase tracking-wide"><Skull size={20}/> Protocolo de Trauma (ATLS - xABCDE)</h3>
+                <div className="space-y-3">
+                  {Object.entries(conduct.xabcde_trauma).map(([key, value]) => (
+                    <div key={key} className="flex gap-3 items-start bg-white/60 p-2 rounded border border-orange-100">
+                      <div className="bg-orange-600 text-white w-6 h-6 rounded flex items-center justify-center font-bold uppercase text-xs shrink-0">{key}</div>
+                      <p className="text-sm text-orange-950">{value}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* SINAIS DE ALARME */}
             {conduct.criterios_gravidade?.length > 0 && (
               <div className="bg-rose-50 border border-rose-100 p-5 rounded-2xl">
-                <h3 className="text-rose-800 font-bold flex items-center gap-2 mb-3 text-sm uppercase"><AlertTriangle size={18}/> Sinais de Alarme (Red Flags)</h3>
+                <h3 className="text-rose-800 font-bold flex items-center gap-2 mb-3 text-sm uppercase"><AlertTriangle size={18}/> Sinais de Alarme</h3>
                 <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-3">
                   {conduct.criterios_gravidade.map((crit, i) => (<div key={i} className="bg-white/80 p-2.5 rounded-lg border border-rose-100/50 text-sm text-rose-900 font-medium flex gap-2"><div className="mt-1 w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"/>{crit}</div>))}
                 </div>
@@ -485,16 +418,16 @@ export default function EmergencyGuideApp() {
             )}
 
             <div className="grid lg:grid-cols-12 gap-6 items-start">
-              {/* ESQUERDA: AVALIAÇÃO E DESFECHO */}
               <div className="lg:col-span-4 space-y-6">
+                {/* AVALIAÇÃO E ALVOS (VITAIS COMPLETOS) */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                    <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center gap-2"><Activity size={18} className="text-slate-500"/><h3 className="font-bold text-slate-700 text-sm uppercase">Avaliação Inicial</h3></div>
                    <div className="p-5 space-y-5 text-sm">
-                      {conduct.avaliacao_inicial?.sinais_vitais_especificos && (
+                      {conduct.avaliacao_inicial?.sinais_vitais_alvos && (
                         <div>
                           <span className="text-xs font-bold text-slate-400 uppercase block mb-2">Alvos Terapêuticos</span>
                           <div className="grid grid-cols-1 gap-2">
-                            {conduct.avaliacao_inicial.sinais_vitais_especificos.map((s,i)=>(
+                            {conduct.avaliacao_inicial.sinais_vitais_alvos.map((s,i)=>(
                               <div key={i} className="bg-indigo-50 p-3 rounded-lg border border-indigo-100 flex items-center gap-3 text-indigo-900">
                                 {getVitalIcon(s)} <span className="font-bold">{s}</span>
                               </div>
@@ -502,40 +435,33 @@ export default function EmergencyGuideApp() {
                           </div>
                         </div>
                       )}
-                      {(conduct.avaliacao_inicial?.exames_obrigatorios || conduct.avaliacao_inicial?.exames_complementares) && (
-                        <div className="space-y-3">
-                           <div><span className="text-xs font-bold text-rose-600 uppercase block mb-1">Prioridade 1 (Obrigatórios)</span><ul className="space-y-1">{conduct.avaliacao_inicial?.exames_obrigatorios?.map((ex,i)=><li key={i} className="flex gap-2 items-start font-medium text-slate-700"><div className="mt-1.5 w-1.5 h-1.5 bg-rose-500 rounded-full shrink-0"/>{ex}</li>)}</ul></div>
-                           <div><span className="text-xs font-bold text-slate-400 uppercase block mb-1">Complementares</span><ul className="space-y-1">{conduct.avaliacao_inicial?.exames_complementares?.map((ex,i)=><li key={i} className="flex gap-2 items-start text-slate-500"><div className="mt-1.5 w-1.5 h-1.5 bg-slate-300 rounded-full shrink-0"/>{ex}</li>)}</ul></div>
-                        </div>
-                      )}
+                      <div className="space-y-3">
+                         <div><span className="text-xs font-bold text-rose-600 uppercase block mb-1">Prioridade 1 (Obrigatórios)</span><ul className="space-y-1">{conduct.avaliacao_inicial?.exames_prioridade1?.map((ex,i)=><li key={i} className="flex gap-2 items-start font-medium text-slate-700"><div className="mt-1.5 w-1.5 h-1.5 bg-rose-500 rounded-full shrink-0"/>{ex}</li>)}</ul></div>
+                         <div><span className="text-xs font-bold text-slate-400 uppercase block mb-1">Complementares</span><ul className="space-y-1">{conduct.avaliacao_inicial?.exames_complementares?.map((ex,i)=><li key={i} className="flex gap-2 items-start text-slate-500"><div className="mt-1.5 w-1.5 h-1.5 bg-slate-300 rounded-full shrink-0"/>{ex}</li>)}</ul></div>
+                      </div>
                    </div>
                 </div>
                 
+                {/* IMAGEM DETALHADA */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                   <div className="bg-blue-50 px-5 py-3 border-b border-blue-100 flex items-center gap-2"><Search size={18} className="text-blue-600"/><h3 className="font-bold text-blue-900 text-sm uppercase">O que procurar?</h3></div>
-                   <div className="p-5 space-y-4 text-sm">
-                      {conduct.achados_exames?.ecg && <div><div className="flex items-center gap-2 font-bold text-slate-700 mb-1"><HeartPulse size={14} className="text-rose-500"/> ECG</div><p className="bg-slate-50 p-2 rounded border border-slate-100 text-slate-600">{conduct.achados_exames.ecg}</p></div>}
-                      {conduct.achados_exames?.laboratorio && <div><div className="flex items-center gap-2 font-bold text-slate-700 mb-1"><Microscope size={14} className="text-purple-500"/> Laboratório</div><p className="bg-slate-50 p-2 rounded border border-slate-100 text-slate-600">{conduct.achados_exames.laboratorio}</p></div>}
-                      {conduct.achados_exames?.raio_x && <div><div className="flex items-center gap-2 font-bold text-slate-700 mb-1"><ImageIcon size={14} className="text-slate-500"/> Imagem</div><p className="bg-slate-50 p-2 rounded border border-slate-100 text-slate-600">{conduct.achados_exames.raio_x}</p></div>}
+                   <div className="bg-blue-50 px-5 py-3 border-b border-blue-100 flex items-center gap-2"><ImageIcon size={18} className="text-blue-600"/><h3 className="font-bold text-blue-900 text-sm uppercase">Achados de Imagem</h3></div>
+                   <div className="p-5 text-sm text-slate-600 leading-relaxed">
+                      {conduct.achados_imagem_detalhes ? conduct.achados_imagem_detalhes : "Nenhum achado de imagem específico listado."}
                    </div>
                 </div>
 
-                {/* CRITÉRIOS DE DESFECHO */}
+                {/* CRITÉRIOS DE DESFECHO (AGORA OBRIGATÓRIOS) */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                    <div className="bg-indigo-50 px-5 py-3 border-b border-indigo-100 flex items-center gap-2"><FileText size={18} className="text-indigo-600"/><h3 className="font-bold text-indigo-900 text-sm uppercase">Critérios de Desfecho</h3></div>
                    <div className="p-5 space-y-4 text-sm">
-                      {conduct.criterios_internacao && (
-                        <div className="bg-amber-50 p-3 rounded-lg border border-amber-100">
-                          <span className="text-xs font-bold text-amber-800 uppercase block mb-1">Internação / UTI</span>
-                          <ul className="space-y-1">{conduct.criterios_internacao.map((c,i)=><li key={i} className="text-amber-900 flex gap-2"><div className="mt-1.5 w-1 h-1 bg-amber-500 rounded-full shrink-0"/>{c}</li>)}</ul>
-                        </div>
-                      )}
-                      {conduct.criterios_alta && (
-                        <div className="bg-green-50 p-3 rounded-lg border border-green-100">
-                          <span className="text-xs font-bold text-green-800 uppercase block mb-1">Critérios de Alta</span>
-                          <ul className="space-y-1">{conduct.criterios_alta.map((c,i)=><li key={i} className="text-green-900 flex gap-2"><div className="mt-1.5 w-1 h-1 bg-green-500 rounded-full shrink-0"/>{c}</li>)}</ul>
-                        </div>
-                      )}
+                      <div className="bg-amber-50 p-3 rounded-lg border border-amber-100">
+                        <span className="text-xs font-bold text-amber-800 uppercase block mb-1">Internação / UTI</span>
+                        <ul className="space-y-1">{conduct.criterios_internacao?.map((c,i)=><li key={i} className="text-amber-900 flex gap-2"><div className="mt-1.5 w-1 h-1 bg-amber-500 rounded-full shrink-0"/>{c}</li>)}</ul>
+                      </div>
+                      <div className="bg-green-50 p-3 rounded-lg border border-green-100">
+                        <span className="text-xs font-bold text-green-800 uppercase block mb-1">Critérios de Alta</span>
+                        <ul className="space-y-1">{conduct.criterios_alta?.map((c,i)=><li key={i} className="text-green-900 flex gap-2"><div className="mt-1.5 w-1 h-1 bg-green-500 rounded-full shrink-0"/>{c}</li>)}</ul>
+                      </div>
                    </div>
                 </div>
               </div>
@@ -549,15 +475,21 @@ export default function EmergencyGuideApp() {
                         <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-emerald-500"></div>
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 mb-3 pl-3">
                            <div>
-                              <div className="flex items-center gap-2"><h4 className="text-xl font-bold text-slate-800">{med.farmaco}</h4>{med.linha && <span className="text-[10px] font-bold bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-slate-600">{med.linha}</span>}</div>
+                              <div className="flex items-center gap-2">
+                                 <h4 className="text-xl font-bold text-slate-800">{med.farmaco}</h4>
+                                 {med.apresentacao && <span className="text-[10px] font-bold bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-slate-600 flex items-center gap-1"><Package size={10}/> {med.apresentacao}</span>}
+                              </div>
                               <span className="text-sm text-slate-500 italic">{med.indicacao}</span>
                            </div>
                            {med.via && <span className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-100">{med.via}</span>}
                         </div>
-                        <div className="bg-slate-50 rounded-lg p-3 ml-3 mb-3 font-mono text-sm text-slate-700 border border-slate-100">{med.posologia}</div>
+                        <div className="bg-slate-50 rounded-lg p-3 ml-3 mb-3 font-mono text-sm text-slate-700 border border-slate-100">
+                           <strong>Dose:</strong> {med.dose || med.posologia}
+                        </div>
                         <div className="grid sm:grid-cols-2 gap-4 ml-3 text-sm">
-                           {med.diluicao && <div className="flex gap-2 text-blue-700"><FlaskConical size={16} className="shrink-0 mt-0.5"/><span><strong>Preparo:</strong> {med.diluicao}</span></div>}
-                           {med.cuidados && <div className="flex gap-2 text-amber-700"><AlertTriangle size={16} className="shrink-0 mt-0.5"/><span><strong>Atenção:</strong> {med.cuidados}</span></div>}
+                           {med.diluicao && <div className="flex gap-2 text-blue-700"><FlaskConical size={16} className="shrink-0 mt-0.5"/><span><strong>Diluição:</strong> {med.diluicao}</span></div>}
+                           {med.modo_admin && <div className="flex gap-2 text-purple-700"><Timer size={16} className="shrink-0 mt-0.5"/><span><strong>Infusão:</strong> {med.modo_admin} {med.tempo_infusao ? `(${med.tempo_infusao})` : ''}</span></div>}
+                           {med.cuidados && <div className="flex gap-2 text-amber-700 col-span-2"><AlertTriangle size={16} className="shrink-0 mt-0.5"/><span><strong>Atenção:</strong> {med.cuidados}</span></div>}
                         </div>
                      </div>
                    ))}
