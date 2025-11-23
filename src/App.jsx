@@ -5,7 +5,7 @@ import {
   CheckCircle2, Thermometer, Syringe, Siren, FlaskConical, Tag, Package,
   ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save, Cloud, CloudOff, Settings, Info,
   HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine, Wind, Droplet, Timer, Skull, Printer, FilePlus, Calculator,
-  Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2
+  Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2, SprayCan
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -161,7 +161,6 @@ export default function EmergencyGuideApp() {
     // Verifica se a conduta atual está nos favoritos para pintar a estrelinha
     if (conduct && favorites.length > 0) {
       const docId = getConductDocId(conduct.condicao || searchQuery, activeRoom);
-      // A busca pode ser imprecisa se o nome mudou, mas tentamos pelo ID ou query
       const isFav = favorites.some(f => f.id === docId || f.query === searchQuery);
       setIsCurrentConductFavorite(isFav);
     } else {
@@ -234,7 +233,7 @@ export default function EmergencyGuideApp() {
           setUserNotes(docSnap.data().content);
           localStorage.setItem(`notes_${username}`, docSnap.data().content);
         }
-      } catch (error) { console.error(error); }
+      } catch (error) { console.error("Erro sync notas:", error); }
     }
   };
 
@@ -335,12 +334,10 @@ export default function EmergencyGuideApp() {
     setIsCurrentConductFavorite(newStatus);
 
     try {
-      // Usa o nome da condição da conduta para ID se possível, ou a busca original
       const docId = getConductDocId(searchQuery, activeRoom);
       const docRef = doc(db, 'artifacts', appId, 'users', currentUser.username, 'conducts', docId);
       
       if (newStatus) {
-          // Salvar como favorito
           await setDoc(docRef, { 
             query: searchQuery,
             room: activeRoom,
@@ -349,9 +346,6 @@ export default function EmergencyGuideApp() {
             lastAccessed: new Date().toISOString()
           }, { merge: true });
       } else {
-          // Remover dos favoritos (pode deletar o doc se não quiser manter cache)
-          // Como a lógica anterior usava cache, vamos apenas setar isFavorite false
-          // O 'manageCacheLimit' limpará depois se ficar velho
           await setDoc(docRef, { isFavorite: false }, { merge: true });
       }
 
@@ -366,7 +360,6 @@ export default function EmergencyGuideApp() {
       if (!currentUser || !isCloudConnected) return;
       try {
           const docRef = doc(db, 'artifacts', appId, 'users', currentUser.username, 'conducts', docId);
-          // Ao remover da lista, definimos como false. Se quiser apagar totalmente, use deleteDoc(docRef)
           await setDoc(docRef, { isFavorite: false }, { merge: true });
       } catch (e) {
           console.error("Erro ao remover favorito", e);
@@ -409,7 +402,6 @@ export default function EmergencyGuideApp() {
 
     const docId = getConductDocId(searchQuery, activeRoom);
 
-    // 1. TENTAR PEGAR DO CACHE/FAVORITOS
     if (isCloudConnected && currentUser) {
       try {
         const docRef = doc(db, 'artifacts', appId, 'users', currentUser.username, 'conducts', docId);
@@ -463,8 +455,8 @@ export default function EmergencyGuideApp() {
     
     REGRAS RÍGIDAS:
     1. JSON puro.
-    2. "tratamento_medicamentoso": ARRAY de objetos. CRUCIAL: Se um fármaco tiver mais de uma apresentação útil (ex: Comprimido e Gotas), crie DOIS OBJETOS DIFERENTES no array (um para cada).
-    3. "tipo": OBRIGATÓRIO. Use: 'Comprimido', 'Xarope', 'Gotas', 'Injetável', 'Tópico', 'Inalatório'.
+    2. "tratamento_medicamentoso": ARRAY de objetos. Se um mesmo fármaco tiver apresentações diferentes (ex: Dipirona Comp vs Gotas), separe em objetos distintos.
+    3. "tipo": CAMPO OBRIGATÓRIO E RÍGIDO. Escolha EXATAMENTE UM DA LISTA: ['Comprimido', 'Cápsula', 'Xarope', 'Suspensão', 'Gotas', 'Solução Oral', 'Injetável', 'Tópico', 'Inalatório', 'Supositório'].
     4. "farmaco": Nome + Concentração (Ex: "Dipirona 500mg").
     5. "criterios_internacao/alta": OBRIGATÓRIOS.
     
@@ -485,7 +477,7 @@ export default function EmergencyGuideApp() {
       "tratamento_medicamentoso": [ 
         { 
           "farmaco": "Nome + Concentração", 
-          "tipo": "Injetável/Comprimido/Gotas", // TIPO OBRIGATÓRIO
+          "tipo": "Comprimido", // USE A LISTA RÍGIDA
           "sugestao_uso": "Texto descritivo...",
           "diluicao": "...",
           "modo_admin": "...",
@@ -565,11 +557,40 @@ export default function EmergencyGuideApp() {
   const getMedTypeIcon = (type) => {
     if (!type) return <Pill size={14} />;
     const t = type.toLowerCase();
-    if (t.includes('injet') || t.includes('amp') || t.includes('ev') || t.includes('im')) return <SyringeIcon size={14} className="text-rose-500" />;
+    if (t.includes('injet')) return <SyringeIcon size={14} className="text-rose-500" />;
     if (t.includes('gota') || t.includes('solu') || t.includes('xarope') || t.includes('susp')) return <Droplets size={14} className="text-blue-500" />;
     if (t.includes('comp') || t.includes('cap') || t.includes('oral')) return <Tablets size={14} className="text-emerald-500" />;
     if (t.includes('tópi') || t.includes('pomada') || t.includes('creme')) return <Pipette size={14} className="text-amber-500" />;
+    if (t.includes('inal') || t.includes('spray')) return <SprayCan size={14} className="text-purple-500" />;
     return <Pill size={14} className="text-slate-500" />;
+  };
+
+  // Função Helper para definir cor da badge de tipo
+  const getMedTypeColor = (type) => {
+    if (!type) return 'bg-slate-100 text-slate-500 border-slate-200';
+    const t = type.toLowerCase();
+    if (t.includes('injet')) return 'bg-rose-50 text-rose-700 border-rose-200';
+    if (t.includes('gota') || t.includes('solu') || t.includes('xarope')) return 'bg-blue-50 text-blue-700 border-blue-200';
+    if (t.includes('comp') || t.includes('cap')) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    if (t.includes('tópi')) return 'bg-amber-50 text-amber-700 border-amber-200';
+    return 'bg-slate-100 text-slate-500 border-slate-200';
+  };
+
+  // Função Helper para fallback de tipo
+  const inferMedType = (med) => {
+    if (med.tipo && med.tipo !== "N/A") return med.tipo;
+    
+    // Tenta adivinhar pelo nome ou via
+    const name = med.farmaco?.toLowerCase() || "";
+    const via = med.via?.toLowerCase() || ""; // A IA as vezes manda 'via' separado
+
+    if (via.includes('ev') || via.includes('iv') || via.includes('im') || via.includes('sc')) return "Injetável";
+    if (name.includes('gotas')) return "Gotas";
+    if (name.includes('xarope')) return "Xarope";
+    if (name.includes('comprimido')) return "Comprimido";
+    if (name.includes('creme') || name.includes('pomada')) return "Tópico";
+    
+    return "Medicamento"; // Fallback final
   };
 
   const roomConfig = {
@@ -595,7 +616,7 @@ export default function EmergencyGuideApp() {
             </form>
             <div className="text-center flex flex-col items-center gap-3 pt-2 border-t border-gray-100">
               <div className={`flex items-center justify-center gap-2 text-[10px] px-3 py-1.5 rounded-full mx-auto w-fit ${configStatus === 'missing' ? 'bg-red-50 text-red-700' : isCloudConnected ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>{configStatus === 'missing' ? <Settings size={12}/> : isCloudConnected ? <Cloud size={12}/> : <CloudOff size={12}/>}<span>{configStatus === 'missing' ? 'Erro: Variáveis de Ambiente' : isCloudConnected ? 'Banco de Dados Conectado' : 'Modo Offline (Dados Locais)'}</span></div>
-              <p className="text-[10px] text-slate-400 leading-tight max-w-xs">ATENÇÃO: Ferramenta auxiliar. Não substitui o julgamento clínico. O autor isenta-se de responsabilidade.</p>
+              <p className="text-[10px] text-slate-400 leading-tight max-w-xs">ATENÇÃO: Ferramenta auxiliar. Não substitui o julgamento clínico. O autor isenta-se de responsabilidade. Uso proibido para leigos.</p>
             </div>
           </div>
         </div>
@@ -611,8 +632,8 @@ export default function EmergencyGuideApp() {
           <div className="flex items-center gap-3">
              <div className="hidden sm:flex flex-col items-end mr-2"><span className="text-xs font-bold text-slate-700">{currentUser.name}</span><span className="text-[10px] text-slate-400 uppercase">{currentUser.role}</span></div>
              
-             {/* BOTÃO MEUS FAVORITOS (NOVO) */}
-             <button onClick={() => setShowFavoritesModal(true)} className="p-2 text-yellow-500 hover:bg-yellow-50 rounded-full" title="Meus Favoritos"><Star size={20} /></button>
+             {/* BOTÃO MEUS FAVORITOS */}
+             <button onClick={() => setShowFavoritesModal(true)} className="p-2 text-yellow-500 hover:bg-yellow-50 rounded-full transition-colors" title="Meus Favoritos"><Star size={20} /></button>
              
              <button onClick={() => setShowNotepad(true)} className="p-2 text-slate-600 hover:bg-slate-100 rounded-full"><Edit size={20} /></button>
              <button onClick={handleLogout} className="p-2 text-red-400 hover:bg-red-50 rounded-full"><LogOut size={20} /></button>
@@ -621,7 +642,7 @@ export default function EmergencyGuideApp() {
       </header>
 
       <main className="flex-grow max-w-6xl mx-auto px-4 py-8 space-y-8 w-full relative">
-        {/* BOTÃO FLUTUANTE DE RECEITA */}
+        {/* BOTÃO FLUTUANTE DE RECEITA (SÓ SALA VERDE) */}
         {activeRoom === 'verde' && selectedPrescriptionItems.length > 0 && (
           <button 
             onClick={() => setShowPrescriptionModal(true)}
@@ -654,7 +675,9 @@ export default function EmergencyGuideApp() {
 
           {recentSearches.length > 0 && (
             <div className="flex flex-wrap gap-2 px-1">
-              <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase mr-2"><History size={14} /> Recentes</div>
+              <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase mr-2">
+                <History size={14} /> Recentes
+              </div>
               {recentSearches.map((search, idx) => (
                 <button 
                   key={idx} 
@@ -679,7 +702,7 @@ export default function EmergencyGuideApp() {
                   {conduct.guideline_referencia && (<p className="text-xs text-slate-500 mt-1 flex items-center gap-1"><BookOpen size={12} /> Fonte: <span className="font-medium">{conduct.guideline_referencia}</span></p>)}
                </div>
                <div className="flex gap-2">
-                 {/* BOTÃO FAVORITAR CONDUTA ATUAL */}
+                 {/* BOTÃO FAVORITAR */}
                  <button 
                     onClick={toggleFavorite} 
                     className={`p-2 rounded-full transition-colors ${isCurrentConductFavorite ? 'bg-yellow-100 text-yellow-500 hover:bg-yellow-200' : 'text-gray-400 hover:bg-gray-100 hover:text-yellow-400'}`}
@@ -691,7 +714,6 @@ export default function EmergencyGuideApp() {
                </div>
             </div>
 
-            {/* RESUMO CLÍNICO */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex gap-4">
                <div className="bg-blue-50 p-2 rounded-full h-fit text-blue-600"><User size={24} /></div>
                <div><h3 className="font-bold text-slate-900 mb-1">Resumo Clínico e Fisiopatologia</h3><p className="text-slate-700 leading-relaxed text-sm">{conduct.resumo_clinico}</p></div>
@@ -760,7 +782,8 @@ export default function EmergencyGuideApp() {
                      const itemId = med.farmaco + (med.receita?.nome_comercial || "");
                      const isSelected = selectedPrescriptionItems.some(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
                      const canSelect = activeRoom === 'verde' && med.receita;
-                     const isInjectable = med.tipo && (med.tipo.toLowerCase().includes('injet') || med.tipo.toLowerCase().includes('endoven'));
+                     const medType = inferMedType(med); // Corrige "N/A" automaticamente
+                     const isInjectable = medType.toLowerCase().includes('injet');
                      
                      let doseFinal = null;
                      let volumeFinal = null;
@@ -790,8 +813,8 @@ export default function EmergencyGuideApp() {
                           )}
                           
                           <div className="absolute top-4 right-12">
-                             <span className="flex items-center gap-1 bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border border-slate-200">
-                                {getMedTypeIcon(med.tipo)} {med.tipo || "N/A"}
+                             <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${getMedTypeColor(medType)}`}>
+                                {getMedTypeIcon(medType)} {medType}
                              </span>
                           </div>
 
