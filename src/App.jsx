@@ -78,7 +78,6 @@ export default function EmergencyGuideApp() {
   const [showNotepad, setShowNotepad] = useState(false);
   const [userNotes, setUserNotes] = useState('');
 
-  // --- NOVOS ESTADOS PARA RECEITUÁRIO ---
   const [selectedPrescriptionItems, setSelectedPrescriptionItems] = useState([]);
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
 
@@ -113,31 +112,36 @@ export default function EmergencyGuideApp() {
     return () => unsubscribe();
   }, []);
 
+  // Carregar sessão local
   useEffect(() => {
     const savedUser = localStorage.getItem('emergency_app_user');
     if (savedUser) {
       try {
         const parsedUser = JSON.parse(savedUser);
         setCurrentUser(parsedUser);
-        loadHistory(parsedUser.username);
+        // Carrega localmente primeiro para rapidez
+        loadLocalHistory(parsedUser.username);
       } catch (e) {}
     }
   }, []);
 
+  // Sincronizar Notas E Histórico da Nuvem
   useEffect(() => {
-    if (currentUser && isCloudConnected) fetchNotesFromCloud(currentUser.username);
-    else if (currentUser) {
+    if (currentUser && isCloudConnected) {
+      fetchNotesFromCloud(currentUser.username);
+      fetchHistoryFromCloud(currentUser.username); // Nova função de sync
+    } else if (currentUser) {
       const localNotes = localStorage.getItem(`notes_${currentUser.username}`);
       if (localNotes) setUserNotes(localNotes);
+      loadLocalHistory(currentUser.username);
     }
   }, [currentUser, isCloudConnected]);
 
-  // Limpa seleção ao mudar de conduta
   useEffect(() => {
     setSelectedPrescriptionItems([]);
   }, [conduct]);
 
-  const loadHistory = (username) => {
+  const loadLocalHistory = (username) => {
     try {
       const history = localStorage.getItem(`history_${username}`);
       if (history) setRecentSearches(JSON.parse(history));
@@ -145,6 +149,56 @@ export default function EmergencyGuideApp() {
     } catch (e) { setRecentSearches([]); }
   };
 
+  // --- FUNÇÕES DE NUVEM (HISTÓRICO) ---
+  const fetchHistoryFromCloud = async (username) => {
+    // Carrega local primeiro para não ficar vazio enquanto conecta
+    loadLocalHistory(username);
+
+    if (db && auth?.currentUser) {
+      try {
+        // Documento separado para histórico
+        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', username);
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+          const remoteData = docSnap.data();
+          if (remoteData.searches && Array.isArray(remoteData.searches)) {
+            setRecentSearches(remoteData.searches);
+            // Atualiza o local para manter sincronia offline
+            localStorage.setItem(`history_${username}`, JSON.stringify(remoteData.searches));
+          }
+        }
+      } catch (error) { console.error("Erro sync histórico:", error); }
+    }
+  };
+
+  const saveToHistory = async (term, room) => {
+    if (!currentUser) return;
+    
+    const newEntry = { query: term, room, timestamp: new Date().toISOString() };
+    const hist = recentSearches.filter(s => s.query.toLowerCase() !== term.toLowerCase());
+    const updated = [newEntry, ...hist].slice(0, 10);
+    
+    // 1. Salva no Estado e LocalStorage (Imediato)
+    setRecentSearches(updated);
+    localStorage.setItem(`history_${currentUser.username}`, JSON.stringify(updated));
+
+    // 2. Salva na Nuvem (Background)
+    if (db && auth?.currentUser) {
+      try {
+        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', currentUser.username);
+        await setDoc(docRef, {
+          searches: updated,
+          lastUpdated: new Date().toISOString(),
+          username: currentUser.username
+        }, { merge: true });
+      } catch (error) {
+        console.error("Erro ao salvar histórico na nuvem:", error);
+      }
+    }
+  };
+
+  // --- FUNÇÕES DE NUVEM (NOTAS) ---
   const fetchNotesFromCloud = async (username) => {
     const localNotes = localStorage.getItem(`notes_${username}`);
     if (localNotes) setUserNotes(localNotes);
@@ -157,7 +211,7 @@ export default function EmergencyGuideApp() {
           setUserNotes(docSnap.data().content);
           localStorage.setItem(`notes_${username}`, docSnap.data().content);
         }
-      } catch (error) { console.error(error); }
+      } catch (error) { console.error("Erro sync notas:", error); }
     }
   };
 
@@ -192,7 +246,7 @@ export default function EmergencyGuideApp() {
     if (foundUser) {
       setCurrentUser(foundUser);
       localStorage.setItem('emergency_app_user', JSON.stringify(foundUser));
-      loadHistory(foundUser.username);
+      // Sync inicial é feito pelo useEffect quando currentUser muda
       setUsernameInput('');
       setPasswordInput('');
     } else {
@@ -322,14 +376,6 @@ export default function EmergencyGuideApp() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const saveToHistory = (term, room) => {
-    const newEntry = { query: term, room, timestamp: new Date().toISOString() };
-    const hist = recentSearches.filter(s => s.query.toLowerCase() !== term.toLowerCase());
-    const updated = [newEntry, ...hist].slice(0, 10);
-    setRecentSearches(updated);
-    localStorage.setItem(`history_${currentUser.username}`, JSON.stringify(updated));
   };
 
   const showError = (msg) => { setErrorMsg(msg); setTimeout(() => setErrorMsg(''), 4000); };
@@ -472,6 +518,7 @@ export default function EmergencyGuideApp() {
 
             <div className="grid lg:grid-cols-12 gap-6 items-start">
               <div className="lg:col-span-4 space-y-6">
+                {/* AVALIAÇÃO E ALVOS */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                    <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center gap-2"><Activity size={18} className="text-slate-500"/><h3 className="font-bold text-slate-700 text-sm uppercase">Avaliação Inicial</h3></div>
                    <div className="p-5 space-y-5 text-sm">
