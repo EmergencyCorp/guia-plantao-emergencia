@@ -355,8 +355,15 @@ export default function EmergencyGuideApp() {
       newItems[index].dias_tratamento = days;
       
       const item = newItems[index];
-      if (item.receita?.calculo_qnt?.frequencia_diaria && days > 0) {
-        const total = Math.ceil(item.receita.calculo_qnt.frequencia_diaria * days);
+      const frequencia = item.receita?.calculo_qnt?.frequencia_diaria;
+
+      // CORREÇÃO: Validação rigorosa para evitar "NaN" na quantidade.
+      // Verifica se frequencia e days são números válidos antes de calcular.
+      const isFrequenciaValid = typeof frequencia === 'number' && !isNaN(frequencia);
+      const isDaysValid = typeof days === 'number' && !isNaN(days) && days > 0;
+
+      if (isFrequenciaValid && isDaysValid) {
+        const total = Math.ceil(frequencia * days);
         const unidade = item.receita.calculo_qnt.unidade || 'unidades';
         item.receita.quantidade = `${total} ${unidade}`;
       }
