@@ -64,6 +64,31 @@ if (firebaseConfig && firebaseConfig.apiKey) {
 const appId = (typeof __app_id !== 'undefined') ? __app_id : 'emergency-guide-app';
 const initialToken = (typeof __initial_auth_token !== 'undefined') ? __initial_auth_token : null;
 
+// --- CONSTANTES GLOBAIS (Movidas para fora para evitar ReferenceError) ---
+
+const roomConfig = {
+  verde: { 
+    name: 'Sala Verde', 
+    color: 'emerald', 
+    accent: 'bg-emerald-500', 
+    border: 'border-emerald-500', 
+    text: 'text-emerald-800', 
+    light: 'bg-emerald-50', 
+    icon: <Stethoscope className="w-5 h-5" />, 
+    description: 'Ambulatorial / Baixa Complexidade' 
+  },
+  vermelha: { 
+    name: 'Sala Vermelha', 
+    color: 'rose', 
+    accent: 'bg-rose-600', 
+    border: 'border-rose-600', 
+    text: 'text-rose-800', 
+    light: 'bg-rose-50', 
+    icon: <Siren className="w-5 h-5" />, 
+    description: 'Emergência / Risco de Vida' 
+  }
+};
+
 export default function EmergencyGuideApp() {
   const [currentUser, setCurrentUser] = useState(null);
   const [usernameInput, setUsernameInput] = useState('');
@@ -97,7 +122,7 @@ export default function EmergencyGuideApp() {
   // --- HELPER FUNCTIONS ---
 
   const calculateDose = (med) => {
-    // CORREÇÃO: Verifica por concentracao_mg_ml (que é o que a IA manda) E concentracao_solucao (legacy)
+    // Verifica por concentracao_mg_ml (novo padrão) OU concentracao_solucao (antigo)
     const concValue = med.concentracao_mg_ml || med.concentracao_solucao;
     
     if (!patientWeight || !med.dose_padrao_kg || !concValue) return null;
@@ -107,11 +132,10 @@ export default function EmergencyGuideApp() {
     const concentration = parseFloat(concValue);
     const unit = med.unidade_base || ""; 
 
-    // 1. Cálculo da Dose Alvo (Massa)
+    // 1. Cálculo da Dose Alvo
     let totalDoseValue = doseKg * weight;
     let doseDisplay = `${totalDoseValue.toFixed(2)}`;
     
-    // Formata a exibição da dose (ex: 14 mcg/min)
     if (unit.includes("mcg")) doseDisplay += " mcg";
     else if (unit.includes("mg")) doseDisplay += " mg";
     else if (unit.includes("UI")) doseDisplay += " UI";
@@ -124,22 +148,17 @@ export default function EmergencyGuideApp() {
     if (concentration > 0) {
        let doseForCalc = totalDoseValue; 
        
-       // Normalização de Unidades de Massa (se a IA informou as unidades)
-       // Se a dose é em mcg e a concentração em mg, divide a dose por 1000
+       // Normalização de Unidades (mcg vs mg)
        if (unit.includes("mcg") && med.unidade_concentracao?.includes("mg")) {
           doseForCalc = totalDoseValue / 1000;
-       } 
-       // Se a dose é em mg e a concentração em mcg, multiplica a dose por 1000
-       else if (unit.includes("mg") && med.unidade_concentracao?.includes("mcg")) {
+       } else if (unit.includes("mg") && med.unidade_concentracao?.includes("mcg")) {
           doseForCalc = totalDoseValue * 1000;
        }
 
-       // Normalização de Tempo (tudo para Hora)
+       // Normalização de Tempo (min vs h)
        if (unit.includes("/min") || unit.includes("min")) {
-         // Dose por minuto -> ml/h = (Dose * 60) / Concentração
          rateMlH = (doseForCalc * 60) / concentration;
        } else {
-         // Dose por hora ou bolus -> ml = Dose / Concentração
          rateMlH = doseForCalc / concentration;
        }
     }
@@ -339,6 +358,7 @@ export default function EmergencyGuideApp() {
           setIsSaving(true);
           try {
             const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'notes', currentUser.username);
+            // Proteção contra undefined
             await setDoc(docRef, {
               content: userNotes || "",
               lastUpdated: new Date().toISOString(),
@@ -580,6 +600,8 @@ export default function EmergencyGuideApp() {
     }
   };
 
+  const showError = (msg) => { setErrorMsg(msg); setTimeout(() => setErrorMsg(''), 4000); };
+
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans text-slate-800">
@@ -763,9 +785,10 @@ export default function EmergencyGuideApp() {
                           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 mb-3 pl-3 pr-20">
                              <div>
                                 <div className="flex items-center gap-2"><h4 className="text-xl font-bold text-slate-800">{med.farmaco}</h4></div>
-                                <span className="text-sm text-slate-500 italic">{med.indicacao}</span>
+                                {med.apresentacao && <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200 font-medium inline-block mt-1">{med.apresentacao}</span>}
+                                <span className="text-sm text-slate-500 italic block mt-1">{med.indicacao}</span>
                              </div>
-                             {med.via && <span className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-100">{med.via}</span>}
+                             {med.via && <span className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-100 mt-2 md:mt-0">{med.via}</span>}
                           </div>
                           
                           <div className="bg-slate-50 rounded-lg p-3 ml-3 mb-3 font-mono text-sm text-slate-700 border border-slate-100"><strong className="text-slate-500 block text-xs uppercase mb-1">Sugestão de Uso / Dose:</strong>{med.sugestao_uso || med.dose}</div>
@@ -869,6 +892,20 @@ export default function EmergencyGuideApp() {
             <div className="p-2 max-h-[60vh] overflow-y-auto bg-slate-50">
               {favorites.length === 0 ? (<div className="text-center p-8 text-slate-400 text-sm">Você ainda não tem favoritos.</div>) : (<div className="space-y-2">{favorites.map((fav) => (<div key={fav.id} className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm flex items-center justify-between group hover:border-blue-300 transition-colors"><button onClick={() => loadFavoriteConduct(fav)} className="flex-1 text-left"><div className="flex items-center gap-2"><div className={`w-2 h-2 rounded-full shrink-0 ${fav.room === 'verde' ? 'bg-emerald-500' : 'bg-rose-500'}`} /><span className="font-bold text-slate-700 text-sm">{fav.query}</span></div><span className="text-[10px] text-slate-400 ml-4">{new Date(fav.lastAccessed).toLocaleDateString()}</span></button><button onClick={(e) => { e.stopPropagation(); removeFavoriteFromList(fav.id); }} className="p-2 text-slate-300 hover:text-red-500 transition-colors" title="Remover"><Trash2 size={16} /></button></div>))}</div>)}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE BLOCO DE NOTAS */}
+      {showNotepad && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200 print:hidden">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col h-[80vh] overflow-hidden">
+            <div className="bg-gray-50 p-4 border-b border-gray-200 flex justify-between items-center">
+              <div className="flex items-center gap-3"><div className="bg-blue-100 p-2 rounded-lg text-blue-600"><Edit size={20} /></div><div><h3 className="font-bold text-slate-800 leading-none">Meu Caderno</h3><div className="flex items-center gap-2 mt-1"><span className="text-xs text-slate-500">Anotações de {currentUser?.name}</span><span className="text-gray-300">•</span>{isCloudConnected ? (<span className="flex items-center gap-1 text-[10px] text-green-600 font-medium"><Cloud size={10} /> Nuvem Ativa</span>) : (<span className="flex items-center gap-1 text-[10px] text-amber-600 font-medium"><CloudOff size={10} /> Offline</span>)}</div></div></div>
+              <button onClick={() => setShowNotepad(false)} className="p-2 hover:bg-gray-200 rounded-full text-gray-500 transition-colors"><X size={20} /></button>
+            </div>
+            <div className="flex-1 bg-yellow-50 relative"><textarea className="w-full h-full p-6 resize-none focus:outline-none text-slate-700 leading-relaxed bg-transparent text-lg font-medium font-serif" placeholder="Escreva suas anotações..." value={userNotes} onChange={handleNoteChange} style={{ backgroundImage: 'linear-gradient(transparent, transparent 31px, #e5e7eb 31px)', backgroundSize: '100% 32px', lineHeight: '32px' }} /></div>
+            <div className="p-3 bg-white border-t border-gray-200 flex justify-between items-center text-xs text-gray-500"><div className="flex items-center gap-1.5">{isSaving ? (<><Loader2 size={14} className="text-blue-600 animate-spin" /><span className="text-blue-600">Salvando...</span></>) : (<><Save size={14} className="text-green-600" /><span>{isCloudConnected ? "Salvo na nuvem" : "Salvo localmente"}</span></>)}</div><span>{userNotes.length} caracteres</span></div>
           </div>
         </div>
       )}
