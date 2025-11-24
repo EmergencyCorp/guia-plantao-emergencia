@@ -28,7 +28,7 @@ import {
 } from 'firebase/firestore';
 
 // ==========================================================================================
-// 🚨 ÁREA DE CONFIGURAÇÃO DO USUÁRIO - COLE SUAS CHAVES AQUI 🚨
+// 🚨 ÁREA DE CONFIGURAÇÃO DO USUÁRIO - COLE SUAS CHAVE AQUI 🚨
 // ==========================================================================================
 // Passo 4: Copie o objeto do console do Firebase e cole abaixo.
 // Deve ficar parecido com: { apiKey: "AIzaSy...", authDomain: "..." }
