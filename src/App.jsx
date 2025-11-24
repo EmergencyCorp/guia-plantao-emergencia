@@ -307,16 +307,18 @@ export default function EmergencyGuideApp() {
     localStorage.removeItem('emergency_app_user');
   };
 
+  // --- MANIPULAÇÃO DE ITENS DA RECEITA ---
   const togglePrescriptionItem = (med) => {
     if (activeRoom !== 'verde' || !med.receita) return;
 
     setSelectedPrescriptionItems(prev => {
-      const itemId = med.farmaco + (med.receita?.nome_comercial || "");
-      const exists = prev.find(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
+      const itemId = med.farmaco; // Identificador simples
+      const exists = prev.find(item => item.farmaco === itemId);
       
       if (exists) {
-        return prev.filter(item => (item.farmaco + (item.receita?.nome_comercial || "")) !== itemId);
+        return prev.filter(item => item.farmaco !== itemId);
       } else {
+        // Usa o dias_sugeridos da IA ou 5 como padrão
         return [...prev, { ...med, dias_tratamento: med.receita.dias_sugeridos || 5 }];
       }
     });
@@ -325,29 +327,40 @@ export default function EmergencyGuideApp() {
   const updateItemDays = (id, days) => {
     if (days < 1) days = 1;
     setSelectedPrescriptionItems(prev => prev.map(item => {
-      if ((item.farmaco + (item.receita?.nome_comercial || "")) === id) {
+      if (item.farmaco === id) {
         return { ...item, dias_tratamento: days };
       }
       return item;
     }));
   };
 
+  // --- CÁLCULO DA RECEITA (SALA VERDE) ---
   const calculateTotalQuantity = (item) => {
     const rec = item.receita;
     if (!rec || !rec.calculo_qnt || !rec.calculo_qnt.frequencia_diaria) return rec?.quantidade || "1 caixa";
-    const totalUnits = Math.ceil(rec.calculo_qnt.qtd_por_dose * rec.calculo_qnt.frequencia_diaria * item.dias_tratamento);
-    return `${totalUnits} ${rec.calculo_qnt.unidade_form || 'unidades'}`;
+    
+    // Cálculo: Qtd por dose * Freq Diária * Dias
+    const qtdDose = rec.calculo_qnt.qtd_por_dose || 1;
+    const freq = rec.calculo_qnt.frequencia_diaria || 1;
+    const dias = item.dias_tratamento || 1;
+    
+    const totalUnits = Math.ceil(qtdDose * freq * dias);
+    const unidade = rec.calculo_qnt.unidade_form || 'unidades';
+    
+    return `${totalUnits} ${unidade}`;
   };
 
+  // --- CÁLCULO DE BOMBA (SALA VERMELHA) ---
   const calculateInfusion = (med) => {
-    if (!patientWeight || !med.dose_padrao_kg || !med.concentracao_solucao) return null;
+    if (!patientWeight || !med.dose_padrao_kg || !med.concentracao_mg_ml) return null;
     
     const weight = parseFloat(patientWeight);
-    const doseKg = parseFloat(med.dose_padrao_kg);
-    const concentration = parseFloat(med.concentracao_solucao);
+    const doseRef = parseFloat(med.dose_padrao_kg);
+    const concentration = parseFloat(med.concentracao_mg_ml);
     const unit = med.unidade_base || ""; 
 
-    let totalDoseValue = doseKg * weight;
+    // 1. Dose Alvo (Ex: 0.1 * 70 = 7 mcg/min)
+    let totalDoseValue = doseRef * weight;
     let doseDisplay = `${totalDoseValue.toFixed(2)}`;
     
     if (unit.includes("mcg")) {
@@ -360,20 +373,24 @@ export default function EmergencyGuideApp() {
       else if (unit.includes("h")) doseDisplay += "/h";
     }
 
+    // 2. Vazão (ml/h)
     let rateMlH = 0;
     if (concentration > 0) {
-       let doseInMg = totalDoseValue; 
-       if (unit.includes("mcg") && med.unidade_concentracao?.includes("mg")) {
-          doseInMg = totalDoseValue / 1000;
-       } else if (unit.includes("mg") && med.unidade_concentracao?.includes("mcg")) {
-          doseInMg = totalDoseValue * 1000;
+       let doseForCalc = totalDoseValue;
+       
+       // Se dose é mcg e concentração mg, converte dose pra mg
+       if (unit.includes("mcg")) {
+         doseForCalc = totalDoseValue / 1000; // mcg -> mg
        }
-       if (unit.includes("/min")) {
-         rateMlH = (doseInMg * 60) / concentration;
+       
+       // Se dose é /min, multiplica por 60 para virar /h
+       if (unit.includes("min")) {
+         rateMlH = (doseForCalc * 60) / concentration;
        } else {
-         rateMlH = doseInMg / concentration;
+         rateMlH = doseForCalc / concentration;
        }
     }
+
     return { doseDisplay, rateMlH: rateMlH.toFixed(1) };
   };
 
@@ -483,6 +500,7 @@ export default function EmergencyGuideApp() {
       } catch (error) { console.error("Erro cache:", error); }
     }
 
+    // Chama API
     try {
       const response = await fetch('/api/generate', {
         method: 'POST',
@@ -561,6 +579,11 @@ export default function EmergencyGuideApp() {
     return "Medicamento";
   };
 
+  const roomConfig = {
+    verde: { name: 'Sala Verde', color: 'emerald', accent: 'bg-emerald-500', border: 'border-emerald-500', text: 'text-emerald-800', light: 'bg-emerald-50', icon: <Stethoscope className="w-5 h-5" />, description: 'Ambulatorial / Baixa Complexidade' },
+    vermelha: { name: 'Sala Vermelha', color: 'rose', accent: 'bg-rose-600', border: 'border-rose-600', text: 'text-rose-800', light: 'bg-rose-50', icon: <Siren className="w-5 h-5" />, description: 'Emergência / Risco de Vida' }
+  };
+
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans text-slate-800">
@@ -607,18 +630,17 @@ export default function EmergencyGuideApp() {
         )}
 
         <div className="space-y-6">
-          {/* SELEÇÃO DE SALA */}
           <div className="grid md:grid-cols-2 gap-4">
-            <button onClick={() => setActiveRoom('verde')} className={`relative flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all ${activeRoom === 'verde' ? `bg-white border-emerald-500 shadow-md ring-1 ring-offset-2 ring-emerald-500` : 'bg-white border-transparent hover:border-gray-200 shadow-sm'}`}>
-              <div className={`p-3 rounded-xl ${activeRoom === 'verde' ? `bg-emerald-50 text-emerald-800` : 'bg-gray-100 text-gray-400'}`}><Stethoscope className="w-6 h-6"/></div>
-              <div><h3 className={`font-bold ${activeRoom === 'verde' ? 'text-slate-800' : 'text-slate-500'}`}>Sala Verde</h3><p className="text-xs text-slate-400">Ambulatorial / Baixa Complexidade</p></div>
-              {activeRoom === 'verde' && <CheckCircle2 className={`ml-auto text-emerald-800`} size={20} />}
-            </button>
-            <button onClick={() => setActiveRoom('vermelha')} className={`relative flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all ${activeRoom === 'vermelha' ? `bg-white border-rose-600 shadow-md ring-1 ring-offset-2 ring-rose-600` : 'bg-white border-transparent hover:border-gray-200 shadow-sm'}`}>
-              <div className={`p-3 rounded-xl ${activeRoom === 'vermelha' ? `bg-rose-50 text-rose-800` : 'bg-gray-100 text-gray-400'}`}><Siren className="w-6 h-6"/></div>
-              <div><h3 className={`font-bold ${activeRoom === 'vermelha' ? 'text-slate-800' : 'text-slate-500'}`}>Sala Vermelha</h3><p className="text-xs text-slate-400">Emergência / Risco de Vida</p></div>
-              {activeRoom === 'vermelha' && <CheckCircle2 className={`ml-auto text-rose-800`} size={20} />}
-            </button>
+            {Object.entries(roomConfig).map(([key, config]) => {
+              const isActive = activeRoom === key;
+              return (
+                <button key={key} onClick={() => setActiveRoom(key)} className={`relative flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all ${isActive ? `bg-white ${config.border} shadow-md ring-1 ring-offset-2 ${config.accent.replace('bg-', 'ring-')}` : 'bg-white border-transparent hover:border-gray-200 shadow-sm'}`}>
+                  <div className={`p-3 rounded-xl ${isActive ? `${config.light} ${config.text}` : 'bg-gray-100 text-gray-400'}`}>{config.icon}</div>
+                  <div><h3 className={`font-bold ${isActive ? 'text-slate-800' : 'text-slate-500'}`}>{config.name}</h3><p className="text-xs text-slate-400">{config.description}</p></div>
+                  {isActive && <CheckCircle2 className={`ml-auto ${config.text}`} size={20} />}
+                </button>
+              );
+            })}
           </div>
 
           <div className="bg-white p-2 rounded-2xl shadow-lg border border-gray-100 flex items-center gap-2">
@@ -738,12 +760,17 @@ export default function EmergencyGuideApp() {
                           {canSelect && (<div className={`absolute top-4 right-4 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-300 text-transparent'}`}><CheckCircle2 size={14} /></div>)}
                           
                           <div className="absolute top-4 right-12">
-                             <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${getMedTypeColor(medType)}`}>{getMedTypeIcon(medType)} {medType}</span>
+                             <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${getMedTypeColor(medType)}`}>
+                                {getMedTypeIcon(medType)} {medType}
+                             </span>
                           </div>
 
                           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 mb-3 pl-3 pr-20">
                              <div>
-                                <div className="flex items-center gap-2"><h4 className="text-xl font-bold text-slate-800">{med.farmaco}</h4></div>
+                                <div className="flex items-center gap-2">
+                                   <h4 className="text-xl font-bold text-slate-800">{med.farmaco}</h4>
+                                   {med.apresentacao && <span className="text-[10px] font-bold bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-slate-600 flex items-center gap-1"><Package size={10}/> {med.apresentacao}</span>}
+                                </div>
                                 <span className="text-sm text-slate-500 italic">{med.indicacao}</span>
                              </div>
                              {med.via && <span className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-100">{med.via}</span>}
@@ -816,14 +843,8 @@ export default function EmergencyGuideApp() {
               <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none"><Activity size={400} /></div>
               <header className="flex flex-col items-center border-b-4 border-double border-slate-800 pb-6 mb-8"><h1 className="text-3xl font-bold tracking-widest uppercase text-slate-900">{currentUser?.name || "NOME DO MÉDICO"}</h1><div className="flex items-center gap-2 mt-2 text-sm font-bold text-slate-600 uppercase tracking-wide"><span>CRM: {currentUser?.crm || "00000/UF"}</span><span>•</span><span>CLÍNICA MÉDICA</span></div></header>
               <div className="flex-1 space-y-8">
-                {['USO ORAL', 'USO TÓPICO', 'USO RETAL', 'USO INALATÓRIO', 'USO OFTÁLMICO', 'USO OTOLÓGICO', 'OUTROS / USO GERAL'].map((usoType) => {
-                  const items = selectedPrescriptionItems.filter(item => {
-                    const itemUso = item.receita?.uso?.toUpperCase() || "USO ORAL";
-                    if (usoType === 'OUTROS / USO GERAL') {
-                       return !itemUso.includes('ORAL') && !itemUso.includes('TÓPICO') && !itemUso.includes('RETAL') && !itemUso.includes('INAL') && !itemUso.includes('OFT') && !itemUso.includes('OTOL');
-                    }
-                    return itemUso.includes(usoType.replace('USO ', ''));
-                  });
+                {['USO ORAL', 'USO TÓPICO', 'USO RETAL', 'USO INALATÓRIO', 'USO OFTÁLMICO', 'USO OTOLÓGICO'].map((usoType) => {
+                  const items = selectedPrescriptionItems.filter(item => item.receita?.uso?.toUpperCase().includes(usoType.replace('USO ', '')) || (usoType === 'USO ORAL' && !item.receita?.uso));
                   if (items.length === 0) return null;
                   return (
                     <div key={usoType}>
@@ -850,20 +871,6 @@ export default function EmergencyGuideApp() {
             <div className="p-2 max-h-[60vh] overflow-y-auto bg-slate-50">
               {favorites.length === 0 ? (<div className="text-center p-8 text-slate-400 text-sm">Você ainda não tem favoritos.</div>) : (<div className="space-y-2">{favorites.map((fav) => (<div key={fav.id} className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm flex items-center justify-between group hover:border-blue-300 transition-colors"><button onClick={() => loadFavoriteConduct(fav)} className="flex-1 text-left"><div className="flex items-center gap-2"><div className={`w-2 h-2 rounded-full shrink-0 ${fav.room === 'verde' ? 'bg-emerald-500' : 'bg-rose-500'}`} /><span className="font-bold text-slate-700 text-sm">{fav.query}</span></div><span className="text-[10px] text-slate-400 ml-4">{new Date(fav.lastAccessed).toLocaleDateString()}</span></button><button onClick={(e) => { e.stopPropagation(); removeFavoriteFromList(fav.id); }} className="p-2 text-slate-300 hover:text-red-500 transition-colors" title="Remover"><Trash2 size={16} /></button></div>))}</div>)}
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL DE BLOCO DE NOTAS */}
-      {showNotepad && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200 print:hidden">
-          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col h-[80vh] overflow-hidden">
-            <div className="bg-gray-50 p-4 border-b border-gray-200 flex justify-between items-center">
-              <div className="flex items-center gap-3"><div className="bg-blue-100 p-2 rounded-lg text-blue-600"><Edit size={20} /></div><div><h3 className="font-bold text-slate-800 leading-none">Meu Caderno</h3><div className="flex items-center gap-2 mt-1"><span className="text-xs text-slate-500">Anotações de {currentUser?.name}</span><span className="text-gray-300">•</span>{isCloudConnected ? (<span className="flex items-center gap-1 text-[10px] text-green-600 font-medium"><Cloud size={10} /> Nuvem Ativa</span>) : (<span className="flex items-center gap-1 text-[10px] text-amber-600 font-medium"><CloudOff size={10} /> Offline</span>)}</div></div></div>
-              <button onClick={() => setShowNotepad(false)} className="p-2 hover:bg-gray-200 rounded-full text-gray-500 transition-colors"><X size={20} /></button>
-            </div>
-            <div className="flex-1 bg-yellow-50 relative"><textarea className="w-full h-full p-6 resize-none focus:outline-none text-slate-700 leading-relaxed bg-transparent text-lg font-medium font-serif" placeholder="Escreva suas anotações..." value={userNotes} onChange={handleNoteChange} style={{ backgroundImage: 'linear-gradient(transparent, transparent 31px, #e5e7eb 31px)', backgroundSize: '100% 32px', lineHeight: '32px' }} /></div>
-            <div className="p-3 bg-white border-t border-gray-200 flex justify-between items-center text-xs text-gray-500"><div className="flex items-center gap-1.5">{isSaving ? (<><Loader2 size={14} className="text-blue-600 animate-spin" /><span className="text-blue-600">Salvando...</span></>) : (<><Save size={14} className="text-green-600" /><span>{isCloudConnected ? "Salvo na nuvem" : "Salvo localmente"}</span></>)}</div><span>{userNotes.length} caracteres</span></div>
           </div>
         </div>
       )}
