@@ -260,7 +260,7 @@ export default function EmergencyGuideApp() {
     setLoginError('');
 
     if (!db || !isCloudConnected) {
-      setLoginError("Sem conexão com o servidor. Verifique se o 'Anônimo' está ativado no Firebase Authentication.");
+      setLoginError("Sem conexão com o servidor. Verifique sua internet.");
       return;
     }
 
@@ -382,6 +382,7 @@ export default function EmergencyGuideApp() {
       } else {
           await setDoc(docRef, { isFavorite: false }, { merge: true });
       }
+
     } catch (error) {
       console.error("Erro ao favoritar:", error);
       setIsCurrentConductFavorite(!newStatus);
@@ -557,7 +558,7 @@ export default function EmergencyGuideApp() {
             </form>
             <div className="text-center flex flex-col items-center gap-3 pt-2 border-t border-gray-100">
               <div className={`flex items-center justify-center gap-2 text-[10px] px-3 py-1.5 rounded-full mx-auto w-fit ${configStatus === 'missing' ? 'bg-red-50 text-red-700' : isCloudConnected ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>{configStatus === 'missing' ? <Settings size={12}/> : isCloudConnected ? <Cloud size={12}/> : <CloudOff size={12}/>}<span>{configStatus === 'missing' ? 'Erro: Variáveis de Ambiente' : isCloudConnected ? 'Banco de Dados Conectado' : 'Modo Offline (Dados Locais)'}</span></div>
-              <p className="text-[10px] text-slate-400 leading-tight max-w-xs">ATENÇÃO: Ferramenta auxiliar. Não substitui o julgamento clínico. O autor isenta-se de responsabilidade. Uso proibido para leigos.</p>
+              <p className="text-[10px] text-slate-400 leading-tight max-w-xs">ATENÇÃO: Ferramenta auxiliar. Não substitui o julgamento clínico. O autor isenta-se de responsabilidade.</p>
             </div>
           </div>
         </div>
@@ -796,12 +797,19 @@ export default function EmergencyGuideApp() {
               <header className="flex flex-col items-center border-b-4 border-double border-slate-800 pb-6 mb-8"><h1 className="text-3xl font-bold tracking-widest uppercase text-slate-900">{currentUser?.name || "NOME DO MÉDICO"}</h1><div className="flex items-center gap-2 mt-2 text-sm font-bold text-slate-600 uppercase tracking-wide"><span>CRM: {currentUser?.crm || "00000/UF"}</span><span>•</span><span>CLÍNICA MÉDICA</span></div></header>
               <div className="flex-1 space-y-8">
                 {['USO ORAL', 'USO TÓPICO', 'USO RETAL', 'USO INALATÓRIO', 'USO OFTÁLMICO', 'USO OTOLÓGICO'].map((usoType) => {
-                  const items = selectedPrescriptionItems.filter(item => item.receita?.uso?.toUpperCase().includes(usoType.replace('USO ', '')) || (usoType === 'USO ORAL' && !item.receita?.uso));
+                  // Lógica de agrupamento e fallback: Se não tem 'uso', cai no Oral
+                  const items = selectedPrescriptionItems.filter(item => {
+                    const usoItem = item.receita?.uso?.toUpperCase();
+                    const target = usoType.replace('USO ', '');
+                    if (usoType === 'USO ORAL') return !usoItem || usoItem.includes('ORAL');
+                    return usoItem && usoItem.includes(target);
+                  });
+                  
                   if (items.length === 0) return null;
                   return (
                     <div key={usoType}>
                       <div className="flex items-center gap-4 mb-4"><h3 className="font-bold text-lg underline decoration-2 underline-offset-4">{usoType}</h3></div>
-                      <ul className="space-y-6 list-none">{items.map((item, index) => (<li key={index} className="relative pl-6"><span className="absolute left-0 top-0 font-bold text-lg">{index + 1}.</span><div className="flex items-end mb-1 w-full"><span className="font-bold text-xl">{item.receita.nome_comercial}</span><div className="flex-1 mx-2 border-b-2 border-dotted border-slate-400 mb-1.5"></div><span className="font-bold text-lg whitespace-nowrap">{item.receita.quantidade}</span></div><p className="text-base leading-relaxed text-slate-800 mt-1 pl-2 border-l-4 border-slate-200">{item.receita.instrucoes}</p></li>))}</ul>
+                      <ul className="space-y-6 list-none">{items.map((item, index) => (<li key={index} className="relative pl-6"><span className="absolute left-0 top-0 font-bold text-lg">{index + 1}.</span><div className="flex items-end mb-1 w-full"><span className="font-bold text-xl">{item.receita.nome_comercial || item.farmaco}</span><div className="flex-1 mx-2 border-b-2 border-dotted border-slate-400 mb-1.5"></div><span className="font-bold text-lg whitespace-nowrap">{item.receita.quantidade}</span></div><p className="text-base leading-relaxed text-slate-800 mt-1 pl-2 border-l-4 border-slate-200">{item.receita.instrucoes}</p></li>))}</ul>
                     </div>
                   )
                 })}
