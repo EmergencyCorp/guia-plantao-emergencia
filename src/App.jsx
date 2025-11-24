@@ -5,7 +5,7 @@ import {
   CheckCircle2, Thermometer, Syringe, Siren, FlaskConical, Tag, Package,
   ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save, Cloud, CloudOff, Settings, Info,
   HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine, Wind, Droplet, Timer, Skull, Printer, FilePlus, Calculator,
-  Star, Trash2, CalendarDays
+  Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2, SprayCan, CalendarDays
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -17,7 +17,7 @@ import {
   setDoc, 
   getDoc, 
   collection, 
-  query as firestoreQuery, // RENOMEADO PARA EVITAR ERRO DE TELA BRANCA
+  query as firestoreQuery, 
   where, 
   orderBy, 
   limit, 
@@ -64,11 +64,8 @@ if (firebaseConfig && firebaseConfig.apiKey) {
 const appId = (typeof __app_id !== 'undefined') ? __app_id : 'emergency-guide-app';
 const initialToken = (typeof __initial_auth_token !== 'undefined') ? __initial_auth_token : null;
 
-const AUTHORIZED_USERS = [
-  { username: 'admin', password: '123', name: 'Dr. Administrador', role: 'Diretor Clínico', crm: '12345-MG' },
-  { username: 'medico', password: 'med', name: 'Dr. Plantonista', role: 'Médico Assistente', crm: '67890-SP' },
-  { username: 'interno', password: 'int', name: 'Acadêmico', role: 'Interno', crm: 'Estudante' }
-];
+// NOTA: USUÁRIOS HARDCODED FORAM REMOVIDOS POR SEGURANÇA.
+// O acesso agora é exclusivo via Firebase Firestore.
 
 export default function EmergencyGuideApp() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -99,8 +96,6 @@ export default function EmergencyGuideApp() {
   const [patientWeight, setPatientWeight] = useState('');
 
   const [isCurrentConductFavorite, setIsCurrentConductFavorite] = useState(false);
-
-  // --- EFFECTS ---
 
   useEffect(() => {
     if (!firebaseConfig || !firebaseConfig.apiKey) {
@@ -138,6 +133,16 @@ export default function EmergencyGuideApp() {
     if (savedUser) {
       try {
         const parsedUser = JSON.parse(savedUser);
+        
+        // Verifica validade ao recarregar
+        if (parsedUser.expiresAt) {
+          const expires = new Date(parsedUser.expiresAt);
+          if (new Date() > expires) {
+             localStorage.removeItem('emergency_app_user');
+             return;
+          }
+        }
+
         setCurrentUser(parsedUser);
         loadHistory(parsedUser.username);
       } catch (e) {}
@@ -169,8 +174,6 @@ export default function EmergencyGuideApp() {
       setIsCurrentConductFavorite(false);
     }
   }, [conduct, favorites]);
-
-  // --- DATA MANAGEMENT ---
 
   const loadHistory = (username) => {
     try {
@@ -249,7 +252,6 @@ export default function EmergencyGuideApp() {
           setIsSaving(true);
           try {
             const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'notes', currentUser.username);
-            // Proteção contra valor undefined no autor
             await setDoc(docRef, {
               content: userNotes,
               lastUpdated: new Date().toISOString(),
@@ -266,17 +268,55 @@ export default function EmergencyGuideApp() {
 
   const handleNoteChange = (e) => setUserNotes(e.target.value);
 
-  const handleLogin = (e) => {
+  // --- LÓGICA DE LOGIN SEGURA (SEM BACKDOOR) ---
+  const handleLogin = async (e) => {
     e.preventDefault();
     setLoginError('');
-    const foundUser = AUTHORIZED_USERS.find(u => u.username.toLowerCase() === usernameInput.toLowerCase() && u.password === passwordInput);
-    if (foundUser) {
-      setCurrentUser(foundUser);
-      localStorage.setItem('emergency_app_user', JSON.stringify(foundUser));
-      setUsernameInput('');
-      setPasswordInput('');
-    } else {
-      setLoginError('Credenciais inválidas.');
+
+    if (!db || !isCloudConnected) {
+      setLoginError("Sem conexão com o servidor. Verifique se o 'Anônimo' está ativado no Firebase Authentication.");
+      return;
+    }
+
+    try {
+      const userId = usernameInput.toLowerCase().trim();
+      // CAMINHO EXATO ONDE O APP PROCURA:
+      const path = `artifacts/${appId}/public/data/registered_users/${userId}`;
+      console.log("🔍 Tentando buscar usuário em:", path);
+
+      const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'registered_users', userId);
+      const userSnap = await getDoc(userDocRef);
+
+      if (userSnap.exists()) {
+        const userData = userSnap.data();
+        
+        if (userData.password === passwordInput) {
+          // Verifica Validade
+          if (userData.expiresAt) {
+             const expirationDate = new Date(userData.expiresAt);
+             const now = new Date();
+             if (now > expirationDate) {
+               setLoginError(`Assinatura expirada em ${expirationDate.toLocaleDateString()}.`);
+               return;
+             }
+          }
+          
+          // Login Sucesso
+          const userSession = { ...userData, username: userId };
+          setCurrentUser(userSession);
+          localStorage.setItem('emergency_app_user', JSON.stringify(userSession));
+          setUsernameInput('');
+          setPasswordInput('');
+        } else {
+          setLoginError("Senha incorreta.");
+        }
+      } else {
+        console.warn("Documento não encontrado no Firestore.");
+        setLoginError(`Usuário não encontrado. (Debug: Verifique se criou a coleção em 'artifacts -> emergency-guide-app -> public -> data -> registered_users')`);
+      }
+    } catch (err) {
+      console.error("Erro crítico no login:", err);
+      setLoginError("Erro técnico ao tentar login (verifique console).");
     }
   };
 
@@ -502,9 +542,10 @@ export default function EmergencyGuideApp() {
     if (!type) return <Pill size={14} />;
     const t = type.toLowerCase();
     if (t.includes('injet')) return <SyringeIcon size={14} className="text-rose-500" />;
-    if (t.includes('gota') || t.includes('solu') || t.includes('xarope') || t.includes('susp')) return <Droplet size={14} className="text-blue-500" />;
-    if (t.includes('comp') || t.includes('cap') || t.includes('oral')) return <Pill size={14} className="text-emerald-500" />;
+    if (t.includes('gota') || t.includes('solu') || t.includes('xarope') || t.includes('susp')) return <Droplets size={14} className="text-blue-500" />;
+    if (t.includes('comp') || t.includes('cap')) return <Tablets size={14} className="text-emerald-500" />;
     if (t.includes('tópi') || t.includes('pomada') || t.includes('creme')) return <Pipette size={14} className="text-amber-500" />;
+    if (t.includes('inal') || t.includes('spray')) return <SprayCan size={14} className="text-purple-500" />;
     return <Pill size={14} className="text-slate-500" />;
   };
 
@@ -546,7 +587,7 @@ export default function EmergencyGuideApp() {
             <p className="text-blue-200 text-sm font-medium">Acesso Exclusivo Médico</p>
           </div>
           <div className="p-8 space-y-6">
-            {loginError && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-xs flex items-center gap-2 border border-red-100"><AlertCircle size={14} /> {loginError}</div>}
+            {loginError && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-xs flex items-center gap-2 border border-red-100 font-mono">{loginError}</div>}
             <form onSubmit={handleLogin} className="space-y-4">
               <div><label className="text-xs font-bold text-slate-500 uppercase ml-1">Usuário</label><div className="relative"><User className="absolute left-3 top-3 text-gray-400 w-5 h-5" /><input type="text" value={usernameInput} onChange={(e)=>setUsernameInput(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-900" placeholder="Ex: admin" /></div></div>
               <div><label className="text-xs font-bold text-slate-500 uppercase ml-1">Senha</label><div className="relative"><KeyRound className="absolute left-3 top-3 text-gray-400 w-5 h-5" /><input type="password" value={passwordInput} onChange={(e)=>setPasswordInput(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-900" placeholder="••••••" /></div></div>
@@ -554,7 +595,7 @@ export default function EmergencyGuideApp() {
             </form>
             <div className="text-center flex flex-col items-center gap-3 pt-2 border-t border-gray-100">
               <div className={`flex items-center justify-center gap-2 text-[10px] px-3 py-1.5 rounded-full mx-auto w-fit ${configStatus === 'missing' ? 'bg-red-50 text-red-700' : isCloudConnected ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>{configStatus === 'missing' ? <Settings size={12}/> : isCloudConnected ? <Cloud size={12}/> : <CloudOff size={12}/>}<span>{configStatus === 'missing' ? 'Erro: Variáveis de Ambiente' : isCloudConnected ? 'Banco de Dados Conectado' : 'Modo Offline (Dados Locais)'}</span></div>
-              <p className="text-[10px] text-slate-400 leading-tight max-w-xs">ATENÇÃO: Ferramenta auxiliar. Não substitui o julgamento clínico. O autor isenta-se de responsabilidade. Uso proibido para leigos.</p>
+              <p className="text-[10px] text-slate-400 leading-tight max-w-xs">ATENÇÃO: Ferramenta auxiliar. Não substitui o julgamento clínico. O autor isenta-se de responsabilidade.</p>
             </div>
           </div>
         </div>
@@ -577,6 +618,7 @@ export default function EmergencyGuideApp() {
       </header>
 
       <main className="flex-grow max-w-6xl mx-auto px-4 py-8 space-y-8 w-full relative">
+        {/* BOTÃO FLUTUANTE DE RECEITA (SÓ SALA VERDE) */}
         {activeRoom === 'verde' && selectedPrescriptionItems.length > 0 && (
           <button onClick={() => setShowPrescriptionModal(true)} className="fixed bottom-8 right-8 z-50 bg-blue-600 hover:bg-blue-700 text-white px-6 py-4 rounded-full shadow-xl flex items-center gap-3 font-bold transition-all animate-in slide-in-from-bottom-4"><Printer size={24} /> Gerar Receita ({selectedPrescriptionItems.length})</button>
         )}
@@ -650,6 +692,7 @@ export default function EmergencyGuideApp() {
 
             <div className="grid lg:grid-cols-12 gap-6 items-start">
               <div className="lg:col-span-4 space-y-6">
+                {/* AVALIAÇÃO E ALVOS */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                    <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center gap-2"><Activity size={18} className="text-slate-500"/><h3 className="font-bold text-slate-700 text-sm uppercase">Avaliação Inicial</h3></div>
                    <div className="p-5 space-y-5 text-sm">
@@ -780,7 +823,7 @@ export default function EmergencyGuideApp() {
         </div>
       </footer>
 
-      {/* MODAL DE RECEITUÁRIO (VISUAL PROFISSIONAL) */}
+      {/* MODAL DE RECEITUÁRIO */}
       {showPrescriptionModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 print:p-0 animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-3xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] print:max-h-none print:h-full print:rounded-none print:shadow-none">
