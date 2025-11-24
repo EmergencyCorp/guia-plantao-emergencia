@@ -2,7 +2,7 @@
 // Localização: /api/generate.js na raiz do projeto.
 
 export default async function handler(req, res) {
-  // Configurações de CORS (Para permitir que seu frontend acesse esta API)
+  // Configurações de CORS
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -11,21 +11,16 @@ export default async function handler(req, res) {
     'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
   );
 
-  // Responder a preflight request (OPTIONS)
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
 
-  // Apenas aceita método POST
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
   const { searchQuery, activeRoom } = req.body;
-
-  // Recupera a chave da API das variáveis de ambiente do servidor
-  // Tenta ler GEMINI_API_KEY ou VITE_GEMINI_API_KEY (para compatibilidade)
   const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
 
   if (!apiKey) {
@@ -36,120 +31,132 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Busca vazia.' });
   }
 
-  // --- CONSTRUÇÃO DO PROMPT INTELIGENTE (O "CÉREBRO") ---
+  // --- CONSTRUÇÃO DO PROMPT DE ALTA PRECISÃO ---
   
-  const roomContext = activeRoom === 'verde' ? 'SALA VERDE (AMBULATORIAL)' : 'SALA VERMELHA (EMERGÊNCIA)';
+  const roomContext = activeRoom === 'verde' ? 'SALA VERDE (AMBULATORIAL)' : 'SALA VERMELHA (EMERGÊNCIA/UTI)';
   const lowerQuery = searchQuery.toLowerCase();
   
   let promptExtra = "";
+  let roleDefinition = "";
 
-  // 1. Lógica Específica de Sala (Receita vs Cálculo)
-  if (activeRoom === 'verde') {
+  // 1. Lógica Específica de Sala (SALA VERMELHA "HARDCORE")
+  if (activeRoom === 'vermelha') {
+    roleDefinition = "Você é um médico INTENSIVISTA e EMERGENCISTA SÊNIOR. Sua prioridade é salvar a vida do paciente com precisão absoluta e tolerância zero para erros.";
+    
     promptExtra += `
-    IMPORTANTE (SALA VERDE - RECEITUÁRIO):
-    Para cada item em "tratamento_medicamentoso", inclua o objeto "receita":
-    "receita": {
-       "uso": "USO ORAL", "USO TÓPICO", "USO RETAL", "USO OFTÁLMICO" ou "USO OTOLÓGICO",
-       "nome_comercial": "Nome + Concentração",
-       "quantidade": "Qtd total (ex: 1 caixa)",
-       "instrucoes": "Posologia amigável para o paciente (ex: Tomar 1 cp de 8/8h...)",
-       "dias_sugeridos": 5,
-       "calculo_qnt": { "frequencia_diaria": 3, "unidade": "comprimidos" }
-    }
-    Se o medicamento for de uso imediato na unidade e não para casa, "receita": null.
+    CRITICIDADE MÁXIMA (SALA VERMELHA):
+    1. **Alvos Terapêuticos (Obrigatório):** Defina metas numéricas precisas. Inclua PAM (Pressão Arterial Média), PAS/PAD, FC, FR, SatO2, Diurese (>0.5ml/kg/h), Lactato e Glicemia se pertinente.
+    2. **Exames (Obrigatório):** Seja específico. Não peça "Laboratório", peça "Gasometria Arterial c/ Lactato, Troponina US, Creatinina...". Em imagem, especifique o protocolo (ex: "Angio-TC de Tórax protocolo TEP").
+    3. **Cálculo de Doses:** - "usa_peso": true
+       - "dose_padrao_kg": número exato (ex: 0.05 a 2 mcg/kg/min para Nora, use o valor inicial padrão)
+       - "unidade_base": ex: "mcg/kg/min", "mg/kg"
+       - "concentracao_mg_ml": Concentração da solução padrão da sua instituição fictícia (ex: Nora 4mg/4ml em 250ml SG5% = 64mcg/ml -> Se for ampola pura, use a da ampola).
+       - "diluicao_contexto": Ex: "4mg em 250ml SG5% (Solução Padrão)"
     `;
   } else {
+    roleDefinition = "Você é um médico generalista experiente em pronto atendimento.";
     promptExtra += `
-    IMPORTANTE (SALA VERMELHA - CÁLCULO DE DOSES):
-    Para drogas tituláveis ou críticas (sedação, aminas, trombólise):
-    1. "usa_peso": true
-    2. "dose_padrao_kg": número (ex: 0.3 para 0.3mg/kg)
-    3. "unidade_base": "mg/kg", "mcg/kg/min" ou "UI/kg"
-    4. "concentracao_mg_ml": NÚMERO da concentração final da solução (ex: 5 para 5mg/ml)
-    5. "diluicao_contexto": Texto explicando a diluição padrão usada para o cálculo.
+    CONTEXTO SALA VERDE (AMBULATORIAL):
+    - Foco em alívio sintomático e tratamento domiciliar.
+    - "receita": OBRIGATÓRIO preencher objeto para prescrição de alta.
+    - "instrucoes": Linguagem clara para o paciente (ex: "Tomar 1 cp após o almoço").
     `;
   }
 
-  // 2. Lógica Clínica Específica
+  // 2. Lógica Clínica Específica (Protocolos Nacionais/Internacionais)
   if (lowerQuery.includes('dengue')) {
     promptExtra += `
-    CONTEXTO DENGUE (Protocolo MS Brasil):
-    - Classifique obrigatoriamente em Grupo A, B, C ou D.
-    - Hidratação: Especifique ml/kg conforme o grupo.
+    PROTOCOLO DENGUE (MS BRASIL):
+    - Classifique: Grupo A, B, C ou D.
+    - Grupo C/D (Sala Vermelha): Fase de Expansão Rápida (20ml/kg em 20 min). Reavaliação a cada etapa.
+    - Grupo A/B (Sala Verde): Hidratação oral escalonada.
     `;
   }
 
-  if (lowerQuery.includes('geca') || lowerQuery.includes('diarreia') || lowerQuery.includes('desidrat')) {
+  if (lowerQuery.includes('sepse') || lowerQuery.includes('septico')) {
     promptExtra += `
-    CONTEXTO REIDRATAÇÃO (OMS):
-    - Classifique em Plano A, B ou C.
-    - Detalhe SRO ou Ringer Lactato conforme plano.
+    PROTOCOLO SEPSE (Surviving Sepsis Campaign):
+    - Pacote de 1 hora: Lactato, Hemoculturas, Antibiótico amplo espectro, Cristaloide 30ml/kg (se hipotensão/lactato > 4), Vasopressor (se PAM < 65 pós volume).
+    `;
+  }
+
+  if (lowerQuery.includes('iam') || lowerQuery.includes('infarto') || lowerQuery.includes('scs')) {
+    promptExtra += `
+    PROTOCOLO IAM (SBC/AHA):
+    - Tempo porta-balão ou porta-agulha.
+    - Dupla antiagregação + Anticoagulação.
+    - Estatinas alta potência.
     `;
   }
 
   if (lowerQuery.includes('trauma') || lowerQuery.includes('acid') || lowerQuery.includes('poli')) {
     promptExtra += `
-    CONTEXTO TRAUMA (ATLS):
-    - OBRIGATÓRIO preencher o objeto "xabcde_trauma" com passo a passo (X, A, B, C, D, E).
+    PROTOCOLO TRAUMA (ATLS 10ª Ed):
+    - OBRIGATÓRIO preencher objeto "xabcde_trauma" com passo a passo rigoroso.
+    - X: Controle de hemorragia exsanguinante (Torniquete, Compressão).
+    - A: Via aérea definitiva + Colar cervical.
     `;
   }
 
-  const promptText = `Atue como médico especialista em emergência.
-  Gere conduta clínica para "${searchQuery}" na ${roomContext}.
+  const promptText = `${roleDefinition}
+  Gere a conduta clínica IMPECÁVEL para "${searchQuery}" na ${roomContext}.
   ${promptExtra}
   
-  REGRAS RÍGIDAS DE OUTPUT (JSON):
-  1. Retorne APENAS JSON válido. Sem markdown.
-  2. "tratamento_medicamentoso": ARRAY de objetos.
-  3. SEPARAÇÃO: Se houver apresentações diferentes (ex: Dipirona Comprimido vs Gotas), crie DOIS OBJETOS distintos no array.
-  4. "tipo": OBRIGATÓRIO. Escolha UM: ['Comprimido', 'Cápsula', 'Xarope', 'Suspensão', 'Gotas', 'Solução Oral', 'Injetável', 'Tópico', 'Inalatório', 'Supositório'].
-  5. "sugestao_uso": Texto descritivo da administração.
+  REGRAS DE FORMATO (JSON):
+  1. Retorne APENAS JSON válido.
+  2. Separe apresentações diferentes (Comprimido vs Injetável) em objetos diferentes no array "tratamento_medicamentoso".
+  3. "tipo": OBRIGATÓRIO da lista: ['Comprimido', 'Cápsula', 'Xarope', 'Suspensão', 'Gotas', 'Solução Oral', 'Injetável', 'Tópico', 'Inalatório', 'Supositório'].
+  4. "sugestao_uso": 
+     - Sala Verde: "Tomar X comp de Y/Y horas..."
+     - Sala Vermelha: "Ataque: X mg EV Bolus. Manutenção: Y mg/h em BIC."
+  5. "avaliacao_inicial.sinais_vitais_alvos": Lista de strings com ALVOS CLÍNICOS (ex: "PAM ≥ 65mmHg", "SatO2 94-98%", "Diurese ≥ 0.5ml/kg/h").
+  6. "achados_exames": Detalhe o que buscar em cada exame para confirmar o diagnóstico.
   
-  ESTRUTURA JSON:
+  ESTRUTURA JSON ESPERADA:
   {
-    "condicao": "Nome",
-    "estadiamento": "Classificação",
+    "condicao": "Nome Técnico Completo",
+    "estadiamento": "Classificação de Risco/Gravidade",
     "classificacao": "${roomContext}",
-    "resumo_clinico": "Texto técnico detalhado...",
-    "xabcde_trauma": null, // OU { "x": "...", "a": "...", ... } se for trauma
+    "resumo_clinico": "Texto técnico detalhado sobre fisiopatologia, apresentação clínica e critérios diagnósticos...",
+    "xabcde_trauma": null, // Preencher APENAS se for trauma
     "avaliacao_inicial": { 
-      "sinais_vitais_alvos": ["PAM > 65mmHg", "SatO2 > 94%"], 
-      "exames_prioridade1": ["..."], 
+      "sinais_vitais_alvos": ["PAM ≥ 65mmHg", "FC < 100bpm", "Lactato < 2mmol/L", "SatO2 > 94%"], 
+      "exames_prioridade1": ["Gasometria Arterial", "Lactato", "Hemoculturas x2"], 
       "exames_complementares": ["..."] 
     },
-    "achados_exames": { "ecg": "...", "laboratorio": "...", "imagem": "..." },
-    "criterios_gravidade": ["..."],
+    "achados_exames": { 
+      "ecg": "Descrição precisa das alterações (ex: Infra ST > 0.5mm em V5-V6)", 
+      "laboratorio": "Alterações esperadas e valores críticos", 
+      "imagem": "Padrão radiológico específico" 
+    },
+    "criterios_gravidade": ["Sinal 1", "Sinal 2"],
     "tratamento_medicamentoso": [ 
       { 
         "farmaco": "Nome + Concentração", 
-        "tipo": "Comprimido",
-        "sugestao_uso": "...",
-        "diluicao": "...", // Apenas se Injetável
-        "modo_admin": "...", // Apenas se Injetável
-        "cuidados": "...", 
-        "indicacao": "...",
-        "receita": { // APENAS SALA VERDE
-           "uso": "...",
-           "nome_comercial": "...",
-           "quantidade": "...",
-           "instrucoes": "...",
-           "dias_sugeridos": 5,
-           "calculo_qnt": { "frequencia_diaria": 0, "unidade": "..." }
-        }, 
-        "usa_peso": false, // APENAS SALA VERMELHA
-        "dose_padrao_kg": 0,
-        "unidade_base": "mg/kg",
-        "concentracao_mg_ml": 0,
-        "diluicao_contexto": "..."
+        "tipo": "Injetável",
+        "sugestao_uso": "Texto descritivo da administração...",
+        "diluicao": "Ex: 1 amp em 100ml SF0.9%", 
+        "modo_admin": "BIC / Bolus Lento", 
+        "cuidados": "Monitorizar QT, Risco de hipotensão...", 
+        "indicacao": "Indicação precisa",
+        "receita": null, // Null na sala vermelha
+        "usa_peso": true, // Se a dose depende do peso
+        "dose_padrao_kg": 0.0, // Apenas o número
+        "unidade_base": "mcg/kg/min",
+        "concentracao_mg_ml": 0.0, // Concentração final da solução
+        "diluicao_contexto": "Ex: Solução Padrão (4mg/4ml em 246ml SF)"
       } 
     ],
-    "escalonamento_terapeutico": [ { "passo": "1ª Linha", "descricao": "..." } ],
-    "medidas_gerais": ["..."],
-    "criterios_internacao": ["..."],
-    "criterios_alta": ["..."],
-    "guideline_referencia": "Fonte"
+    "escalonamento_terapeutico": [ 
+      { "passo": "1. Estabilização Inicial", "descricao": "..." },
+      { "passo": "2. Terapia Específica", "descricao": "..." }
+    ],
+    "medidas_gerais": ["Cabeceira elevada", "Jejum", "Acesso venoso calibroso"],
+    "criterios_internacao": ["Critério UTI 1", "..."],
+    "criterios_alta": ["Critério Estabilidade 1", "..."],
+    "guideline_referencia": "Fonte (Ex: Surviving Sepsis Campaign 2021)"
   }
-  Doses adulto 70kg (base).`;
+  Baseie-se em doses para adulto 70kg (padrão).`;
 
   try {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
@@ -170,7 +177,6 @@ export default async function handler(req, res) {
     const data = await response.json();
     const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    // Retorna o JSON processado para o frontend
     res.status(200).json(JSON.parse(textResponse));
 
   } catch (error) {
