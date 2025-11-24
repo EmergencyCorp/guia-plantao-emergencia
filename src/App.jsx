@@ -279,7 +279,8 @@ export default function EmergencyGuideApp() {
     }
 
     try {
-      const userId = usernameInput.toLowerCase().trim();
+      // FIX: Defensive check for usernameInput
+      const userId = (usernameInput || '').toLowerCase().trim();
       // CAMINHO EXATO ONDE O APP PROCURA:
       const path = `artifacts/${appId}/public/data/registered_users/${userId}`;
       console.log("🔍 Tentando buscar usuário em:", path);
@@ -370,7 +371,9 @@ export default function EmergencyGuideApp() {
   // --- CACHE & FAVORITES ---
 
   const getConductDocId = (query, room) => {
-    return `${query.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}_${room}`;
+    // FIX: Defensive coding to prevent "toLowerCase is not a function" error
+    const safeQuery = (query || '').toString();
+    return `${safeQuery.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}_${room}`;
   };
 
   const subscribeToFavorites = (username) => {
@@ -445,11 +448,24 @@ export default function EmergencyGuideApp() {
     if (!db) return;
     try {
       const conductsRef = collection(db, 'artifacts', appId, 'users', username, 'conducts');
-      const q = firestoreQuery(conductsRef, where("isFavorite", "==", false), orderBy("lastAccessed", "desc"));
+      
+      // FIX: Removed orderBy to avoid "The query requires an index" error.
+      // We will sort the results in memory (Client-side) instead of asking Firestore to do it.
+      const q = firestoreQuery(conductsRef, where("isFavorite", "==", false));
       
       const snapshot = await getDocs(q);
+      
       if (snapshot.size > 10) {
-        const docsToDelete = snapshot.docs.slice(10);
+        // Sort explicitly in JS to avoid index requirement
+        const docs = snapshot.docs.map(d => ({ ref: d.ref, ...d.data() }));
+        docs.sort((a, b) => {
+             const dateA = new Date(a.lastAccessed || 0);
+             const dateB = new Date(b.lastAccessed || 0);
+             return dateB - dateA; // Descending (newest first)
+        });
+
+        // Keep top 10, delete the rest
+        const docsToDelete = docs.slice(10);
         const deletePromises = docsToDelete.map(d => deleteDoc(d.ref));
         await Promise.all(deletePromises);
       }
@@ -532,7 +548,7 @@ export default function EmergencyGuideApp() {
   const showError = (msg) => { setErrorMsg(msg); setTimeout(() => setErrorMsg(''), 4000); };
 
   const getVitalIcon = (text) => {
-    const t = text.toLowerCase();
+    const t = (text || '').toLowerCase(); // FIX: Defensive coding
     if (t.includes('fc') || t.includes('bpm')) return <HeartPulse size={16} className="text-rose-500" />;
     if (t.includes('pa') || t.includes('mmhg') || t.includes('pam')) return <Activity size={16} className="text-blue-500" />;
     if (t.includes('sat') || t.includes('o2')) return <Droplet size={16} className="text-cyan-500" />;
@@ -542,7 +558,7 @@ export default function EmergencyGuideApp() {
 
   const getMedTypeIcon = (type) => {
     if (!type) return <Pill size={14} />;
-    const t = type.toLowerCase();
+    const t = (type || '').toLowerCase(); // FIX: Defensive coding
     if (t.includes('injet')) return <SyringeIcon size={14} className="text-rose-500" />;
     if (t.includes('gota') || t.includes('solu') || t.includes('xarope') || t.includes('susp')) return <Droplets size={14} className="text-blue-500" />;
     if (t.includes('comp') || t.includes('cap')) return <Tablets size={14} className="text-emerald-500" />;
@@ -553,7 +569,7 @@ export default function EmergencyGuideApp() {
 
   const getMedTypeColor = (type) => {
     if (!type) return 'bg-slate-100 text-slate-500 border-slate-200';
-    const t = type.toLowerCase();
+    const t = (type || '').toLowerCase(); // FIX: Defensive coding
     if (t.includes('injet')) return 'bg-rose-50 text-rose-700 border-rose-200';
     if (t.includes('gota') || t.includes('solu') || t.includes('xarope')) return 'bg-blue-50 text-blue-700 border-blue-200';
     if (t.includes('comp') || t.includes('cap')) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
@@ -563,8 +579,8 @@ export default function EmergencyGuideApp() {
 
   const inferMedType = (med) => {
     if (med.tipo && med.tipo !== "N/A") return med.tipo;
-    const name = med.farmaco?.toLowerCase() || "";
-    const via = med.via?.toLowerCase() || "";
+    const name = (med.farmaco || '').toLowerCase(); // FIX: Defensive coding
+    const via = (med.via || '').toLowerCase(); // FIX: Defensive coding
     if (via.includes('ev') || via.includes('iv') || via.includes('im') || via.includes('sc')) return "Injetável";
     if (name.includes('gotas')) return "Gotas";
     if (name.includes('xarope')) return "Xarope";
