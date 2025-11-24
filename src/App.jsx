@@ -1239,4 +1239,8 @@ export default function EmergencyGuideApp() {
       )}
     </div>
   );
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 394b2c9e771b5fea3c517e9167733c6acb9fecfc
