@@ -27,11 +27,25 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 
-// --- CONFIGURAÇÃO DO FIREBASE ---
-const firebaseConfig = JSON.parse(__firebase_config);
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+// --- CONFIGURAÇÃO SEGURA DO FIREBASE ---
+let app = null;
+let auth = null;
+let db = null;
+let firebaseConfig = null;
+
+try {
+  if (typeof __firebase_config !== 'undefined') {
+    firebaseConfig = JSON.parse(__firebase_config);
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
+  } else {
+    console.warn("Firebase config não encontrada. O app rodará em modo offline/demo.");
+  }
+} catch (e) {
+  console.error("Erro ao inicializar Firebase:", e);
+}
+
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
 // --- URL DO LOGO (Link direto do Google Drive) ---
@@ -68,6 +82,12 @@ export default function EmergencyGuideApp() {
 
   // --- INICIALIZAÇÃO E AUTH ---
   useEffect(() => {
+    // Se auth não foi inicializado (config ausente), não faz nada
+    if (!auth) {
+      setIsCloudConnected(false);
+      return;
+    }
+
     const initAuth = async () => {
       try {
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
