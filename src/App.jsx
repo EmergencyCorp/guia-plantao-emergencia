@@ -5,7 +5,8 @@ import {
   CheckCircle2, Thermometer, Syringe, Siren, FlaskConical, Tag, Package,
   ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save, Cloud, CloudOff, Settings, Info,
   HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine, Wind, Droplet, Timer, Skull, Printer, FilePlus, Calculator,
-  Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2, SprayCan, CalendarDays
+  Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2, SprayCan, CalendarDays,
+  Utensils, GlassWater, ShieldCheck, Zap, Info as InfoIcon, Target
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -416,9 +417,30 @@ export default function EmergencyGuideApp() {
         roleDefinition = "Você é um médico INTENSIVISTA e EMERGENCISTA SÊNIOR. Sua prioridade é salvar a vida do paciente com precisão absoluta e tolerância zero para erros.";
         promptExtra += `
         CRITICIDADE MÁXIMA (SALA VERMELHA):
-        1. **Alvos Terapêuticos (Obrigatório):** Defina metas numéricas precisas. Inclua PAM, PAS/PAD, FC, FR, SatO2, Diurese (>0.5ml/kg/h), Lactato e Glicemia.
-        2. **Exames (Obrigatório):** Seja específico.
-        3. **Cálculo de Doses:** - "usa_peso": true, "dose_padrao_kg": número exato, "unidade_base": ex: "mcg/kg/min", "concentracao_mg_ml": concentração padrão.
+        
+        **PROTOCOLOS INSTITUCIONAIS OBRIGATÓRIOS (SIGA ESTRITAMENTE ESTES PADRÕES DE DILUIÇÃO SE O MEDICAMENTO FOR SOLICITADO):**
+        1. **Noradrenalina:** 8 ampolas (4mg/4mL) + 218mL SG 5% (Total 250mL). Concentração: 128 mcg/mL.
+        2. **Dobutamina:** 4 ampolas (250mg/20mL) + 170mL SG 5% (Total 250mL). Concentração: 4000 mcg/mL.
+        3. **Nitroprussiato (Nipride):** 1 ampola (50mg/2mL) + 248mL SG 5% (Total 250mL). Concentração: 200 mcg/mL.
+        4. **Nitroglicerina (Tridil):** 1 ampola (50mg/10mL) + 240mL SG 5% (Total 250mL). Concentração: 200 mcg/mL. Dose em mcg/min.
+        5. **Vasopressina:** 1 ampola (20UI/1mL) + 100mL SF 0,9%. Concentração: 0.2 UI/mL. Dose em UI/min.
+        6. **Dopamina:** 5 ampolas (50mg/10mL) + 200mL SG 5%. Concentração: 1000 mcg/mL.
+        7. **Dexmedetomidina (Precedex):** 2 ampolas (200mcg/2mL) + 96mL SF 0,9%. Concentração: 4 mcg/mL. Dose em **mcg/kg/h**.
+        8. **Fentanyl (Manutenção):** 2 ampolas (500mcg/10mL) + 80mL SF 0,9%. Concentração: 10 mcg/mL. Dose em **mcg/kg/h**.
+        9. **Midazolam (Manutenção):** 10 ampolas (15mg/3mL) + 120mL SG 5%. Concentração: 1 mg/mL. Dose em **mg/kg/h**.
+        10. **Propofol (Manutenção):** Puro (Sem diluição). Concentração: 10 mg/mL. Dose em **mg/kg/h**.
+        11. **Esmolol:** 1 ampola (2500mg/10mL) + 240mL SG 5%. Concentração: 10 mg/mL. Dose em mcg/kg/min.
+        12. **Cisatracúrio:** 5 ampolas (10mg/5mL) + 25mL SF 0,9%. Concentração: 1 mg/mL. Dose em mcg/kg/min.
+
+        **ESTRUTURA DE PRESCRIÇÃO E CATEGORIZAÇÃO:**
+           - Categorias: "Dieta", "Hidratação", "Antibiótico", "Sintomáticos", "Profilaxia", "Terapia Específica".
+           - Para medicamentos vasoativos/sedativos listados acima, use EXATAMENTE a diluição e concentração descrita.
+           - Para **Hidratação**, se venosa, use "usa_peso": true e em "dose_padrao_kg" forneça o volume total em 24h.
+           
+        **DETALHAMENTO TÉCNICO:**
+           - "diluicao_detalhada": Copie o texto do protocolo acima se aplicável.
+           - "concentracao_mg_ml": Use o valor numérico exato do protocolo (ex: Noradrenalina = 0.128, Precedex = 0.004).
+           - "unidade_base": ATENÇÃO ÀS UNIDADES DE TEMPO! Use "mcg/kg/min", "mcg/kg/h", "mg/kg/h", "UI/min" ou "mcg/min" conforme o protocolo da droga.
         `;
       } else {
         roleDefinition = "Você é um médico generalista experiente em pronto atendimento.";
@@ -426,7 +448,6 @@ export default function EmergencyGuideApp() {
         CONTEXTO SALA VERDE (AMBULATORIAL):
         - Foco em alívio sintomático e tratamento domiciliar.
         - "receita": OBRIGATÓRIO preencher objeto para prescrição de alta.
-        - "instrucoes": Linguagem clara para o paciente.
         `;
       }
 
@@ -451,7 +472,7 @@ export default function EmergencyGuideApp() {
       1. Retorne APENAS JSON válido.
       2. Separe apresentações diferentes em objetos diferentes.
       3. "tipo" OBRIGATÓRIO: ['Comprimido', 'Cápsula', 'Xarope', 'Suspensão', 'Gotas', 'Solução Oral', 'Injetável', 'Tópico', 'Inalatório', 'Supositório'].
-      4. "sugestao_uso": Sala Verde (Instruções paciente), Sala Vermelha (Instruções adminstração).
+      4. "sugestao_uso": Sala Verde (Instruções paciente), Sala Vermelha (Instruções adminstração resumida).
       
       ESTRUTURA JSON ESPERADA:
       {
@@ -469,19 +490,22 @@ export default function EmergencyGuideApp() {
         "criterios_gravidade": ["Sinal 1", "Sinal 2"],
         "tratamento_medicamentoso": [ 
           { 
+            "categoria": "Terapia Específica", 
             "farmaco": "Nome + Concentração", 
             "tipo": "Injetável",
-            "sugestao_uso": "...",
-            "diluicao": "...", 
-            "modo_admin": "...", 
-            "cuidados": "...", 
+            "posologia": "...",
+            "diluicao_detalhada": "...",
+            "concentracao_solucao": "...",
+            "velocidade_infusao_sugerida": "...",
+            "referencia_dose": "...",
+            "cuidados_especificos": "...",
+            "tempo_infusao": "...",
             "indicacao": "...",
-            "receita": { "nome_comercial": "...", "quantidade": "...", "uso": "USO ORAL", "instrucoes": "...", "dias_sugeridos": 5, "calculo_qnt": {"frequencia_diaria": 1, "unidade": "cp"} },
+            "receita": null,
             "usa_peso": false, 
             "dose_padrao_kg": 0.0, 
-            "unidade_base": "mcg/kg/min",
-            "concentracao_mg_ml": 0.0,
-            "diluicao_contexto": "..."
+            "unidade_base": "mcg/kg/min", // ou mcg/kg/h, mg/kg/h, UI/min
+            "concentracao_mg_ml": 0.0
           } 
         ],
         "escalonamento_terapeutico": [ { "passo": "...", "descricao": "..." } ],
@@ -578,6 +602,65 @@ export default function EmergencyGuideApp() {
     return "Medicamento";
   };
 
+  // Helper para agrupar medicamentos
+  const groupMedsByCategory = (meds) => {
+    if (!meds) return {};
+    const groups = {};
+    const defaultOrder = ['Dieta', 'Hidratação', 'Terapia Específica', 'Antibiótico', 'Sintomáticos', 'Profilaxia', 'Outros'];
+    
+    meds.forEach(med => {
+      let cat = med.categoria || 'Outros';
+      // Normalização simples
+      if (cat.toLowerCase().includes('dieta')) cat = 'Dieta';
+      else if (cat.toLowerCase().includes('hidrat')) cat = 'Hidratação';
+      else if (cat.toLowerCase().includes('anti') && cat.toLowerCase().includes('bi')) cat = 'Antibiótico';
+      else if (cat.toLowerCase().includes('sintom')) cat = 'Sintomáticos';
+      else if (cat.toLowerCase().includes('profilax')) cat = 'Profilaxia';
+      else if (cat.toLowerCase().includes('espec') || cat.toLowerCase().includes('vaso') || cat.toLowerCase().includes('seda')) cat = 'Terapia Específica';
+      
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(med);
+    });
+
+    // Ordenar as chaves
+    const orderedGroups = {};
+    defaultOrder.forEach(key => {
+      if (groups[key]) orderedGroups[key] = groups[key];
+    });
+    // Adicionar categorias extras que não estavam na lista padrão
+    Object.keys(groups).forEach(key => {
+      if (!defaultOrder.includes(key) && !['Dieta', 'Hidratação', 'Antibiótico', 'Sintomáticos', 'Profilaxia', 'Terapia Específica'].includes(key)) {
+        orderedGroups[key] = groups[key];
+      }
+    });
+
+    return orderedGroups;
+  };
+
+  const getCategoryIcon = (category) => {
+    switch (category) {
+      case 'Dieta': return <Utensils size={18} />;
+      case 'Hidratação': return <GlassWater size={18} />;
+      case 'Antibiótico': return <Tablets size={18} />;
+      case 'Sintomáticos': return <Pill size={18} />;
+      case 'Profilaxia': return <ShieldCheck size={18} />;
+      case 'Terapia Específica': return <Zap size={18} />;
+      default: return <Pill size={18} />;
+    }
+  };
+
+  const getCategoryColor = (category) => {
+    switch (category) {
+      case 'Dieta': return 'text-orange-600 bg-orange-50 border-orange-200';
+      case 'Hidratação': return 'text-cyan-600 bg-cyan-50 border-cyan-200';
+      case 'Antibiótico': return 'text-rose-600 bg-rose-50 border-rose-200';
+      case 'Sintomáticos': return 'text-purple-600 bg-purple-50 border-purple-200';
+      case 'Profilaxia': return 'text-emerald-600 bg-emerald-50 border-emerald-200';
+      case 'Terapia Específica': return 'text-blue-600 bg-blue-50 border-blue-200';
+      default: return 'text-slate-600 bg-slate-50 border-slate-200';
+    }
+  };
+
   const roomConfig = {
     verde: { name: 'Sala Verde', color: 'emerald', accent: 'bg-emerald-500', border: 'border-emerald-500', text: 'text-emerald-800', light: 'bg-emerald-50', icon: <Stethoscope className="w-5 h-5" />, description: 'Ambulatorial / Baixa Complexidade' },
     vermelha: { name: 'Sala Vermelha', color: 'rose', accent: 'bg-rose-600', border: 'border-rose-600', text: 'text-rose-800', light: 'bg-rose-50', icon: <Siren className="w-5 h-5" />, description: 'Emergência / Risco de Vida' }
@@ -611,6 +694,8 @@ export default function EmergencyGuideApp() {
   }
 
   // --- RENDERIZAÇÃO: APP PRINCIPAL ---
+  const groupedMeds = conduct && activeRoom === 'vermelha' ? groupMedsByCategory(conduct.tratamento_medicamentoso) : null;
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800 selection:bg-blue-100">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
@@ -674,7 +759,7 @@ export default function EmergencyGuideApp() {
                <div><h3 className="font-bold text-slate-900 mb-1">Resumo Clínico e Fisiopatologia</h3><p className="text-slate-700 leading-relaxed text-sm">{conduct.resumo_clinico}</p></div>
             </div>
 
-            {conduct.xabcde_trauma && (
+            {conduct.xabcde_trauma && typeof conduct.xabcde_trauma === 'object' && (
               <div className="bg-orange-50 border border-orange-200 p-5 rounded-2xl">
                 <h3 className="text-orange-900 font-bold flex items-center gap-2 mb-3 uppercase tracking-wide"><Skull size={20}/> Protocolo de Trauma (ATLS - xABCDE)</h3>
                 <div className="space-y-3">{Object.entries(conduct.xabcde_trauma).map(([key, value]) => (<div key={key} className="flex gap-3 items-start bg-white/60 p-2 rounded border border-orange-100"><div className="bg-orange-600 text-white w-6 h-6 rounded flex items-center justify-center font-bold uppercase text-xs shrink-0">{key}</div><p className="text-sm text-orange-950">{value}</p></div>))}</div>
@@ -733,95 +818,181 @@ export default function EmergencyGuideApp() {
               <div className="lg:col-span-8 space-y-6">
                 <div className="space-y-4">
                    <div className="flex items-center gap-2 text-emerald-800 mb-2 px-2"><div className="bg-emerald-100 p-1.5 rounded"><Pill size={18}/></div><h3 className="font-bold text-lg">Prescrição e Conduta</h3></div>
-                   {conduct.tratamento_medicamentoso?.map((med, idx) => {
-                     const itemId = med.farmaco + (med.receita?.nome_comercial || "");
-                     const isSelected = selectedPrescriptionItems.some(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
-                     const canSelect = activeRoom === 'verde' && med.receita;
-                     const medType = inferMedType(med); 
-                     const isInjectable = medType.toLowerCase().includes('injet');
-                     
-                     let doseFinal = null;
-                     let volumeFinal = null;
-                     
-                     if (activeRoom === 'vermelha' && med.usa_peso && patientWeight && med.dose_padrao_kg) {
-                       const weight = parseFloat(patientWeight);
-                       const doseRef = parseFloat(med.dose_padrao_kg);
-                       const unit = med.unidade_base?.toLowerCase() || '';
-                       const concMgMl = parseFloat(med.concentracao_mg_ml || 0);
+                   
+                   {/* RENDERIZAÇÃO CONDICIONAL: SE FOR SALA VERMELHA E TIVER CATEGORIAS, USA O NOVO LAYOUT */}
+                   {groupedMeds ? (
+                     <div className="space-y-6">
+                        {Object.entries(groupedMeds).map(([category, meds]) => (
+                           <div key={category} className={`border rounded-2xl overflow-hidden ${getCategoryColor(category)} bg-white border-opacity-60`}>
+                              <div className={`px-4 py-2 flex items-center gap-2 font-bold text-sm uppercase border-b border-opacity-50 ${getCategoryColor(category)}`}>
+                                 {getCategoryIcon(category)} {category}
+                              </div>
+                              <div className="p-4 space-y-4">
+                                 {meds.map((med, idx) => {
+                                    const medType = inferMedType(med);
+                                    let doseFinal = null;
+                                    let volumeFinal = null;
 
-                       // Cálculo da Dose Absoluta para Exibição
-                       const totalDose = doseRef * weight;
-                       const displayUnit = med.unidade_base.replace('/kg', '').trim();
-                       doseFinal = `${totalDose.toFixed(2)} ${displayUnit}`;
+                                    if (activeRoom === 'vermelha' && med.usa_peso && patientWeight && med.dose_padrao_kg) {
+                                      const weight = parseFloat(patientWeight);
+                                      const doseRef = parseFloat(med.dose_padrao_kg);
+                                      const unit = med.unidade_base?.toLowerCase() || '';
+                                      const concMgMl = parseFloat(med.concentracao_mg_ml || 0);
+               
+                                      // Cálculo base da dose absoluta (Ex: Total de mg)
+                                      const totalDose = doseRef * weight;
+                                      const displayUnit = med.unidade_base ? med.unidade_base.replace(/\/kg.*$/, '').trim() : '';
+                                      doseFinal = `${totalDose.toFixed(2)} ${displayUnit}`;
+               
+                                      // === LÓGICA DE CÁLCULO AVANÇADA PARA BIC (mL/h) ===
+                                      
+                                      // 1. HIDRATAÇÃO (Volume Total 24h)
+                                      if (category === 'Hidratação' && med.usa_peso) {
+                                        const volume24h = totalDose; // dose_padrao_kg = ml/kg/24h
+                                        const flowRate = volume24h / 24;
+                                        volumeFinal = `Total: ${volume24h.toFixed(0)} ml/24h (Vazão: ${flowRate.toFixed(1)} ml/h)`;
+                                        doseFinal = `${doseRef} ml/kg/24h`;
+                                      } 
+                                      
+                                      // 2. CÁLCULOS ESPECÍFICOS DE VAZÃO (DROGAS)
+                                      else if (concMgMl > 0) {
+                                         // A. Unidade: mcg/kg/min (Noradrenalina, Dopamina, Dobutamina, Nipride)
+                                         // Fórmula: (Dose * Peso * 60) / (Conc_mg * 1000)
+                                         if (unit.includes('mcg') && unit.includes('min')) {
+                                            const concMcgMl = concMgMl * 1000;
+                                            const flowRate = (doseRef * weight * 60) / concMcgMl;
+                                            volumeFinal = `${flowRate.toFixed(1)} ml/h`;
+                                         } 
+                                         // B. Unidade: mcg/kg/h (Precedex, Fentanyl)
+                                         // Fórmula: (Dose * Peso) / (Conc_mg * 1000)
+                                         else if (unit.includes('mcg') && unit.includes('h') && !unit.includes('min')) {
+                                            const concMcgMl = concMgMl * 1000;
+                                            const flowRate = (doseRef * weight) / concMcgMl;
+                                            volumeFinal = `${flowRate.toFixed(1)} ml/h`;
+                                         }
+                                         // C. Unidade: mg/kg/h (Midazolam, Propofol)
+                                         // Fórmula: (Dose * Peso) / Conc_mg
+                                         else if (unit.includes('mg') && unit.includes('h') && !unit.includes('min') && !unit.includes('mcg')) {
+                                            const flowRate = (doseRef * weight) / concMgMl;
+                                            volumeFinal = `${flowRate.toFixed(1)} ml/h`;
+                                         }
+                                         // D. Unidade: UI/min (Vasopressina)
+                                         // Fórmula: (Dose_UI_min * 60) / Conc_UI_ml
+                                         else if (unit.includes('ui') && unit.includes('min')) {
+                                            // doseRef aqui é UI/min (sem peso, geralmente)
+                                            // Se usa_peso for false, weight = 1. Mas se usa_peso=true, mantemos
+                                            const doseTotalUI = med.usa_peso ? (doseRef * weight) : doseRef;
+                                            // concMgMl aqui representa UI/mL
+                                            const flowRate = (doseTotalUI * 60) / concMgMl;
+                                            volumeFinal = `${flowRate.toFixed(1)} ml/h`;
+                                            doseFinal = `${doseTotalUI} UI/min`;
+                                         }
+                                         // E. Unidade: mcg/min (Nitroglicerina/Tridil - sem peso)
+                                         else if (unit.includes('mcg') && unit.includes('min') && !unit.includes('kg')) {
+                                            const concMcgMl = concMgMl * 1000;
+                                            const flowRate = (doseRef * 60) / concMcgMl;
+                                            volumeFinal = `${flowRate.toFixed(1)} ml/h`;
+                                            doseFinal = `${doseRef} mcg/min`;
+                                         }
+                                         // Fallback: Dose Absoluta / Concentração (Bolus simples)
+                                         else {
+                                            let adjustedConc = concMgMl;
+                                            if (unit.includes('mcg')) adjustedConc = concMgMl * 1000;
+                                            const vol = totalDose / adjustedConc;
+                                            volumeFinal = `${vol.toFixed(1)} ml`;
+                                         }
+                                      }
+                                    }
 
-                       // Cálculo de Volume/Vazão
-                       if (concMgMl > 0) {
-                          if (unit.includes('mcg') && unit.includes('min')) {
-                             // FÓRMULA DE INFUSÃO CONTÍNUA:
-                             // ml/h = Dose (mcg/kg/min) x Peso (kg) x 60 / Concentração (mcg/mL)
-                             const concMcgMl = concMgMl * 1000;
-                             const flowRate = (doseRef * weight * 60) / concMcgMl;
-                             volumeFinal = `${flowRate.toFixed(1)} ml/h`;
-                          } else {
-                             // FÓRMULA DE BOLUS/DOSE ÚNICA:
-                             // ml = Dose Total / Concentração
-                             let adjustedConc = concMgMl;
-                             if (unit.includes('mcg')) adjustedConc = concMgMl * 1000; // Ajuste se a dose for em mcg
-                             const vol = totalDose / adjustedConc;
-                             volumeFinal = `${vol.toFixed(1)} ml`;
-                          }
-                       }
-                     }
+                                    return (
+                                       <div key={idx} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm relative group hover:border-blue-200 transition-all">
+                                          <div className="flex justify-between items-start mb-2">
+                                             <h4 className="font-bold text-slate-800 text-lg">{med.farmaco}</h4>
+                                             {med.via && <span className="text-[10px] font-bold bg-gray-100 text-gray-600 px-2 py-0.5 rounded border border-gray-200">{med.via}</span>}
+                                          </div>
+                                          
+                                          {/* Nova Ficha Técnica Detalhada (Apenas Vermelha) */}
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm text-slate-600 mb-3 bg-slate-50/50 p-3 rounded-lg border border-slate-100">
+                                            {med.posologia && <div className="col-span-2 flex items-start gap-2"><span className="font-bold text-slate-700 shrink-0">Posologia:</span> <span>{med.posologia}</span></div>}
+                                            {med.diluicao_detalhada && <div className="col-span-2 flex items-start gap-2 text-blue-800"><FlaskConical size={14} className="mt-0.5 shrink-0"/> <span className="font-bold shrink-0">Diluição:</span> <span>{med.diluicao_detalhada}</span></div>}
+                                            {med.concentracao_solucao && <div className="flex items-center gap-2"><span className="font-bold text-slate-700">Conc. Final:</span> <span>{med.concentracao_solucao}</span></div>}
+                                            {med.velocidade_infusao_sugerida && <div className="flex items-center gap-2 text-purple-700"><Timer size={14} className="shrink-0"/> <span className="font-bold">Vel. Inicial:</span> <span>{med.velocidade_infusao_sugerida}</span></div>}
+                                            {med.tempo_infusao && <div className="flex items-center gap-2"><Clock size={14} className="shrink-0"/> <span className="font-bold text-slate-700">Tempo:</span> <span>{med.tempo_infusao}</span></div>}
+                                            {med.referencia_dose && <div className="flex items-center gap-2 text-slate-400 text-xs"><BookOpen size={12} className="shrink-0"/> <span className="font-medium">Ref:</span> <span>{med.referencia_dose}</span></div>}
+                                            {med.cuidados_especificos && <div className="col-span-2 flex items-start gap-2 text-amber-700 bg-amber-50 p-2 rounded mt-1 border border-amber-100/50"><AlertTriangle size={14} className="mt-0.5 shrink-0"/> <span className="font-bold shrink-0">Cuidados:</span> <span>{med.cuidados_especificos}</span></div>}
+                                          </div>
 
-                     const selectedItemState = selectedPrescriptionItems.find(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
-                     const currentDays = selectedItemState ? selectedItemState.dias_tratamento : (med.receita?.dias_sugeridos || 5);
+                                          {activeRoom === 'vermelha' && med.usa_peso && (
+                                            <div className="bg-slate-100 p-3 rounded-lg border border-slate-200 text-sm mt-3 relative overflow-hidden">
+                                               <div className="absolute top-0 right-0 p-1 opacity-10"><Calculator size={40} /></div>
+                                               <div className="flex gap-2 items-center mb-1 relative z-10">
+                                                  <span className="font-bold text-slate-600 uppercase text-xs">Cálculo para {patientWeight || '...'} kg:</span>
+                                               </div>
+                                               <div className="flex gap-4 items-baseline relative z-10">
+                                                 <span className="text-slate-800 font-bold text-lg">{doseFinal || '-'}</span>
+                                                 {volumeFinal && <div className="text-blue-700 font-bold text-lg border-l border-slate-300 pl-4">{volumeFinal}</div>}
+                                               </div>
+                                               {!patientWeight && <div className="text-xs text-rose-500 mt-1 font-medium italic animate-pulse">⚠ Insira o peso do paciente acima para calcular</div>}
+                                            </div>
+                                          )}
+                                       </div>
+                                    );
+                                 })}
+                              </div>
+                           </div>
+                        ))}
+                     </div>
+                   ) : (
+                     /* RENDERIZAÇÃO PADRÃO (SALA VERDE OU SEM CATEGORIAS) */
+                     conduct.tratamento_medicamentoso?.map((med, idx) => {
+                       const itemId = med.farmaco + (med.receita?.nome_comercial || "");
+                       const isSelected = selectedPrescriptionItems.some(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
+                       const canSelect = activeRoom === 'verde' && med.receita;
+                       const medType = inferMedType(med); 
+                       const isInjectable = medType.toLowerCase().includes('injet');
+                       
+                       const selectedItemState = selectedPrescriptionItems.find(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
+                       const currentDays = selectedItemState ? selectedItemState.dias_tratamento : (med.receita?.dias_sugeridos || 5);
 
-                     return (
-                       <div 
-                         key={idx} 
-                         onClick={() => canSelect && togglePrescriptionItem(med)}
-                         className={`bg-white rounded-xl border p-5 shadow-sm transition-all relative overflow-hidden group ${canSelect ? 'cursor-pointer hover:border-blue-300 hover:shadow-md' : ''} ${isSelected ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50/30' : 'border-gray-200'}`}
-                       >
-                          <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${isSelected ? 'bg-blue-500' : 'bg-emerald-500'}`}></div>
-                          {canSelect && (<div className={`absolute top-4 right-4 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-300 text-transparent'}`}><CheckCircle2 size={14} /></div>)}
-                          
-                          <div className="absolute top-4 right-12">
-                             <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${getMedTypeColor(medType)}`}>{getMedTypeIcon(medType)} {medType}</span>
-                          </div>
-
-                          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 mb-3 pl-3 pr-20">
-                             <div>
-                                <div className="flex items-center gap-2"><h4 className="text-xl font-bold text-slate-800">{med.farmaco}</h4></div>
-                                <span className="text-sm text-slate-500 italic">{med.indicacao}</span>
-                             </div>
-                             {med.via && <span className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-100">{med.via}</span>}
-                          </div>
-                          
-                          <div className="bg-slate-50 rounded-lg p-3 ml-3 mb-3 font-mono text-sm text-slate-700 border border-slate-100"><strong className="text-slate-500 block text-xs uppercase mb-1">Sugestão de Uso / Dose:</strong>{med.sugestao_uso || med.dose}</div>
-                          
-                          {canSelect && isSelected && (
-                            <div className="ml-3 mb-3 animate-in slide-in-from-top-1" onClick={(e) => e.stopPropagation()}>
-                               <label className="text-xs font-bold text-blue-700 flex items-center gap-1 mb-1"><CalendarDays size={12} /> Duração (Dias):</label>
-                               <input type="number" min="1" className="w-20 px-2 py-1 text-sm border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-blue-900 font-bold" value={currentDays} onChange={(e) => updateItemDays(itemId, parseInt(e.target.value))} />
+                       return (
+                         <div 
+                           key={idx} 
+                           onClick={() => canSelect && togglePrescriptionItem(med)}
+                           className={`bg-white rounded-xl border p-5 shadow-sm transition-all relative overflow-hidden group ${canSelect ? 'cursor-pointer hover:border-blue-300 hover:shadow-md' : ''} ${isSelected ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50/30' : 'border-gray-200'}`}
+                         >
+                            <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${isSelected ? 'bg-blue-500' : 'bg-emerald-500'}`}></div>
+                            {canSelect && (<div className={`absolute top-4 right-4 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-300 text-transparent'}`}><CheckCircle2 size={14} /></div>)}
+                            
+                            <div className="absolute top-4 right-12">
+                               <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${getMedTypeColor(medType)}`}>{getMedTypeIcon(medType)} {medType}</span>
                             </div>
-                          )}
 
-                          {activeRoom === 'vermelha' && med.usa_peso && (
-                            <div className="bg-rose-50 rounded-lg p-3 ml-3 mb-3 border border-rose-100">
-                               <div className="flex justify-between items-center mb-1"><span className="text-xs font-bold text-rose-800 uppercase">Dose Calculada ({patientWeight || '?'}kg):</span><span className="text-[10px] text-rose-600">Ref: {med.dose_padrao_kg} {med.unidade_base}</span></div>
-                               <div className="flex gap-4">{doseFinal ? <span className="text-lg font-bold text-rose-900">{doseFinal}</span> : <span className="italic text-sm text-rose-400">Insira o peso</span>}{volumeFinal && <span className="text-lg font-bold text-rose-700 border-l pl-4 border-rose-200">Vazão: {volumeFinal}</span>}</div>
-                               {med.diluicao_contexto && <div className="text-[10px] text-rose-500 mt-1 bg-white/50 p-1 rounded">{med.diluicao_contexto}</div>}
+                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 mb-3 pl-3 pr-20">
+                               <div>
+                                  <div className="flex items-center gap-2"><h4 className="text-xl font-bold text-slate-800">{med.farmaco}</h4></div>
+                                  <span className="text-sm text-slate-500 italic">{med.indicacao}</span>
+                               </div>
+                               {med.via && <span className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-100">{med.via}</span>}
                             </div>
-                          )}
+                            
+                            <div className="bg-slate-50 rounded-lg p-3 ml-3 mb-3 font-mono text-sm text-slate-700 border border-slate-100"><strong className="text-slate-500 block text-xs uppercase mb-1">Sugestão de Uso / Dose:</strong>{med.sugestao_uso || med.dose}</div>
+                            
+                            {canSelect && isSelected && (
+                              <div className="ml-3 mb-3 animate-in slide-in-from-top-1" onClick={(e) => e.stopPropagation()}>
+                                 <label className="text-xs font-bold text-blue-700 flex items-center gap-1 mb-1"><CalendarDays size={12} /> Duração (Dias):</label>
+                                 <input type="number" min="1" className="w-20 px-2 py-1 text-sm border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-blue-900 font-bold" value={currentDays} onChange={(e) => updateItemDays(itemId, parseInt(e.target.value))} />
+                              </div>
+                            )}
 
-                          <div className="grid sm:grid-cols-2 gap-4 ml-3 text-sm">
-                             {isInjectable && med.diluicao && (<div className="flex gap-2 text-blue-700"><FlaskConical size={16} className="shrink-0 mt-0.5"/><span><strong>Diluição:</strong> {med.diluicao}</span></div>)}
-                             {isInjectable && med.modo_admin && (<div className="flex gap-2 text-purple-700"><Timer size={16} className="shrink-0 mt-0.5"/><span><strong>Infusão:</strong> {med.modo_admin} {med.tempo_infusao ? `(${med.tempo_infusao})` : ''}</span></div>)}
-                             {med.cuidados && <div className="flex gap-2 text-amber-700 col-span-2"><AlertTriangle size={16} className="shrink-0 mt-0.5"/><span><strong>Atenção:</strong> {med.cuidados}</span></div>}
-                          </div>
-                       </div>
-                     );
-                   })}
+                            <div className="grid sm:grid-cols-2 gap-4 ml-3 text-sm">
+                               {isInjectable && med.diluicao && (<div className="flex gap-2 text-blue-700"><FlaskConical size={16} className="shrink-0 mt-0.5"/><span><strong>Diluição:</strong> {med.diluicao}</span></div>)}
+                               {isInjectable && med.modo_admin && (<div className="flex gap-2 text-purple-700"><Timer size={16} className="shrink-0 mt-0.5"/><span><strong>Infusão:</strong> {med.modo_admin} {med.tempo_infusao ? `(${med.tempo_infusao})` : ''}</span></div>)}
+                               {med.cuidados && <div className="flex gap-2 text-amber-700 col-span-2"><AlertTriangle size={16} className="shrink-0 mt-0.5"/><span><strong>Atenção:</strong> {med.cuidados}</span></div>}
+                            </div>
+                         </div>
+                       );
+                     })
+                   )}
                 </div>
 
                 <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
