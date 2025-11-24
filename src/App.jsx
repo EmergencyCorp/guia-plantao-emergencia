@@ -3,7 +3,7 @@ import {
   Activity, AlertCircle, Search, Clock, Pill, FileText, Loader2, BookOpen, 
   Stethoscope, ClipboardCheck, AlertTriangle, ArrowRight, X, User, 
   CheckCircle2, Thermometer, Syringe, Siren, FlaskConical, Tag, Package,
-  ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save, Cloud, CloudOff, Settings, Info,
+  ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Save, Cloud, CloudOff, Settings, Info,
   HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine, Wind, Droplet, Timer, Skull, Printer, FilePlus, Calculator,
   Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2, SprayCan, CalendarDays
 } from 'lucide-react';
@@ -239,10 +239,11 @@ export default function EmergencyGuideApp() {
           setIsSaving(true);
           try {
             const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'notes', currentUser.username);
+            // CORREÇÃO DE SEGURANÇA: Garante que 'author' nunca seja undefined
             await setDoc(docRef, {
-              content: userNotes,
+              content: userNotes || "",
               lastUpdated: new Date().toISOString(),
-              author: currentUser.name || "Usuário",
+              author: currentUser.name || currentUser.username || "Usuário",
               username: currentUser.username
             }, { merge: true });
           } catch (error) { console.error("Erro save nuvem:", error); } 
@@ -308,16 +309,16 @@ export default function EmergencyGuideApp() {
   };
 
   const togglePrescriptionItem = (med) => {
-    if (activeRoom !== 'verde' || !med.receita_estruturada) return;
+    if (activeRoom !== 'verde' || !med.receita) return;
 
     setSelectedPrescriptionItems(prev => {
-      const itemId = med.farmaco;
-      const exists = prev.find(item => item.farmaco === itemId);
+      const itemId = med.farmaco + (med.receita?.nome_comercial || "");
+      const exists = prev.find(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
       
       if (exists) {
-        return prev.filter(item => item.farmaco !== itemId);
+        return prev.filter(item => (item.farmaco + (item.receita?.nome_comercial || "")) !== itemId);
       } else {
-        return [...prev, { ...med, dias_tratamento: 5 }];
+        return [...prev, { ...med, dias_tratamento: med.receita.dias_sugeridos || 5 }];
       }
     });
   };
@@ -325,70 +326,57 @@ export default function EmergencyGuideApp() {
   const updateItemDays = (id, days) => {
     if (days < 1) days = 1;
     setSelectedPrescriptionItems(prev => prev.map(item => {
-      if (item.farmaco === id) {
+      // ID composto para garantir unicidade
+      if ((item.farmaco + (item.receita?.nome_comercial || "")) === id) {
         return { ...item, dias_tratamento: days };
       }
       return item;
     }));
   };
 
-  // --- CÁLCULO DE RECEITUÁRIO (SALA VERDE) ---
   const calculateTotalQuantity = (item) => {
-    const rec = item.receita_estruturada;
-    if (!rec || !rec.qtd_por_dose || !rec.frequencia_diaria) return rec?.quantidade || "1 caixa";
-    const totalUnits = Math.ceil(rec.qtd_por_dose * rec.frequencia_diaria * item.dias_tratamento);
-    return `${totalUnits} ${rec.unidade_form}`;
+    const rec = item.receita;
+    if (!rec || !rec.calculo_qnt || !rec.calculo_qnt.frequencia_diaria) return rec?.quantidade || "1 caixa";
+    const totalUnits = Math.ceil(rec.calculo_qnt.qtd_por_dose * rec.calculo_qnt.frequencia_diaria * item.dias_tratamento);
+    return `${totalUnits} ${rec.calculo_qnt.unidade_form || 'unidades'}`;
   };
 
-  // --- CÁLCULO DE INFUSÃO (SALA VERMELHA) ---
   const calculateInfusion = (med) => {
-    if (!patientWeight || !med.dose_referencia || !med.concentracao_solucao) return null;
+    if (!patientWeight || !med.dose_padrao_kg || !med.concentracao_solucao) return null;
     
     const weight = parseFloat(patientWeight);
-    const doseRef = parseFloat(med.dose_referencia);
+    const doseKg = parseFloat(med.dose_padrao_kg);
     const concentration = parseFloat(med.concentracao_solucao);
+    const unit = med.unidade_base || ""; 
+
+    let totalDoseValue = doseKg * weight;
+    let doseDisplay = `${totalDoseValue.toFixed(2)}`;
     
-    const unitDose = med.unidade_dose || ""; // ex: mcg/kg/min, mg/kg/h
-    const unitConc = med.unidade_concentracao || "mg/ml"; // ex: mcg/ml, mg/ml
-
-    // 1. Descobrir a Dose Total desejada por HORA
-    // Precisamos chegar em [Massa]/Hora
-    let totalMassPerHour = 0;
-    let displayDose = `${doseRef} ${unitDose}`;
-
-    // Se tem 'kg', multiplica pelo peso
-    const dosePerPatient = unitDose.includes("kg") ? doseRef * weight : doseRef;
-
-    // Se é por 'min', multiplica por 60 para virar hora. Se já é 'h', mantém.
-    if (unitDose.includes("min")) {
-      totalMassPerHour = dosePerPatient * 60;
+    if (unit.includes("mcg")) {
+      doseDisplay += " mcg";
+      if (unit.includes("min")) doseDisplay += "/min";
+      else if (unit.includes("h")) doseDisplay += "/h";
     } else {
-      totalMassPerHour = dosePerPatient;
+      doseDisplay += " mg";
+      if (unit.includes("min")) doseDisplay += "/min";
+      else if (unit.includes("h")) doseDisplay += "/h";
     }
 
-    // 2. Normalizar as unidades de massa (Tudo para a unidade da concentração)
-    // Ex: Dose em mcg, Conc em mg -> Dose / 1000
-    let normalizedMassPerHour = totalMassPerHour;
-
-    const isDoseMcg = unitDose.includes("mcg");
-    const isConcMg = unitConc.includes("mg");
-    const isDoseMg = unitDose.includes("mg");
-    const isConcMcg = unitConc.includes("mcg");
-
-    if (isDoseMcg && isConcMg) {
-      normalizedMassPerHour = totalMassPerHour / 1000;
-    } else if (isDoseMg && isConcMcg) {
-      normalizedMassPerHour = totalMassPerHour * 1000;
+    let rateMlH = 0;
+    if (concentration > 0) {
+       let doseInMg = totalDoseValue; 
+       if (unit.includes("mcg") && med.unidade_concentracao?.includes("mg")) {
+          doseInMg = totalDoseValue / 1000;
+       } else if (unit.includes("mg") && med.unidade_concentracao?.includes("mcg")) {
+          doseInMg = totalDoseValue * 1000;
+       }
+       if (unit.includes("/min")) {
+         rateMlH = (doseInMg * 60) / concentration;
+       } else {
+         rateMlH = doseInMg / concentration;
+       }
     }
-
-    // 3. Calcular vazão (ml/h)
-    // ml/h = (Massa/h) / (Massa/ml)
-    const rate = normalizedMassPerHour / concentration;
-
-    return {
-      doseDisplay: displayDose,
-      rateMlH: rate.toFixed(1) // 1 casa decimal
-    };
+    return { doseDisplay, rateMlH: rateMlH.toFixed(1) };
   };
 
   const getConductDocId = (query, room) => {
@@ -478,7 +466,6 @@ export default function EmergencyGuideApp() {
 
     const docId = getConductDocId(searchQuery, activeRoom);
 
-    // Verifica Cache
     if (isCloudConnected && currentUser) {
       try {
         const docRef = doc(db, 'artifacts', appId, 'users', currentUser.username, 'conducts', docId);
@@ -497,7 +484,6 @@ export default function EmergencyGuideApp() {
       } catch (error) { console.error("Erro cache:", error); }
     }
 
-    // Chama API
     try {
       const response = await fetch('/api/generate', {
         method: 'POST',
@@ -762,12 +748,8 @@ export default function EmergencyGuideApp() {
 
                           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 mb-3 pl-3 pr-20">
                              <div>
-                                <div className="flex items-center gap-2">
-                                   <h4 className="text-xl font-bold text-slate-800">{med.farmaco}</h4>
-                                   {med.apresentacao && <span className="text-[10px] font-bold bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-slate-600 flex items-center gap-1"><Package size={10}/> {med.apresentacao}</span>}
-                                </div>
+                                <div className="flex items-center gap-2"><h4 className="text-xl font-bold text-slate-800">{med.farmaco}</h4></div>
                                 <span className="text-sm text-slate-500 italic">{med.indicacao}</span>
-                                {med.classe && <span className="ml-2 text-xs bg-gray-100 px-2 py-0.5 rounded text-gray-500 border border-gray-200">{med.classe}</span>}
                              </div>
                              {med.via && <span className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-100">{med.via}</span>}
                           </div>
@@ -873,6 +855,20 @@ export default function EmergencyGuideApp() {
             <div className="p-2 max-h-[60vh] overflow-y-auto bg-slate-50">
               {favorites.length === 0 ? (<div className="text-center p-8 text-slate-400 text-sm">Você ainda não tem favoritos.</div>) : (<div className="space-y-2">{favorites.map((fav) => (<div key={fav.id} className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm flex items-center justify-between group hover:border-blue-300 transition-colors"><button onClick={() => loadFavoriteConduct(fav)} className="flex-1 text-left"><div className="flex items-center gap-2"><div className={`w-2 h-2 rounded-full shrink-0 ${fav.room === 'verde' ? 'bg-emerald-500' : 'bg-rose-500'}`} /><span className="font-bold text-slate-700 text-sm">{fav.query}</span></div><span className="text-[10px] text-slate-400 ml-4">{new Date(fav.lastAccessed).toLocaleDateString()}</span></button><button onClick={(e) => { e.stopPropagation(); removeFavoriteFromList(fav.id); }} className="p-2 text-slate-300 hover:text-red-500 transition-colors" title="Remover"><Trash2 size={16} /></button></div>))}</div>)}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE BLOCO DE NOTAS */}
+      {showNotepad && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200 print:hidden">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col h-[80vh] overflow-hidden">
+            <div className="bg-gray-50 p-4 border-b border-gray-200 flex justify-between items-center">
+              <div className="flex items-center gap-3"><div className="bg-blue-100 p-2 rounded-lg text-blue-600"><Edit size={20} /></div><div><h3 className="font-bold text-slate-800 leading-none">Meu Caderno</h3><div className="flex items-center gap-2 mt-1"><span className="text-xs text-slate-500">Anotações de {currentUser?.name}</span><span className="text-gray-300">•</span>{isCloudConnected ? (<span className="flex items-center gap-1 text-[10px] text-green-600 font-medium"><Cloud size={10} /> Nuvem Ativa</span>) : (<span className="flex items-center gap-1 text-[10px] text-amber-600 font-medium"><CloudOff size={10} /> Offline</span>)}</div></div></div>
+              <button onClick={() => setShowNotepad(false)} className="p-2 hover:bg-gray-200 rounded-full text-gray-500 transition-colors"><X size={20} /></button>
+            </div>
+            <div className="flex-1 bg-yellow-50 relative"><textarea className="w-full h-full p-6 resize-none focus:outline-none text-slate-700 leading-relaxed bg-transparent text-lg font-medium font-serif" placeholder="Escreva suas anotações..." value={userNotes} onChange={handleNoteChange} style={{ backgroundImage: 'linear-gradient(transparent, transparent 31px, #e5e7eb 31px)', backgroundSize: '100% 32px', lineHeight: '32px' }} /></div>
+            <div className="p-3 bg-white border-t border-gray-200 flex justify-between items-center text-xs text-gray-500"><div className="flex items-center gap-1.5">{isSaving ? (<><Loader2 size={14} className="text-blue-600 animate-spin" /><span className="text-blue-600">Salvando...</span></>) : (<><Save size={14} className="text-green-600" /><span>{isCloudConnected ? "Salvo na nuvem" : "Salvo localmente"}</span></>)}</div><span>{userNotes.length} caracteres</span></div>
           </div>
         </div>
       )}
