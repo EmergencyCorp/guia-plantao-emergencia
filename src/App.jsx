@@ -5,7 +5,7 @@ import {
   CheckCircle2, Thermometer, Syringe, Siren, FlaskConical, Tag, Package,
   ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save, Cloud, CloudOff, Settings, Info,
   HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine, Wind, Droplet, Timer, Skull, Printer, FilePlus, Calculator,
-  Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2, SprayCan, CalendarDays, Layers
+  Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2, SprayCan, CalendarDays
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -317,7 +317,7 @@ export default function EmergencyGuideApp() {
       if (exists) {
         return prev.filter(item => item.farmaco !== itemId);
       } else {
-        return [...prev, { ...med, dias_tratamento: med.receita_estruturada.dias_sugeridos || 5 }];
+        return [...prev, { ...med, dias_tratamento: 5 }];
       }
     });
   };
@@ -332,11 +332,63 @@ export default function EmergencyGuideApp() {
     }));
   };
 
+  // --- CÁLCULO DE RECEITUÁRIO (SALA VERDE) ---
   const calculateTotalQuantity = (item) => {
     const rec = item.receita_estruturada;
     if (!rec || !rec.qtd_por_dose || !rec.frequencia_diaria) return rec?.quantidade || "1 caixa";
     const totalUnits = Math.ceil(rec.qtd_por_dose * rec.frequencia_diaria * item.dias_tratamento);
     return `${totalUnits} ${rec.unidade_form}`;
+  };
+
+  // --- CÁLCULO DE INFUSÃO (SALA VERMELHA) ---
+  const calculateInfusion = (med) => {
+    if (!patientWeight || !med.dose_referencia || !med.concentracao_solucao) return null;
+    
+    const weight = parseFloat(patientWeight);
+    const doseRef = parseFloat(med.dose_referencia);
+    const concentration = parseFloat(med.concentracao_solucao);
+    
+    const unitDose = med.unidade_dose || ""; // ex: mcg/kg/min, mg/kg/h
+    const unitConc = med.unidade_concentracao || "mg/ml"; // ex: mcg/ml, mg/ml
+
+    // 1. Descobrir a Dose Total desejada por HORA
+    // Precisamos chegar em [Massa]/Hora
+    let totalMassPerHour = 0;
+    let displayDose = `${doseRef} ${unitDose}`;
+
+    // Se tem 'kg', multiplica pelo peso
+    const dosePerPatient = unitDose.includes("kg") ? doseRef * weight : doseRef;
+
+    // Se é por 'min', multiplica por 60 para virar hora. Se já é 'h', mantém.
+    if (unitDose.includes("min")) {
+      totalMassPerHour = dosePerPatient * 60;
+    } else {
+      totalMassPerHour = dosePerPatient;
+    }
+
+    // 2. Normalizar as unidades de massa (Tudo para a unidade da concentração)
+    // Ex: Dose em mcg, Conc em mg -> Dose / 1000
+    let normalizedMassPerHour = totalMassPerHour;
+
+    const isDoseMcg = unitDose.includes("mcg");
+    const isConcMg = unitConc.includes("mg");
+    const isDoseMg = unitDose.includes("mg");
+    const isConcMcg = unitConc.includes("mcg");
+
+    if (isDoseMcg && isConcMg) {
+      normalizedMassPerHour = totalMassPerHour / 1000;
+    } else if (isDoseMg && isConcMcg) {
+      normalizedMassPerHour = totalMassPerHour * 1000;
+    }
+
+    // 3. Calcular vazão (ml/h)
+    // ml/h = (Massa/h) / (Massa/ml)
+    const rate = normalizedMassPerHour / concentration;
+
+    return {
+      doseDisplay: displayDose,
+      rateMlH: rate.toFixed(1) // 1 casa decimal
+    };
   };
 
   const getConductDocId = (query, room) => {
@@ -426,6 +478,7 @@ export default function EmergencyGuideApp() {
 
     const docId = getConductDocId(searchQuery, activeRoom);
 
+    // Verifica Cache
     if (isCloudConnected && currentUser) {
       try {
         const docRef = doc(db, 'artifacts', appId, 'users', currentUser.username, 'conducts', docId);
@@ -444,6 +497,7 @@ export default function EmergencyGuideApp() {
       } catch (error) { console.error("Erro cache:", error); }
     }
 
+    // Chama API
     try {
       const response = await fetch('/api/generate', {
         method: 'POST',
@@ -525,43 +579,6 @@ export default function EmergencyGuideApp() {
   const roomConfig = {
     verde: { name: 'Sala Verde', color: 'emerald', accent: 'bg-emerald-500', border: 'border-emerald-500', text: 'text-emerald-800', light: 'bg-emerald-50', icon: <Stethoscope className="w-5 h-5" />, description: 'Ambulatorial / Baixa Complexidade' },
     vermelha: { name: 'Sala Vermelha', color: 'rose', accent: 'bg-rose-600', border: 'border-rose-600', text: 'text-rose-800', light: 'bg-rose-50', icon: <Siren className="w-5 h-5" />, description: 'Emergência / Risco de Vida' }
-  };
-
-  const calculateDose = (med) => {
-    if (!patientWeight || !med.dose_padrao_kg || !med.concentracao_solucao) return null;
-    const weight = parseFloat(patientWeight);
-    const doseKg = parseFloat(med.dose_padrao_kg);
-    const concentration = parseFloat(med.concentracao_solucao);
-    const unit = med.unidade_base || ""; 
-
-    let totalDoseValue = doseKg * weight;
-    let doseDisplay = `${totalDoseValue.toFixed(2)}`;
-    
-    if (unit.includes("mcg")) {
-      doseDisplay += " mcg";
-      if (unit.includes("min")) doseDisplay += "/min";
-      else if (unit.includes("h")) doseDisplay += "/h";
-    } else {
-      doseDisplay += " mg";
-      if (unit.includes("min")) doseDisplay += "/min";
-      else if (unit.includes("h")) doseDisplay += "/h";
-    }
-
-    let rateMlH = 0;
-    if (concentration > 0) {
-       let doseInMg = totalDoseValue; 
-       if (unit.includes("mcg") && med.unidade_concentracao?.includes("mg")) {
-          doseInMg = totalDoseValue / 1000;
-       } else if (unit.includes("mg") && med.unidade_concentracao?.includes("mcg")) {
-          doseInMg = totalDoseValue * 1000;
-       }
-       if (unit.includes("/min")) {
-         rateMlH = (doseInMg * 60) / concentration;
-       } else {
-         rateMlH = doseInMg / concentration;
-       }
-    }
-    return { doseDisplay, rateMlH: rateMlH.toFixed(1) };
   };
 
   if (!currentUser) {
@@ -712,9 +729,9 @@ export default function EmergencyGuideApp() {
                 <div className="space-y-4">
                    <div className="flex items-center gap-2 text-emerald-800 mb-2 px-2"><div className="bg-emerald-100 p-1.5 rounded"><Pill size={18}/></div><h3 className="font-bold text-lg">Prescrição e Conduta</h3></div>
                    {conduct.tratamento_medicamentoso?.map((med, idx) => {
-                     const itemId = med.farmaco + (med.receita_estruturada?.nome_completo || "");
-                     const isSelected = selectedPrescriptionItems.some(item => (item.farmaco + (item.receita_estruturada?.nome_completo || "")) === itemId);
-                     const canSelect = activeRoom === 'verde' && med.receita_estruturada;
+                     const itemId = med.farmaco + (med.receita?.nome_comercial || "");
+                     const isSelected = selectedPrescriptionItems.some(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
+                     const canSelect = activeRoom === 'verde' && med.receita;
                      const medType = inferMedType(med); 
                      const isInjectable = medType.toLowerCase().includes('injet');
                      
@@ -722,16 +739,13 @@ export default function EmergencyGuideApp() {
                      let volumeFinal = null;
                      
                      if (activeRoom === 'vermelha' && med.usa_peso && patientWeight && med.dose_padrao_kg) {
-                       const doseNum = parseFloat(med.dose_padrao_kg) * parseFloat(patientWeight);
-                       doseFinal = doseNum.toFixed(1) + " " + med.unidade_base.split('/')[0];
-                       if (med.concentracao_mg_ml) {
-                         const vol = doseNum / parseFloat(med.concentracao_mg_ml);
-                         volumeFinal = vol.toFixed(1) + " ml";
-                       }
+                       const dose = calculateDose(med);
+                       doseFinal = dose?.doseDisplay;
+                       volumeFinal = dose?.rateMlH ? dose.rateMlH + " ml/h" : null;
                      }
 
-                     const selectedItemState = selectedPrescriptionItems.find(item => (item.farmaco + (item.receita_estruturada?.nome_completo || "")) === itemId);
-                     const currentDays = selectedItemState ? selectedItemState.dias_tratamento : (med.receita_estruturada?.dias_sugeridos || 5);
+                     const selectedItemState = selectedPrescriptionItems.find(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
+                     const currentDays = selectedItemState ? selectedItemState.dias_tratamento : (med.receita?.dias_sugeridos || 5);
 
                      return (
                        <div 
@@ -748,7 +762,10 @@ export default function EmergencyGuideApp() {
 
                           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 mb-3 pl-3 pr-20">
                              <div>
-                                <div className="flex items-center gap-2"><h4 className="text-xl font-bold text-slate-800">{med.farmaco}</h4></div>
+                                <div className="flex items-center gap-2">
+                                   <h4 className="text-xl font-bold text-slate-800">{med.farmaco}</h4>
+                                   {med.apresentacao && <span className="text-[10px] font-bold bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-slate-600 flex items-center gap-1"><Package size={10}/> {med.apresentacao}</span>}
+                                </div>
                                 <span className="text-sm text-slate-500 italic">{med.indicacao}</span>
                                 {med.classe && <span className="ml-2 text-xs bg-gray-100 px-2 py-0.5 rounded text-gray-500 border border-gray-200">{med.classe}</span>}
                              </div>
@@ -824,7 +841,7 @@ export default function EmergencyGuideApp() {
               <div className="flex-1 space-y-8">
                 {['USO ORAL', 'USO TÓPICO', 'USO RETAL', 'USO INALATÓRIO', 'USO OFTÁLMICO', 'USO OTOLÓGICO', 'OUTROS / USO GERAL'].map((usoType) => {
                   const items = selectedPrescriptionItems.filter(item => {
-                    const itemUso = item.receita_estruturada?.via?.toUpperCase() || "USO ORAL";
+                    const itemUso = item.receita?.uso?.toUpperCase() || "USO ORAL";
                     if (usoType === 'OUTROS / USO GERAL') {
                        return !itemUso.includes('ORAL') && !itemUso.includes('TÓPICO') && !itemUso.includes('RETAL') && !itemUso.includes('INAL') && !itemUso.includes('OFT') && !itemUso.includes('OTOL');
                     }
@@ -834,7 +851,7 @@ export default function EmergencyGuideApp() {
                   return (
                     <div key={usoType}>
                       <div className="flex items-center gap-4 mb-4"><h3 className="font-bold text-lg underline decoration-2 underline-offset-4">{usoType}</h3></div>
-                      <ul className="space-y-6 list-none">{items.map((item, index) => (<li key={index} className="relative pl-6"><span className="absolute left-0 top-0 font-bold text-lg">{index + 1}.</span><div className="flex items-end mb-1 w-full"><span className="font-bold text-xl">{item.receita_estruturada?.nome_completo || item.farmaco}</span><div className="flex-1 mx-2 border-b-2 border-dotted border-slate-400 mb-1.5"></div><span className="font-bold text-lg whitespace-nowrap">{calculateTotalQuantity(item)}</span></div><p className="text-base leading-relaxed text-slate-800 mt-1 pl-2 border-l-4 border-slate-200">{item.receita_estruturada?.instrucao_box}</p></li>))}</ul>
+                      <ul className="space-y-6 list-none">{items.map((item, index) => (<li key={index} className="relative pl-6"><span className="absolute left-0 top-0 font-bold text-lg">{index + 1}.</span><div className="flex items-end mb-1 w-full"><span className="font-bold text-xl">{item.receita.nome_comercial || item.farmaco}</span><div className="flex-1 mx-2 border-b-2 border-dotted border-slate-400 mb-1.5"></div><span className="font-bold text-lg whitespace-nowrap">{calculateTotalQuantity(item)}</span></div><p className="text-base leading-relaxed text-slate-800 mt-1 pl-2 border-l-4 border-slate-200">{item.receita.instrucoes}</p></li>))}</ul>
                     </div>
                   )
                 })}
