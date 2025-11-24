@@ -5,7 +5,7 @@ import {
   CheckCircle2, Thermometer, Syringe, Siren, FlaskConical, Tag, Package,
   ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save, Cloud, CloudOff, Settings, Info,
   HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine, Wind, Droplet, Timer, Skull, Printer, FilePlus, Calculator,
-  Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2, SprayCan, CalendarDays
+  Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2, SprayCan, CalendarDays, Layers
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -308,34 +308,35 @@ export default function EmergencyGuideApp() {
   };
 
   const togglePrescriptionItem = (med) => {
-    if (activeRoom !== 'verde' || !med.receita) return;
+    if (activeRoom !== 'verde' || !med.receita_estruturada) return;
 
     setSelectedPrescriptionItems(prev => {
-      const itemId = med.farmaco + (med.receita?.nome_comercial || "");
-      const exists = prev.find(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
+      const itemId = med.farmaco;
+      const exists = prev.find(item => item.farmaco === itemId);
       
       if (exists) {
-        return prev.filter(item => (item.farmaco + (item.receita?.nome_comercial || "")) !== itemId);
+        return prev.filter(item => item.farmaco !== itemId);
       } else {
-        return [...prev, { ...med, dias_tratamento: med.receita.dias_sugeridos || 5 }];
+        return [...prev, { ...med, dias_tratamento: med.receita_estruturada.dias_sugeridos || 5 }];
       }
     });
   };
 
   const updateItemDays = (id, days) => {
-    const newItems = [...selectedPrescriptionItems];
-    const index = newItems.findIndex(item => (item.farmaco + (item.receita?.nome_comercial || "")) === id);
-    
-    if (index !== -1) {
-      newItems[index].dias_tratamento = days;
-      const item = newItems[index];
-      if (item.receita?.calculo_qnt?.frequencia_diaria && days > 0) {
-        const total = Math.ceil(item.receita.calculo_qnt.frequencia_diaria * days);
-        const unidade = item.receita.calculo_qnt.unidade || 'unidades';
-        item.receita.quantidade = `${total} ${unidade}`;
+    if (days < 1) days = 1;
+    setSelectedPrescriptionItems(prev => prev.map(item => {
+      if (item.farmaco === id) {
+        return { ...item, dias_tratamento: days };
       }
-      setSelectedPrescriptionItems(newItems);
-    }
+      return item;
+    }));
+  };
+
+  const calculateTotalQuantity = (item) => {
+    const rec = item.receita_estruturada;
+    if (!rec || !rec.qtd_por_dose || !rec.frequencia_diaria) return rec?.quantidade || "1 caixa";
+    const totalUnits = Math.ceil(rec.qtd_por_dose * rec.frequencia_diaria * item.dias_tratamento);
+    return `${totalUnits} ${rec.unidade_form}`;
   };
 
   const getConductDocId = (query, room) => {
@@ -425,7 +426,6 @@ export default function EmergencyGuideApp() {
 
     const docId = getConductDocId(searchQuery, activeRoom);
 
-    // Verifica Cache
     if (isCloudConnected && currentUser) {
       try {
         const docRef = doc(db, 'artifacts', appId, 'users', currentUser.username, 'conducts', docId);
@@ -444,7 +444,6 @@ export default function EmergencyGuideApp() {
       } catch (error) { console.error("Erro cache:", error); }
     }
 
-    // Chama API
     try {
       const response = await fetch('/api/generate', {
         method: 'POST',
@@ -528,47 +527,41 @@ export default function EmergencyGuideApp() {
     vermelha: { name: 'Sala Vermelha', color: 'rose', accent: 'bg-rose-600', border: 'border-rose-600', text: 'text-rose-800', light: 'bg-rose-50', icon: <Siren className="w-5 h-5" />, description: 'Emergência / Risco de Vida' }
   };
 
-  // --- CÁLCULO DE BIC E DOSES ---
   const calculateDose = (med) => {
-    if (!patientWeight || !med.dose_padrao_kg) return null;
-    
+    if (!patientWeight || !med.dose_padrao_kg || !med.concentracao_solucao) return null;
     const weight = parseFloat(patientWeight);
     const doseKg = parseFloat(med.dose_padrao_kg);
-    const concentration = parseFloat(med.concentracao_mg_ml);
-    const unit = med.unidade_base; // ex: mcg/kg/min, mg/kg, mcg/kg/h
+    const concentration = parseFloat(med.concentracao_solucao);
+    const unit = med.unidade_base || ""; 
 
-    // Cálculo da DOSE TOTAL (O que o paciente precisa receber)
     let totalDoseValue = doseKg * weight;
-    let doseDisplay = "";
-
+    let doseDisplay = `${totalDoseValue.toFixed(2)}`;
+    
     if (unit.includes("mcg")) {
-      doseDisplay = `${totalDoseValue.toFixed(1)} mcg`;
-      // Se for mcg/min, mostra por minuto. Se for mcg/kg, é bolus.
+      doseDisplay += " mcg";
       if (unit.includes("min")) doseDisplay += "/min";
       else if (unit.includes("h")) doseDisplay += "/h";
     } else {
-      doseDisplay = `${totalDoseValue.toFixed(1)} mg`;
+      doseDisplay += " mg";
       if (unit.includes("min")) doseDisplay += "/min";
       else if (unit.includes("h")) doseDisplay += "/h";
     }
 
-    // Cálculo da VAZÃO DA BOMBA (ml/h)
-    // Fórmula básica: (Dose desejada * Peso * 60 (se min)) / Concentração da solução
-    let rateMlH = null;
+    let rateMlH = 0;
     if (concentration > 0) {
-       let doseInMg = totalDoseValue; // Assume mg
-       if (unit.includes("mcg")) doseInMg = totalDoseValue / 1000; // Converte para mg se a conc for mg/ml
-
-       if (unit.includes("min")) {
-         // Dose em min -> ml/h = (mg/min * 60) / (mg/ml)
+       let doseInMg = totalDoseValue; 
+       if (unit.includes("mcg") && med.unidade_concentracao?.includes("mg")) {
+          doseInMg = totalDoseValue / 1000;
+       } else if (unit.includes("mg") && med.unidade_concentracao?.includes("mcg")) {
+          doseInMg = totalDoseValue * 1000;
+       }
+       if (unit.includes("/min")) {
          rateMlH = (doseInMg * 60) / concentration;
        } else {
-         // Dose em h ou bolus -> ml = mg / (mg/ml)
          rateMlH = doseInMg / concentration;
        }
     }
-
-    return { doseDisplay, rateMlH: rateMlH ? rateMlH.toFixed(1) : null };
+    return { doseDisplay, rateMlH: rateMlH.toFixed(1) };
   };
 
   if (!currentUser) {
@@ -589,7 +582,7 @@ export default function EmergencyGuideApp() {
             </form>
             <div className="text-center flex flex-col items-center gap-3 pt-2 border-t border-gray-100">
               <div className={`flex items-center justify-center gap-2 text-[10px] px-3 py-1.5 rounded-full mx-auto w-fit ${configStatus === 'missing' ? 'bg-red-50 text-red-700' : isCloudConnected ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>{configStatus === 'missing' ? <Settings size={12}/> : isCloudConnected ? <Cloud size={12}/> : <CloudOff size={12}/>}<span>{configStatus === 'missing' ? 'Erro: Variáveis de Ambiente' : isCloudConnected ? 'Banco de Dados Conectado' : 'Modo Offline (Dados Locais)'}</span></div>
-              <p className="text-[10px] text-slate-400 leading-tight max-w-xs">ATENÇÃO: Ferramenta auxiliar. Não substitui o julgamento clínico. O autor isenta-se de responsabilidade. Uso proibido para leigos.</p>
+              <p className="text-[10px] text-slate-400 leading-tight max-w-xs">ATENÇÃO: Ferramenta auxiliar. Não substitui o julgamento clínico. O autor isenta-se de responsabilidade.</p>
             </div>
           </div>
         </div>
@@ -719,9 +712,9 @@ export default function EmergencyGuideApp() {
                 <div className="space-y-4">
                    <div className="flex items-center gap-2 text-emerald-800 mb-2 px-2"><div className="bg-emerald-100 p-1.5 rounded"><Pill size={18}/></div><h3 className="font-bold text-lg">Prescrição e Conduta</h3></div>
                    {conduct.tratamento_medicamentoso?.map((med, idx) => {
-                     const itemId = med.farmaco + (med.receita?.nome_comercial || "");
-                     const isSelected = selectedPrescriptionItems.some(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
-                     const canSelect = activeRoom === 'verde' && med.receita;
+                     const itemId = med.farmaco + (med.receita_estruturada?.nome_completo || "");
+                     const isSelected = selectedPrescriptionItems.some(item => (item.farmaco + (item.receita_estruturada?.nome_completo || "")) === itemId);
+                     const canSelect = activeRoom === 'verde' && med.receita_estruturada;
                      const medType = inferMedType(med); 
                      const isInjectable = medType.toLowerCase().includes('injet');
                      
@@ -729,13 +722,16 @@ export default function EmergencyGuideApp() {
                      let volumeFinal = null;
                      
                      if (activeRoom === 'vermelha' && med.usa_peso && patientWeight && med.dose_padrao_kg) {
-                       const dose = calculateDose(med);
-                       doseFinal = dose?.doseDisplay;
-                       volumeFinal = dose?.rateMlH ? dose.rateMlH + " ml/h" : null;
+                       const doseNum = parseFloat(med.dose_padrao_kg) * parseFloat(patientWeight);
+                       doseFinal = doseNum.toFixed(1) + " " + med.unidade_base.split('/')[0];
+                       if (med.concentracao_mg_ml) {
+                         const vol = doseNum / parseFloat(med.concentracao_mg_ml);
+                         volumeFinal = vol.toFixed(1) + " ml";
+                       }
                      }
 
-                     const selectedItemState = selectedPrescriptionItems.find(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
-                     const currentDays = selectedItemState ? selectedItemState.dias_tratamento : (med.receita?.dias_sugeridos || 5);
+                     const selectedItemState = selectedPrescriptionItems.find(item => (item.farmaco + (item.receita_estruturada?.nome_completo || "")) === itemId);
+                     const currentDays = selectedItemState ? selectedItemState.dias_tratamento : (med.receita_estruturada?.dias_sugeridos || 5);
 
                      return (
                        <div 
@@ -754,6 +750,7 @@ export default function EmergencyGuideApp() {
                              <div>
                                 <div className="flex items-center gap-2"><h4 className="text-xl font-bold text-slate-800">{med.farmaco}</h4></div>
                                 <span className="text-sm text-slate-500 italic">{med.indicacao}</span>
+                                {med.classe && <span className="ml-2 text-xs bg-gray-100 px-2 py-0.5 rounded text-gray-500 border border-gray-200">{med.classe}</span>}
                              </div>
                              {med.via && <span className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-100">{med.via}</span>}
                           </div>
@@ -813,7 +810,7 @@ export default function EmergencyGuideApp() {
         </div>
       </footer>
 
-      {/* MODAL DE RECEITUÁRIO */}
+      {/* MODAL DE RECEITUÁRIO (VISUAL PROFISSIONAL) */}
       {showPrescriptionModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 print:p-0 animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-3xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] print:max-h-none print:h-full print:rounded-none print:shadow-none">
@@ -825,13 +822,19 @@ export default function EmergencyGuideApp() {
               <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none"><Activity size={400} /></div>
               <header className="flex flex-col items-center border-b-4 border-double border-slate-800 pb-6 mb-8"><h1 className="text-3xl font-bold tracking-widest uppercase text-slate-900">{currentUser?.name || "NOME DO MÉDICO"}</h1><div className="flex items-center gap-2 mt-2 text-sm font-bold text-slate-600 uppercase tracking-wide"><span>CRM: {currentUser?.crm || "00000/UF"}</span><span>•</span><span>CLÍNICA MÉDICA</span></div></header>
               <div className="flex-1 space-y-8">
-                {['USO ORAL', 'USO TÓPICO', 'USO RETAL', 'USO INALATÓRIO', 'USO OFTÁLMICO', 'USO OTOLÓGICO'].map((usoType) => {
-                  const items = selectedPrescriptionItems.filter(item => item.receita?.uso?.toUpperCase().includes(usoType.replace('USO ', '')) || (usoType === 'USO ORAL' && !item.receita?.uso));
+                {['USO ORAL', 'USO TÓPICO', 'USO RETAL', 'USO INALATÓRIO', 'USO OFTÁLMICO', 'USO OTOLÓGICO', 'OUTROS / USO GERAL'].map((usoType) => {
+                  const items = selectedPrescriptionItems.filter(item => {
+                    const itemUso = item.receita_estruturada?.via?.toUpperCase() || "USO ORAL";
+                    if (usoType === 'OUTROS / USO GERAL') {
+                       return !itemUso.includes('ORAL') && !itemUso.includes('TÓPICO') && !itemUso.includes('RETAL') && !itemUso.includes('INAL') && !itemUso.includes('OFT') && !itemUso.includes('OTOL');
+                    }
+                    return itemUso.includes(usoType.replace('USO ', ''));
+                  });
                   if (items.length === 0) return null;
                   return (
                     <div key={usoType}>
                       <div className="flex items-center gap-4 mb-4"><h3 className="font-bold text-lg underline decoration-2 underline-offset-4">{usoType}</h3></div>
-                      <ul className="space-y-6 list-none">{items.map((item, index) => (<li key={index} className="relative pl-6"><span className="absolute left-0 top-0 font-bold text-lg">{index + 1}.</span><div className="flex items-end mb-1 w-full"><span className="font-bold text-xl">{item.receita.nome_comercial || item.farmaco}</span><div className="flex-1 mx-2 border-b-2 border-dotted border-slate-400 mb-1.5"></div><span className="font-bold text-lg whitespace-nowrap">{item.receita.quantidade}</span></div><p className="text-base leading-relaxed text-slate-800 mt-1 pl-2 border-l-4 border-slate-200">{item.receita.instrucoes}</p></li>))}</ul>
+                      <ul className="space-y-6 list-none">{items.map((item, index) => (<li key={index} className="relative pl-6"><span className="absolute left-0 top-0 font-bold text-lg">{index + 1}.</span><div className="flex items-end mb-1 w-full"><span className="font-bold text-xl">{item.receita_estruturada?.nome_completo || item.farmaco}</span><div className="flex-1 mx-2 border-b-2 border-dotted border-slate-400 mb-1.5"></div><span className="font-bold text-lg whitespace-nowrap">{calculateTotalQuantity(item)}</span></div><p className="text-base leading-relaxed text-slate-800 mt-1 pl-2 border-l-4 border-slate-200">{item.receita_estruturada?.instrucao_box}</p></li>))}</ul>
                     </div>
                   )
                 })}
