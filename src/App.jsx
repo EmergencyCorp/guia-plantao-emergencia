@@ -212,7 +212,7 @@ export default function EmergencyGuideApp() {
       if (!currentUser) return;
       const newEntry = { query: term, room, timestamp: new Date().toISOString() };
       const hist = recentSearches.filter(s => s.query.toLowerCase() !== term.toLowerCase());
-      const updated = [newEntry, ...hist].slice(10);
+      const updated = [newEntry, ...hist].slice(0, 10);
       setRecentSearches(updated);
       localStorage.setItem(`history_${currentUser.username}`, JSON.stringify(updated));
   
@@ -279,8 +279,7 @@ export default function EmergencyGuideApp() {
     }
 
     try {
-      // FIX: Defensive check for usernameInput
-      const userId = (usernameInput || '').toLowerCase().trim();
+      const userId = usernameInput.toLowerCase().trim();
       // CAMINHO EXATO ONDE O APP PROCURA:
       const path = `artifacts/${appId}/public/data/registered_users/${userId}`;
       console.log("🔍 Tentando buscar usuário em:", path);
@@ -353,17 +352,15 @@ export default function EmergencyGuideApp() {
     const index = newItems.findIndex(item => (item.farmaco + (item.receita?.nome_comercial || "")) === id);
     
     if (index !== -1) {
-      // Cria uma cópia rasa do item para garantir que a atualização de estado seja detectada
-      const updatedItem = { ...newItems[index], dias_tratamento: days };
+      newItems[index].dias_tratamento = days;
       
-      if (updatedItem.receita?.calculo_qnt?.frequencia_diaria && days > 0) {
-        const total = Math.ceil(updatedItem.receita.calculo_qnt.frequencia_diaria * days);
-        const unidade = updatedItem.receita.calculo_qnt.unidade || 'unidades';
-        // Atualiza a quantidade se possível (cria cópia da receita para evitar mutação direta profunda)
-        updatedItem.receita = { ...updatedItem.receita, quantidade: `${total} ${unidade}` };
+      const item = newItems[index];
+      if (item.receita?.calculo_qnt?.frequencia_diaria && days > 0) {
+        const total = Math.ceil(item.receita.calculo_qnt.frequencia_diaria * days);
+        const unidade = item.receita.calculo_qnt.unidade || 'unidades';
+        item.receita.quantidade = `${total} ${unidade}`;
       }
       
-      newItems[index] = updatedItem;
       setSelectedPrescriptionItems(newItems);
     }
   };
@@ -371,9 +368,7 @@ export default function EmergencyGuideApp() {
   // --- CACHE & FAVORITES ---
 
   const getConductDocId = (query, room) => {
-    // FIX: Defensive coding to prevent "toLowerCase is not a function" error
-    const safeQuery = (query || '').toString();
-    return `${safeQuery.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}_${room}`;
+    return `${query.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}_${room}`;
   };
 
   const subscribeToFavorites = (username) => {
@@ -448,24 +443,11 @@ export default function EmergencyGuideApp() {
     if (!db) return;
     try {
       const conductsRef = collection(db, 'artifacts', appId, 'users', username, 'conducts');
-      
-      // FIX: Removed orderBy to avoid "The query requires an index" error.
-      // We will sort the results in memory (Client-side) instead of asking Firestore to do it.
-      const q = firestoreQuery(conductsRef, where("isFavorite", "==", false));
+      const q = firestoreQuery(conductsRef, where("isFavorite", "==", false), orderBy("lastAccessed", "desc"));
       
       const snapshot = await getDocs(q);
-      
       if (snapshot.size > 10) {
-        // Sort explicitly in JS to avoid index requirement
-        const docs = snapshot.docs.map(d => ({ ref: d.ref, ...d.data() }));
-        docs.sort((a, b) => {
-             const dateA = new Date(a.lastAccessed || 0);
-             const dateB = new Date(b.lastAccessed || 0);
-             return dateB - dateA; // Descending (newest first)
-        });
-
-        // Keep top 10, delete the rest
-        const docsToDelete = docs.slice(10);
+        const docsToDelete = snapshot.docs.slice(10);
         const deletePromises = docsToDelete.map(d => deleteDoc(d.ref));
         await Promise.all(deletePromises);
       }
@@ -548,7 +530,7 @@ export default function EmergencyGuideApp() {
   const showError = (msg) => { setErrorMsg(msg); setTimeout(() => setErrorMsg(''), 4000); };
 
   const getVitalIcon = (text) => {
-    const t = (text || '').toLowerCase(); // FIX: Defensive coding
+    const t = text.toLowerCase();
     if (t.includes('fc') || t.includes('bpm')) return <HeartPulse size={16} className="text-rose-500" />;
     if (t.includes('pa') || t.includes('mmhg') || t.includes('pam')) return <Activity size={16} className="text-blue-500" />;
     if (t.includes('sat') || t.includes('o2')) return <Droplet size={16} className="text-cyan-500" />;
@@ -558,7 +540,7 @@ export default function EmergencyGuideApp() {
 
   const getMedTypeIcon = (type) => {
     if (!type) return <Pill size={14} />;
-    const t = (type || '').toLowerCase(); // FIX: Defensive coding
+    const t = type.toLowerCase();
     if (t.includes('injet')) return <SyringeIcon size={14} className="text-rose-500" />;
     if (t.includes('gota') || t.includes('solu') || t.includes('xarope') || t.includes('susp')) return <Droplets size={14} className="text-blue-500" />;
     if (t.includes('comp') || t.includes('cap')) return <Tablets size={14} className="text-emerald-500" />;
@@ -569,7 +551,7 @@ export default function EmergencyGuideApp() {
 
   const getMedTypeColor = (type) => {
     if (!type) return 'bg-slate-100 text-slate-500 border-slate-200';
-    const t = (type || '').toLowerCase(); // FIX: Defensive coding
+    const t = type.toLowerCase();
     if (t.includes('injet')) return 'bg-rose-50 text-rose-700 border-rose-200';
     if (t.includes('gota') || t.includes('solu') || t.includes('xarope')) return 'bg-blue-50 text-blue-700 border-blue-200';
     if (t.includes('comp') || t.includes('cap')) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
@@ -579,8 +561,8 @@ export default function EmergencyGuideApp() {
 
   const inferMedType = (med) => {
     if (med.tipo && med.tipo !== "N/A") return med.tipo;
-    const name = (med.farmaco || '').toLowerCase(); // FIX: Defensive coding
-    const via = (med.via || '').toLowerCase(); // FIX: Defensive coding
+    const name = med.farmaco?.toLowerCase() || "";
+    const via = med.via?.toLowerCase() || "";
     if (via.includes('ev') || via.includes('iv') || via.includes('im') || via.includes('sc')) return "Injetável";
     if (name.includes('gotas')) return "Gotas";
     if (name.includes('xarope')) return "Xarope";
@@ -755,18 +737,10 @@ export default function EmergencyGuideApp() {
                      
                      if (activeRoom === 'vermelha' && med.usa_peso && patientWeight && med.dose_padrao_kg) {
                        const doseNum = parseFloat(med.dose_padrao_kg) * parseFloat(patientWeight);
-                       const unit = med.unidade_base?.toLowerCase() || '';
-                       const isMin = unit.includes('/min');
-                       
                        doseFinal = doseNum.toFixed(1) + " " + med.unidade_base.split('/')[0];
-                       
                        if (med.concentracao_mg_ml) {
                          const vol = doseNum / parseFloat(med.concentracao_mg_ml);
-                         if (isMin) {
-                             volumeFinal = (vol * 60).toFixed(1) + " ml/h";
-                         } else {
-                             volumeFinal = vol.toFixed(1) + " ml";
-                         }
+                         volumeFinal = vol.toFixed(1) + " ml";
                        }
                      }
 
@@ -867,7 +841,7 @@ export default function EmergencyGuideApp() {
                   return (
                     <div key={usoType}>
                       <div className="flex items-center gap-4 mb-4"><h3 className="font-bold text-lg underline decoration-2 underline-offset-4">{usoType}</h3></div>
-                      <ul className="space-y-6 list-none">{items.map((item, index) => (<li key={index} className="relative pl-6"><span className="absolute left-0 top-0 font-bold text-lg">{index + 1}.</span><div className="flex items-end mb-1 w-full"><span className="font-bold text-xl">{item.receita?.nome_comercial || item.farmaco}</span><div className="flex-1 mx-2 border-b-2 border-dotted border-slate-400 mb-1.5"></div><span className="font-bold text-lg whitespace-nowrap">{item.receita.quantidade}</span></div><p className="text-base leading-relaxed text-slate-800 mt-1 pl-2 border-l-4 border-slate-200">{item.receita.instrucoes}{item.dias_tratamento ? ` (Uso por ${item.dias_tratamento} dias)` : ''}</p></li>))}</ul>
+                      <ul className="space-y-6 list-none">{items.map((item, index) => (<li key={index} className="relative pl-6"><span className="absolute left-0 top-0 font-bold text-lg">{index + 1}.</span><div className="flex items-end mb-1 w-full"><span className="font-bold text-xl">{item.receita.nome_comercial}</span><div className="flex-1 mx-2 border-b-2 border-dotted border-slate-400 mb-1.5"></div><span className="font-bold text-lg whitespace-nowrap">{item.receita.quantidade}</span></div><p className="text-base leading-relaxed text-slate-800 mt-1 pl-2 border-l-4 border-slate-200">{item.receita.instrucoes}</p></li>))}</ul>
                     </div>
                   )
                 })}
