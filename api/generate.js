@@ -30,40 +30,30 @@ export default async function handler(req, res) {
   if (activeRoom === 'verde') {
     promptExtra += `
     CONTEXTO SALA VERDE:
-    - Foco: Receituário e alta.
-    - "receita": Obrigatório preencher para medicamentos de casa.
-    - "sugestao_uso": Linguagem simples para o paciente (ex: "Tomar 1 comprimido após almoço").
+    - "receita_estruturada": OBRIGATÓRIO.
+    - Foco em posologia para casa.
     `;
   } else {
     promptExtra += `
-    CONTEXTO SALA VERMELHA (CRÍTICO):
-    - Foco: Estabilização, Intubação, Vasoativos.
-    - "receita": null.
-    - "sugestao_uso": Linguagem técnica para enfermagem (ex: "Infundir em BIC", "Bolus lento 3 min").
-    
-    TABELA MESTRA DE DILUIÇÕES PADRÃO (USE ESTAS SE O FÁRMACO FOR CITADO):
-    1. **Noradrenalina**: 4 ampolas (16mg) + SG5% 234ml (Total 250ml). Conc: 64 mcg/ml. Dose inicial: 0.05 mcg/kg/min.
-    2. **Dobutamina**: 1 ampola (250mg) + SG5% 230ml (Total 250ml). Conc: 1000 mcg/ml. Dose inicial: 2.5 mcg/kg/min.
-    3. **Nitroprussiato (Nipride)**: 1 ampola (50mg) + SG5% 248ml (Total 250ml). Conc: 200 mcg/ml. Dose inicial: 0.3 mcg/kg/min.
-    4. **Nitroglicerina (Tridil)**: 1 ampola (50mg) + SG5% 240ml (Total 250ml). Conc: 200 mcg/ml. Dose inicial: 5-10 mcg/min (sem peso).
-    5. **Fentanil (Sedação Contínua)**: 4 ampolas (2000mcg) + SF0.9% 60ml (Total 100ml). Conc: 20 mcg/ml. Dose: 0.02-0.05 mcg/kg/min.
-    6. **Midazolam (Sedação Contínua)**: 10 ampolas (150mg) + SF0.9% 120ml (Total 150ml). Conc: 1 mg/ml. Dose: 0.02-0.1 mg/kg/h.
-    7. **Propofol**: Puro (10mg/ml). Dose: mg/kg/h.
-    8. **Amiodarona**: Ataque 150mg em 100ml SG5% (10-15min). Manutenção: 900mg em 500ml SG5% em 24h.
-    9. **Hidrocortisona (Choque)**: 200mg/dia (50mg 6/6h) ou infusão contínua.
-    
-    REGRAS DE CÁLCULO (Json Fields):
-    - "usa_peso": true (se a dose depende de peso).
-    - "dose_padrao_kg": APENAS O NÚMERO da dose inicial (ex: 0.05).
-    - "unidade_base": "mcg/kg/min", "mg/kg/h", "mcg/min" ou "mg/kg".
-    - "concentracao_mg_ml": NÚMERO da concentração da solução padrão acima (ex: 64 para Nora). ATENÇÃO À UNIDADE (se base é mcg, aqui deve ser mcg/ml).
-    - "diluicao_contexto": Texto descrevendo a diluição padrão usada (ex: "4 amp em 234ml SG5%").
+    CONTEXTO SALA VERMELHA (BOMBA/BIC):
+    - "usa_peso": true para drogas tituláveis.
+    - "concentracao_solucao": Fundamental para cálculo de ml/h.
     `;
   }
 
-  const promptText = `Atue como médico intensivista sênior.
+  if (searchQuery.toLowerCase().includes('dengue')) promptExtra += `\nPROTOCOLO DENGUE: Classifique A, B, C, D.`;
+  if (searchQuery.toLowerCase().includes('trauma')) promptExtra += `\nPROTOCOLO TRAUMA: Preencha xabcde_trauma.`;
+
+  const promptText = `Atue como médico emergencista.
   Gere conduta para "${searchQuery}" na ${roomContext}.
   ${promptExtra}
+  
+  REGRAS RÍGIDAS:
+  1. JSON puro.
+  2. "tratamento_medicamentoso": ARRAY. Separe apresentações diferentes (ex: Comp vs Gotas) em itens distintos.
+  3. "tipo": [Comprimido, Cápsula, Xarope, Suspensão, Gotas, Solução Oral, Injetável, Tópico, Inalatório, Supositório].
+  4. "classe": Classificação farmacológica (ex: Analgésico, Antibiótico, Vasoativo).
+  5. "apresentacao": Detalhe comercial (ex: "Ampola 2ml", "Frasco 10ml", "Caixa 30cp").
   
   ESTRUTURA JSON OBRIGATÓRIA:
   {
@@ -77,23 +67,33 @@ export default async function handler(req, res) {
     "criterios_gravidade": [],
     "tratamento_medicamentoso": [ 
       { 
-        "farmaco": "Nome", 
-        "tipo": "Injetável/Comprimido",
-        "sugestao_uso": "...",
-        "diluicao": "...",
-        "modo_admin": "...",
-        "cuidados": "...", 
-        "indicacao": "...",
-        "receita": null, 
+        "classe": "Ex: Analgésico / Antibiótico",
+        "farmaco": "Nome Genérico + Concentração", 
+        "apresentacao": "Ex: Ampola 2ml / Comp 500mg",
+        "tipo": "Injetável",
+        "sugestao_uso": "...", 
+        "receita_estruturada": { // Apenas Sala Verde
+           "via": "USO ORAL",
+           "nome_completo": "...",
+           "unidade_form": "comprimidos",
+           "qtd_por_dose": 1,
+           "frequencia_diaria": 4,
+           "instrucao_box": "..."
+        },
         "usa_peso": false, 
         "dose_padrao_kg": 0, 
         "unidade_base": "...", 
-        "concentracao_mg_ml": 0, 
-        "diluicao_contexto": "..."
+        "concentracao_solucao": 0, 
+        "unidade_concentracao": "...",
+        "diluicao_contexto": "...",
+        "diluicao": "...", 
+        "modo_admin": "...",
+        "cuidados": "...", 
+        "indicacao": "..."
       } 
     ],
-    "escalonamento_terapeutico": [],
-    "medidas_gerais": [],
+    "escalonamento_terapeutico": [ { "passo": "1ª Linha", "descricao": "..." } ],
+    "medidas_gerais": ["..."],
     "criterios_internacao": [],
     "criterios_alta": [],
     "guideline_referencia": "..."
