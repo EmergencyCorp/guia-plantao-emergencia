@@ -43,15 +43,48 @@ export default async function handler(req, res) {
   if (activeRoom === 'vermelha') {
     roleDefinition = "Você é um médico INTENSIVISTA e EMERGENCISTA SÊNIOR. Sua prioridade é salvar a vida do paciente com precisão absoluta e tolerância zero para erros.";
     
+    // PROTOCOLOS INSTITUCIONAIS EXTRAÍDOS DAS IMAGENS
+    const institutionalProtocols = `
+    ATENÇÃO: PARA AS DROGAS ABAIXO, USE ESTRITAMENTE AS DILUIÇÕES E CONCENTRAÇÕES PADRÃO DA INSTITUIÇÃO (NÃO INVENTE):
+    
+    1. VASOATIVAS:
+       - NORADRENALINA: 4 Ampolas (16mg) + 234mL SG 5% (Total 250mL). Concentração: 64 mcg/mL.
+       - DOBUTAMINA: 4 Ampolas (1000mg) + 170mL SG 5% (Total 250mL). Concentração: 4000 mcg/mL (4 mg/mL).
+       - NITROPRUSSIATO (NIPRIDE): 1 Ampola (50mg) + 248mL SG 5% (Total 250mL). Concentração: 200 mcg/mL.
+       - NITROGLICERINA (TRIDIL): 1 Ampola (50mg) + 240mL SG 5% (Total 250mL). Concentração: 200 mcg/mL.
+       - VASOPRESSINA: 1 Ampola (20UI) + 100mL SF 0.9%. Concentração: 0.2 UI/mL.
+       - ADRENALINA (INFUSÃO): 6 Ampolas (6mg) + 94mL SF 0.9% (Total 100mL). Concentração: 60 mcg/mL.
+       - DOPAMINA: 5 Ampolas (250mg) + 200mL SG 5%. Concentração: 1000 mcg/mL.
+
+    2. SEDAÇÃO E ANALGESIA CONTÍNUA (BOMBA):
+       - FENTANIL: 2 Ampolas (1000mcg) + 80mL SF 0.9% (Total 100mL). Concentração: 10 mcg/mL.
+       - MIDAZOLAM: 10 Ampolas (3mL cada = 150mg totais) + 120mL SF 0.9% (Total 150mL). Concentração: 1 mg/mL.
+       - PROPOFOL: Puro (Sem diluição). Concentração: 10 mg/mL.
+       - DEXMEDETOMIDINA (PRECEDEX): 2 Ampolas (400mcg) + 96mL SF 0.9% (Total 100mL). Concentração: 4 mcg/mL.
+       - KETAMINA: 1 Ampola (2mL/100mg) + 98mL SF 0.9%. Concentração: 1 mg/mL.
+
+    3. BLOQUEADORES NEUROMUSCULARES:
+       - ROCURÔNIO: 10 Ampolas (500mg) + 50mL SF 0.9%. Concentração: 5000 mcg/mL (5 mg/mL).
+       - CISATRACÚRIO: 5 Ampolas + 25mL SF 0.9%.
+
+    4. OUTROS:
+       - AMIODARONA (ATAQUE): 150mg + 100mL SG5% em 20-30 min.
+       - AMIODARONA (MANUTENÇÃO): 900mg (6 amp) + 250mL SG5% em 24h.
+       - ESMOLOL: 1 Ampola (2.5g) + 240mL SG 5%. Concentração: 10 mg/mL.
+    `;
+
     promptExtra += `
     CRITICIDADE MÁXIMA (SALA VERMELHA):
-    1. **Alvos Terapêuticos (Obrigatório):** Defina metas numéricas precisas. Inclua PAM (Pressão Arterial Média), PAS/PAD, FC, FR, SatO2, Diurese (>0.5ml/kg/h), Lactato e Glicemia se pertinente.
-    2. **Exames (Obrigatório):** Seja específico. Não peça "Laboratório", peça "Gasometria Arterial c/ Lactato, Troponina US, Creatinina...". Em imagem, especifique o protocolo (ex: "Angio-TC de Tórax protocolo TEP").
-    3. **Cálculo de Doses:** - "usa_peso": true
-       - "dose_padrao_kg": número exato (ex: 0.05 a 2 mcg/kg/min para Nora, use o valor inicial padrão)
-       - "unidade_base": ex: "mcg/kg/min", "mg/kg"
-       - "concentracao_mg_ml": Concentração da solução padrão da sua instituição fictícia (ex: Nora 4mg/4ml em 250ml SG5% = 64mcg/ml -> Se for ampola pura, use a da ampola).
-       - "diluicao_contexto": Ex: "4mg em 250ml SG5% (Solução Padrão)"
+    1. **Alvos Terapêuticos (Obrigatório):** Defina metas numéricas precisas (PAM, SatO2, etc).
+    2. **Exames (Obrigatório):** Seja específico nos pedidos.
+    3. **Cálculo de Doses (OBRIGATÓRIO SEGUIR O PADRÃO ACIMA):** - Se a droga estiver na lista acima, preencha:
+         - "usa_peso": true (se aplicável, ex: Nora, Dobuta, Fentanil contínuo)
+         - "dose_padrao_kg": O valor inicial recomendado (ex: Nora iniciar 0.05 mcg/kg/min).
+         - "unidade_base": ex: "mcg/kg/min" ou "mcg/kg/h".
+         - "concentracao_mg_ml": O VALOR EXATO DA CONCENTRAÇÃO CALCULADA ACIMA (ex: Nora = 0.064 mg/mL ou 64 mcg/mL. Converta para a mesma grandeza da dose. Se dose é mcg, aqui deve ser mcg/ml).
+         - "diluicao_contexto": Texto exato da diluição (ex: "4 Ampolas (16mg) + 234mL SG 5%").
+    
+    ${institutionalProtocols}
     `;
   } else {
     roleDefinition = "Você é um médico generalista experiente em pronto atendimento.";
@@ -63,39 +96,18 @@ export default async function handler(req, res) {
     `;
   }
 
-  // 2. Lógica Clínica Específica (Protocolos Nacionais/Internacionais)
+  // 2. Lógica Clínica Específica
   if (lowerQuery.includes('dengue')) {
-    promptExtra += `
-    PROTOCOLO DENGUE (MS BRASIL):
-    - Classifique: Grupo A, B, C ou D.
-    - Grupo C/D (Sala Vermelha): Fase de Expansão Rápida (20ml/kg em 20 min). Reavaliação a cada etapa.
-    - Grupo A/B (Sala Verde): Hidratação oral escalonada.
-    `;
+    promptExtra += ` PROTOCOLO DENGUE (MS BRASIL)... `;
   }
-
   if (lowerQuery.includes('sepse') || lowerQuery.includes('septico')) {
-    promptExtra += `
-    PROTOCOLO SEPSE (Surviving Sepsis Campaign):
-    - Pacote de 1 hora: Lactato, Hemoculturas, Antibiótico amplo espectro, Cristaloide 30ml/kg (se hipotensão/lactato > 4), Vasopressor (se PAM < 65 pós volume).
-    `;
+    promptExtra += ` PROTOCOLO SEPSE (Surviving Sepsis Campaign)... `;
   }
-
-  if (lowerQuery.includes('iam') || lowerQuery.includes('infarto') || lowerQuery.includes('scs')) {
-    promptExtra += `
-    PROTOCOLO IAM (SBC/AHA):
-    - Tempo porta-balão ou porta-agulha.
-    - Dupla antiagregação + Anticoagulação.
-    - Estatinas alta potência.
-    `;
+  if (lowerQuery.includes('iam') || lowerQuery.includes('infarto')) {
+    promptExtra += ` PROTOCOLO IAM (SBC/AHA)... `;
   }
-
   if (lowerQuery.includes('trauma') || lowerQuery.includes('acid') || lowerQuery.includes('poli')) {
-    promptExtra += `
-    PROTOCOLO TRAUMA (ATLS 10ª Ed):
-    - OBRIGATÓRIO preencher objeto "xabcde_trauma" com passo a passo rigoroso.
-    - X: Controle de hemorragia exsanguinante (Torniquete, Compressão).
-    - A: Via aérea definitiva + Colar cervical.
-    `;
+    promptExtra += ` PROTOCOLO TRAUMA (ATLS 10ª Ed)... `;
   }
 
   const promptText = `${roleDefinition}
@@ -104,57 +116,41 @@ export default async function handler(req, res) {
   
   REGRAS DE FORMATO (JSON):
   1. Retorne APENAS JSON válido.
-  2. Separe apresentações diferentes (Comprimido vs Injetável) em objetos diferentes no array "tratamento_medicamentoso".
-  3. "tipo": OBRIGATÓRIO da lista: ['Comprimido', 'Cápsula', 'Xarope', 'Suspensão', 'Gotas', 'Solução Oral', 'Injetável', 'Tópico', 'Inalatório', 'Supositório'].
-  4. "sugestao_uso": 
-     - Sala Verde: "Tomar X comp de Y/Y horas..."
-     - Sala Vermelha: "Ataque: X mg EV Bolus. Manutenção: Y mg/h em BIC."
-  5. "avaliacao_inicial.sinais_vitais_alvos": Lista de strings com ALVOS CLÍNICOS (ex: "PAM ≥ 65mmHg", "SatO2 94-98%", "Diurese ≥ 0.5ml/kg/h").
-  6. "achados_exames": Detalhe o que buscar em cada exame para confirmar o diagnóstico.
+  2. "tratamento_medicamentoso": array de objetos.
+  3. Se Sala Vermelha, "receita" deve ser null. Se Sala Verde, preencha "receita".
   
   ESTRUTURA JSON ESPERADA:
   {
     "condicao": "Nome Técnico Completo",
-    "estadiamento": "Classificação de Risco/Gravidade",
+    "estadiamento": "Classificação",
     "classificacao": "${roomContext}",
-    "resumo_clinico": "Texto técnico detalhado sobre fisiopatologia, apresentação clínica e critérios diagnósticos...",
-    "xabcde_trauma": null, // Preencher APENAS se for trauma
-    "avaliacao_inicial": { 
-      "sinais_vitais_alvos": ["PAM ≥ 65mmHg", "FC < 100bpm", "Lactato < 2mmol/L", "SatO2 > 94%"], 
-      "exames_prioridade1": ["Gasometria Arterial", "Lactato", "Hemoculturas x2"], 
-      "exames_complementares": ["..."] 
-    },
-    "achados_exames": { 
-      "ecg": "Descrição precisa das alterações (ex: Infra ST > 0.5mm em V5-V6)", 
-      "laboratorio": "Alterações esperadas e valores críticos", 
-      "imagem": "Padrão radiológico específico" 
-    },
-    "criterios_gravidade": ["Sinal 1", "Sinal 2"],
+    "resumo_clinico": "...",
+    "xabcde_trauma": null,
+    "avaliacao_inicial": { "sinais_vitais_alvos": [], "exames_prioridade1": [], "exames_complementares": [] },
+    "achados_exames": { "ecg": "...", "laboratorio": "...", "imagem": "..." },
+    "criterios_gravidade": [],
     "tratamento_medicamentoso": [ 
       { 
-        "farmaco": "Nome + Concentração", 
+        "farmaco": "Nome", 
         "tipo": "Injetável",
-        "sugestao_uso": "Texto descritivo da administração...",
-        "diluicao": "Ex: 1 amp em 100ml SF0.9%", 
-        "modo_admin": "BIC / Bolus Lento", 
-        "cuidados": "Monitorizar QT, Risco de hipotensão...", 
-        "indicacao": "Indicação precisa",
-        "receita": { "nome_comercial": "Ex: Novalgina 1g", "quantidade": "1 cx", "instrucoes": "Tomar 1 cp de 6/6h", "uso": "ORAL", "dias_sugeridos": 5 }, // Null na sala vermelha
-        "usa_peso": true, // Se a dose depende do peso
-        "dose_padrao_kg": 0.0, // Apenas o número
+        "sugestao_uso": "...",
+        "diluicao": "...", 
+        "modo_admin": "BIC", 
+        "cuidados": "...", 
+        "indicacao": "...",
+        "receita": { "nome_comercial": "...", "quantidade": "...", "instrucoes": "...", "uso": "...", "dias_sugeridos": 5 },
+        "usa_peso": true,
+        "dose_padrao_kg": 0.0,
         "unidade_base": "mcg/kg/min",
-        "concentracao_mg_ml": 0.0, // Concentração final da solução
-        "diluicao_contexto": "Ex: Solução Padrão (4mg/4ml em 246ml SF)"
+        "concentracao_mg_ml": 64, // Exemplo Nora: 64 mcg/ml
+        "diluicao_contexto": "4 Amp + 234ml SG5%"
       } 
     ],
-    "escalonamento_terapeutico": [ 
-      { "passo": "1. Estabilização Inicial", "descricao": "..." },
-      { "passo": "2. Terapia Específica", "descricao": "..." }
-    ],
-    "medidas_gerais": ["Cabeceira elevada", "Jejum", "Acesso venoso calibroso"],
-    "criterios_internacao": ["Critério UTI 1", "..."],
-    "criterios_alta": ["Critério Estabilidade 1", "..."],
-    "guideline_referencia": "Fonte (Ex: Surviving Sepsis Campaign 2021)"
+    "escalonamento_terapeutico": [],
+    "medidas_gerais": [],
+    "criterios_internacao": [],
+    "criterios_alta": [],
+    "guideline_referencia": "..."
   }
   Baseie-se em doses para adulto 70kg (padrão).`;
 
