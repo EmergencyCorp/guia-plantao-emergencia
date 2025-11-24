@@ -739,10 +739,18 @@ export default function EmergencyGuideApp() {
                      
                      if (activeRoom === 'vermelha' && med.usa_peso && patientWeight && med.dose_padrao_kg) {
                        const doseNum = parseFloat(med.dose_padrao_kg) * parseFloat(patientWeight);
+                       const unit = med.unidade_base?.toLowerCase() || '';
+                       const isMin = unit.includes('/min');
+                       
                        doseFinal = doseNum.toFixed(1) + " " + med.unidade_base.split('/')[0];
+                       
                        if (med.concentracao_mg_ml) {
                          const vol = doseNum / parseFloat(med.concentracao_mg_ml);
-                         volumeFinal = vol.toFixed(1) + " ml";
+                         if (isMin) {
+                             volumeFinal = (vol * 60).toFixed(1) + " ml/h";
+                         } else {
+                             volumeFinal = vol.toFixed(1) + " ml";
+                         }
                        }
                      }
 
