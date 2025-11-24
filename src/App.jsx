@@ -5,7 +5,7 @@ import {
   CheckCircle2, Thermometer, Syringe, Siren, FlaskConical, Tag, Package,
   ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save, Cloud, CloudOff, Settings, Info,
   HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine, Wind, Droplet, Timer, Skull, Printer, FilePlus, Calculator,
-  Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2, SprayCan, CalendarDays
+  Star, Trash2, CalendarDays
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -17,7 +17,7 @@ import {
   setDoc, 
   getDoc, 
   collection, 
-  query as firestoreQuery, 
+  query as firestoreQuery, // RENOMEADO PARA EVITAR ERRO DE TELA BRANCA
   where, 
   orderBy, 
   limit, 
@@ -26,7 +26,7 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 
-// --- CONFIGURAÇÃO DO FIREBASE ---
+// --- LÓGICA DE CONFIGURAÇÃO DO FIREBASE ---
 const getFirebaseConfig = () => {
   try {
     if (import.meta.env && import.meta.env.VITE_FIREBASE_API_KEY) {
@@ -64,6 +64,12 @@ if (firebaseConfig && firebaseConfig.apiKey) {
 const appId = (typeof __app_id !== 'undefined') ? __app_id : 'emergency-guide-app';
 const initialToken = (typeof __initial_auth_token !== 'undefined') ? __initial_auth_token : null;
 
+const AUTHORIZED_USERS = [
+  { username: 'admin', password: '123', name: 'Dr. Administrador', role: 'Diretor Clínico', crm: '12345-MG' },
+  { username: 'medico', password: 'med', name: 'Dr. Plantonista', role: 'Médico Assistente', crm: '67890-SP' },
+  { username: 'interno', password: 'int', name: 'Acadêmico', role: 'Interno', crm: 'Estudante' }
+];
+
 export default function EmergencyGuideApp() {
   const [currentUser, setCurrentUser] = useState(null);
   const [usernameInput, setUsernameInput] = useState('');
@@ -93,6 +99,8 @@ export default function EmergencyGuideApp() {
   const [patientWeight, setPatientWeight] = useState('');
 
   const [isCurrentConductFavorite, setIsCurrentConductFavorite] = useState(false);
+
+  // --- EFFECTS ---
 
   useEffect(() => {
     if (!firebaseConfig || !firebaseConfig.apiKey) {
@@ -161,6 +169,8 @@ export default function EmergencyGuideApp() {
       setIsCurrentConductFavorite(false);
     }
   }, [conduct, favorites]);
+
+  // --- DATA MANAGEMENT ---
 
   const loadHistory = (username) => {
     try {
@@ -239,13 +249,14 @@ export default function EmergencyGuideApp() {
           setIsSaving(true);
           try {
             const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'notes', currentUser.username);
+            // Proteção contra valor undefined no autor
             await setDoc(docRef, {
               content: userNotes,
               lastUpdated: new Date().toISOString(),
-              author: currentUser.name,
+              author: currentUser.name || "Usuário",
               username: currentUser.username
             }, { merge: true });
-          } catch (error) { console.error(error); } 
+          } catch (error) { console.error("Erro save nuvem:", error); } 
           finally { setIsSaving(false); }
         }
       }
@@ -255,47 +266,17 @@ export default function EmergencyGuideApp() {
 
   const handleNoteChange = (e) => setUserNotes(e.target.value);
 
-  // --- LÓGICA DE LOGIN (SEGURA - SÓ FIREBASE) ---
-  const handleLogin = async (e) => {
+  const handleLogin = (e) => {
     e.preventDefault();
     setLoginError('');
-
-    if (!db || !isCloudConnected) {
-      setLoginError("Sem conexão com o servidor. Verifique sua internet.");
-      return;
-    }
-
-    try {
-      // Busca o usuário no banco de dados
-      const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'registered_users', usernameInput.toLowerCase());
-      const userSnap = await getDoc(userDocRef);
-
-      if (userSnap.exists()) {
-        const userData = userSnap.data();
-        
-        // Verifica senha (em produção use HASH!)
-        if (userData.password === passwordInput) {
-          const expirationDate = new Date(userData.expiresAt);
-          if (new Date() > expirationDate) {
-            setLoginError("Assinatura expirada. Contate o suporte.");
-            return;
-          }
-          
-          // Login Sucesso
-          const userSession = { ...userData, username: usernameInput.toLowerCase() };
-          setCurrentUser(userSession);
-          localStorage.setItem('emergency_app_user', JSON.stringify(userSession));
-          setUsernameInput('');
-          setPasswordInput('');
-        } else {
-          setLoginError("Senha incorreta.");
-        }
-      } else {
-        setLoginError("Usuário não encontrado.");
-      }
-    } catch (err) {
-      console.error("Erro login:", err);
-      setLoginError("Erro ao processar login.");
+    const foundUser = AUTHORIZED_USERS.find(u => u.username.toLowerCase() === usernameInput.toLowerCase() && u.password === passwordInput);
+    if (foundUser) {
+      setCurrentUser(foundUser);
+      localStorage.setItem('emergency_app_user', JSON.stringify(foundUser));
+      setUsernameInput('');
+      setPasswordInput('');
+    } else {
+      setLoginError('Credenciais inválidas.');
     }
   };
 
@@ -308,6 +289,8 @@ export default function EmergencyGuideApp() {
     setFavorites([]);
     localStorage.removeItem('emergency_app_user');
   };
+
+  // --- PRESCRIPTION LOGIC ---
 
   const togglePrescriptionItem = (med) => {
     if (activeRoom !== 'verde' || !med.receita) return;
@@ -341,6 +324,8 @@ export default function EmergencyGuideApp() {
       setSelectedPrescriptionItems(newItems);
     }
   };
+
+  // --- CACHE & FAVORITES ---
 
   const getConductDocId = (query, room) => {
     return `${query.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}_${room}`;
@@ -429,7 +414,8 @@ export default function EmergencyGuideApp() {
     } catch (error) { console.error("Erro ao limpar cache:", error); }
   };
 
-  // --- GERAÇÃO VIA API SEGURA (SERVERLESS) ---
+  // --- GENERATE ---
+
   const generateConduct = async () => {
     if (!searchQuery.trim()) {
       showError('Digite uma condição clínica.');
@@ -443,7 +429,7 @@ export default function EmergencyGuideApp() {
 
     const docId = getConductDocId(searchQuery, activeRoom);
 
-    // 1. Verifica Cache
+    // Verifica Cache
     if (isCloudConnected && currentUser) {
       try {
         const docRef = doc(db, 'artifacts', appId, 'users', currentUser.username, 'conducts', docId);
@@ -463,10 +449,8 @@ export default function EmergencyGuideApp() {
       } catch (error) { console.error("Erro cache:", error); }
     }
 
-    // 2. Chama API Serverless (O Cofre)
+    // Chama API
     try {
-      // Em produção, a URL seria /api/generate (relativo). 
-      // No ambiente de preview, usamos a URL completa se necessário ou fallback simulado se a API não existir
       const response = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -518,10 +502,9 @@ export default function EmergencyGuideApp() {
     if (!type) return <Pill size={14} />;
     const t = type.toLowerCase();
     if (t.includes('injet')) return <SyringeIcon size={14} className="text-rose-500" />;
-    if (t.includes('gota') || t.includes('solu') || t.includes('xarope') || t.includes('susp')) return <Droplets size={14} className="text-blue-500" />;
-    if (t.includes('comp') || t.includes('cap')) return <Tablets size={14} className="text-emerald-500" />;
+    if (t.includes('gota') || t.includes('solu') || t.includes('xarope') || t.includes('susp')) return <Droplet size={14} className="text-blue-500" />;
+    if (t.includes('comp') || t.includes('cap') || t.includes('oral')) return <Pill size={14} className="text-emerald-500" />;
     if (t.includes('tópi') || t.includes('pomada') || t.includes('creme')) return <Pipette size={14} className="text-amber-500" />;
-    if (t.includes('inal') || t.includes('spray')) return <SprayCan size={14} className="text-purple-500" />;
     return <Pill size={14} className="text-slate-500" />;
   };
 
@@ -537,17 +520,14 @@ export default function EmergencyGuideApp() {
 
   const inferMedType = (med) => {
     if (med.tipo && med.tipo !== "N/A") return med.tipo;
-    
     const name = med.farmaco?.toLowerCase() || "";
     const via = med.via?.toLowerCase() || "";
-
     if (via.includes('ev') || via.includes('iv') || via.includes('im') || via.includes('sc')) return "Injetável";
     if (name.includes('gotas')) return "Gotas";
     if (name.includes('xarope')) return "Xarope";
     if (name.includes('comprimido')) return "Comprimido";
     if (name.includes('creme') || name.includes('pomada')) return "Tópico";
     if (name.includes('spray') || name.includes('bombinha')) return "Inalatório";
-    
     return "Medicamento";
   };
 
@@ -680,6 +660,7 @@ export default function EmergencyGuideApp() {
                       </div>
                    </div>
                 </div>
+                
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                    <div className="bg-blue-50 px-5 py-3 border-b border-blue-100 flex items-center gap-2"><Search size={18} className="text-blue-600"/><h3 className="font-bold text-blue-900 text-sm uppercase">Investigação Diagnóstica</h3></div>
                    <div className="p-5 space-y-4 text-sm">
@@ -688,6 +669,7 @@ export default function EmergencyGuideApp() {
                       {conduct.achados_exames?.imagem && <div><div className="flex items-center gap-2 font-bold text-slate-700 mb-1"><ImageIcon size={14} className="text-slate-500"/> Imagem</div><p className="bg-slate-50 p-2 rounded border border-slate-100 text-slate-600">{conduct.achados_exames.imagem}</p></div>}
                    </div>
                 </div>
+
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                    <div className="bg-indigo-50 px-5 py-3 border-b border-indigo-100 flex items-center gap-2"><FileText size={18} className="text-indigo-600"/><h3 className="font-bold text-indigo-900 text-sm uppercase">Critérios de Desfecho</h3></div>
                    <div className="p-5 space-y-4 text-sm">
@@ -719,7 +701,6 @@ export default function EmergencyGuideApp() {
                        }
                      }
 
-                     // Encontrar item para pegar dias (se selecionado)
                      const selectedItemState = selectedPrescriptionItems.find(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
                      const currentDays = selectedItemState ? selectedItemState.dias_tratamento : (med.receita?.dias_sugeridos || 5);
 
@@ -799,7 +780,7 @@ export default function EmergencyGuideApp() {
         </div>
       </footer>
 
-      {/* MODAL DE RECEITUÁRIO */}
+      {/* MODAL DE RECEITUÁRIO (VISUAL PROFISSIONAL) */}
       {showPrescriptionModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 print:p-0 animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-3xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] print:max-h-none print:h-full print:rounded-none print:shadow-none">
@@ -839,6 +820,20 @@ export default function EmergencyGuideApp() {
             <div className="p-2 max-h-[60vh] overflow-y-auto bg-slate-50">
               {favorites.length === 0 ? (<div className="text-center p-8 text-slate-400 text-sm">Você ainda não tem favoritos.</div>) : (<div className="space-y-2">{favorites.map((fav) => (<div key={fav.id} className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm flex items-center justify-between group hover:border-blue-300 transition-colors"><button onClick={() => loadFavoriteConduct(fav)} className="flex-1 text-left"><div className="flex items-center gap-2"><div className={`w-2 h-2 rounded-full shrink-0 ${fav.room === 'verde' ? 'bg-emerald-500' : 'bg-rose-500'}`} /><span className="font-bold text-slate-700 text-sm">{fav.query}</span></div><span className="text-[10px] text-slate-400 ml-4">{new Date(fav.lastAccessed).toLocaleDateString()}</span></button><button onClick={(e) => { e.stopPropagation(); removeFavoriteFromList(fav.id); }} className="p-2 text-slate-300 hover:text-red-500 transition-colors" title="Remover"><Trash2 size={16} /></button></div>))}</div>)}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE BLOCO DE NOTAS */}
+      {showNotepad && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200 print:hidden">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col h-[80vh] overflow-hidden">
+            <div className="bg-gray-50 p-4 border-b border-gray-200 flex justify-between items-center">
+              <div className="flex items-center gap-3"><div className="bg-blue-100 p-2 rounded-lg text-blue-600"><Edit size={20} /></div><div><h3 className="font-bold text-slate-800 leading-none">Meu Caderno</h3><div className="flex items-center gap-2 mt-1"><span className="text-xs text-slate-500">Anotações de {currentUser?.name}</span><span className="text-gray-300">•</span>{isCloudConnected ? (<span className="flex items-center gap-1 text-[10px] text-green-600 font-medium"><Cloud size={10} /> Nuvem Ativa</span>) : (<span className="flex items-center gap-1 text-[10px] text-amber-600 font-medium"><CloudOff size={10} /> Offline</span>)}</div></div></div>
+              <button onClick={() => setShowNotepad(false)} className="p-2 hover:bg-gray-200 rounded-full text-gray-500 transition-colors"><X size={20} /></button>
+            </div>
+            <div className="flex-1 bg-yellow-50 relative"><textarea className="w-full h-full p-6 resize-none focus:outline-none text-slate-700 leading-relaxed bg-transparent text-lg font-medium font-serif" placeholder="Escreva suas anotações..." value={userNotes} onChange={handleNoteChange} style={{ backgroundImage: 'linear-gradient(transparent, transparent 31px, #e5e7eb 31px)', backgroundSize: '100% 32px', lineHeight: '32px' }} /></div>
+            <div className="p-3 bg-white border-t border-gray-200 flex justify-between items-center text-xs text-gray-500"><div className="flex items-center gap-1.5">{isSaving ? (<><Loader2 size={14} className="text-blue-600 animate-spin" /><span className="text-blue-600">Salvando...</span></>) : (<><Save size={14} className="text-green-600" /><span>{isCloudConnected ? "Salvo na nuvem" : "Salvo localmente"}</span></>)}</div><span>{userNotes.length} caracteres</span></div>
           </div>
         </div>
       )}
