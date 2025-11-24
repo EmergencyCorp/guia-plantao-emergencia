@@ -363,26 +363,18 @@ export default function EmergencyGuideApp() {
       showError("Necessário estar online para favoritar.");
       return;
     }
-
     const newStatus = !isCurrentConductFavorite;
     setIsCurrentConductFavorite(newStatus);
-
     try {
       const docId = getConductDocId(searchQuery, activeRoom);
       const docRef = doc(db, 'artifacts', appId, 'users', currentUser.username, 'conducts', docId);
-      
       if (newStatus) {
           await setDoc(docRef, { 
-            query: searchQuery,
-            room: activeRoom,
-            conductData: conduct,
-            isFavorite: true,
-            lastAccessed: new Date().toISOString()
+            query: searchQuery, room: activeRoom, conductData: conduct, isFavorite: true, lastAccessed: new Date().toISOString()
           }, { merge: true });
       } else {
           await setDoc(docRef, { isFavorite: false }, { merge: true });
       }
-
     } catch (error) {
       console.error("Erro ao favoritar:", error);
       setIsCurrentConductFavorite(!newStatus);
@@ -395,9 +387,7 @@ export default function EmergencyGuideApp() {
       try {
           const docRef = doc(db, 'artifacts', appId, 'users', currentUser.username, 'conducts', docId);
           await setDoc(docRef, { isFavorite: false }, { merge: true });
-      } catch (e) {
-          console.error("Erro ao remover favorito", e);
-      }
+      } catch (e) { console.error("Erro ao remover favorito", e); }
   };
 
   const loadFavoriteConduct = (fav) => {
@@ -435,6 +425,7 @@ export default function EmergencyGuideApp() {
 
     const docId = getConductDocId(searchQuery, activeRoom);
 
+    // Verifica Cache
     if (isCloudConnected && currentUser) {
       try {
         const docRef = doc(db, 'artifacts', appId, 'users', currentUser.username, 'conducts', docId);
@@ -453,6 +444,7 @@ export default function EmergencyGuideApp() {
       } catch (error) { console.error("Erro cache:", error); }
     }
 
+    // Chama API
     try {
       const response = await fetch('/api/generate', {
         method: 'POST',
@@ -470,11 +462,7 @@ export default function EmergencyGuideApp() {
       if (isCloudConnected && currentUser) {
         const docRef = doc(db, 'artifacts', appId, 'users', currentUser.username, 'conducts', docId);
         await setDoc(docRef, {
-          query: searchQuery,
-          room: activeRoom,
-          conductData: parsedConduct,
-          isFavorite: false,
-          lastAccessed: new Date().toISOString()
+          query: searchQuery, room: activeRoom, conductData: parsedConduct, isFavorite: false, lastAccessed: new Date().toISOString()
         });
         manageCacheLimit(currentUser.username);
       }
@@ -540,6 +528,49 @@ export default function EmergencyGuideApp() {
     vermelha: { name: 'Sala Vermelha', color: 'rose', accent: 'bg-rose-600', border: 'border-rose-600', text: 'text-rose-800', light: 'bg-rose-50', icon: <Siren className="w-5 h-5" />, description: 'Emergência / Risco de Vida' }
   };
 
+  // --- CÁLCULO DE BIC E DOSES ---
+  const calculateDose = (med) => {
+    if (!patientWeight || !med.dose_padrao_kg) return null;
+    
+    const weight = parseFloat(patientWeight);
+    const doseKg = parseFloat(med.dose_padrao_kg);
+    const concentration = parseFloat(med.concentracao_mg_ml);
+    const unit = med.unidade_base; // ex: mcg/kg/min, mg/kg, mcg/kg/h
+
+    // Cálculo da DOSE TOTAL (O que o paciente precisa receber)
+    let totalDoseValue = doseKg * weight;
+    let doseDisplay = "";
+
+    if (unit.includes("mcg")) {
+      doseDisplay = `${totalDoseValue.toFixed(1)} mcg`;
+      // Se for mcg/min, mostra por minuto. Se for mcg/kg, é bolus.
+      if (unit.includes("min")) doseDisplay += "/min";
+      else if (unit.includes("h")) doseDisplay += "/h";
+    } else {
+      doseDisplay = `${totalDoseValue.toFixed(1)} mg`;
+      if (unit.includes("min")) doseDisplay += "/min";
+      else if (unit.includes("h")) doseDisplay += "/h";
+    }
+
+    // Cálculo da VAZÃO DA BOMBA (ml/h)
+    // Fórmula básica: (Dose desejada * Peso * 60 (se min)) / Concentração da solução
+    let rateMlH = null;
+    if (concentration > 0) {
+       let doseInMg = totalDoseValue; // Assume mg
+       if (unit.includes("mcg")) doseInMg = totalDoseValue / 1000; // Converte para mg se a conc for mg/ml
+
+       if (unit.includes("min")) {
+         // Dose em min -> ml/h = (mg/min * 60) / (mg/ml)
+         rateMlH = (doseInMg * 60) / concentration;
+       } else {
+         // Dose em h ou bolus -> ml = mg / (mg/ml)
+         rateMlH = doseInMg / concentration;
+       }
+    }
+
+    return { doseDisplay, rateMlH: rateMlH ? rateMlH.toFixed(1) : null };
+  };
+
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans text-slate-800">
@@ -558,7 +589,7 @@ export default function EmergencyGuideApp() {
             </form>
             <div className="text-center flex flex-col items-center gap-3 pt-2 border-t border-gray-100">
               <div className={`flex items-center justify-center gap-2 text-[10px] px-3 py-1.5 rounded-full mx-auto w-fit ${configStatus === 'missing' ? 'bg-red-50 text-red-700' : isCloudConnected ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>{configStatus === 'missing' ? <Settings size={12}/> : isCloudConnected ? <Cloud size={12}/> : <CloudOff size={12}/>}<span>{configStatus === 'missing' ? 'Erro: Variáveis de Ambiente' : isCloudConnected ? 'Banco de Dados Conectado' : 'Modo Offline (Dados Locais)'}</span></div>
-              <p className="text-[10px] text-slate-400 leading-tight max-w-xs">ATENÇÃO: Ferramenta auxiliar. Não substitui o julgamento clínico. O autor isenta-se de responsabilidade.</p>
+              <p className="text-[10px] text-slate-400 leading-tight max-w-xs">ATENÇÃO: Ferramenta auxiliar. Não substitui o julgamento clínico. O autor isenta-se de responsabilidade. Uso proibido para leigos.</p>
             </div>
           </div>
         </div>
@@ -654,6 +685,7 @@ export default function EmergencyGuideApp() {
 
             <div className="grid lg:grid-cols-12 gap-6 items-start">
               <div className="lg:col-span-4 space-y-6">
+                {/* AVALIAÇÃO E ALVOS */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                    <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center gap-2"><Activity size={18} className="text-slate-500"/><h3 className="font-bold text-slate-700 text-sm uppercase">Avaliação Inicial</h3></div>
                    <div className="p-5 space-y-5 text-sm">
@@ -697,12 +729,9 @@ export default function EmergencyGuideApp() {
                      let volumeFinal = null;
                      
                      if (activeRoom === 'vermelha' && med.usa_peso && patientWeight && med.dose_padrao_kg) {
-                       const doseNum = parseFloat(med.dose_padrao_kg) * parseFloat(patientWeight);
-                       doseFinal = doseNum.toFixed(1) + " " + med.unidade_base.split('/')[0];
-                       if (med.concentracao_mg_ml) {
-                         const vol = doseNum / parseFloat(med.concentracao_mg_ml);
-                         volumeFinal = vol.toFixed(1) + " ml";
-                       }
+                       const dose = calculateDose(med);
+                       doseFinal = dose?.doseDisplay;
+                       volumeFinal = dose?.rateMlH ? dose.rateMlH + " ml/h" : null;
                      }
 
                      const selectedItemState = selectedPrescriptionItems.find(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
@@ -741,7 +770,7 @@ export default function EmergencyGuideApp() {
                           {activeRoom === 'vermelha' && med.usa_peso && (
                             <div className="bg-rose-50 rounded-lg p-3 ml-3 mb-3 border border-rose-100">
                                <div className="flex justify-between items-center mb-1"><span className="text-xs font-bold text-rose-800 uppercase">Dose Calculada ({patientWeight || '?'}kg):</span><span className="text-[10px] text-rose-600">Ref: {med.dose_padrao_kg} {med.unidade_base}</span></div>
-                               <div className="flex gap-4">{doseFinal ? <span className="text-lg font-bold text-rose-900">{doseFinal}</span> : <span className="italic text-sm text-rose-400">Insira o peso</span>}{volumeFinal && <span className="text-lg font-bold text-rose-700 border-l pl-4 border-rose-200">Volume: {volumeFinal}</span>}</div>
+                               <div className="flex gap-4">{doseFinal ? <span className="text-lg font-bold text-rose-900">{doseFinal}</span> : <span className="italic text-sm text-rose-400">Insira o peso</span>}{volumeFinal && <span className="text-lg font-bold text-rose-700 border-l pl-4 border-rose-200">Bomba: {volumeFinal}</span>}</div>
                                {med.diluicao_contexto && <div className="text-[10px] text-rose-500 mt-1 bg-white/50 p-1 rounded">{med.diluicao_contexto}</div>}
                             </div>
                           )}
@@ -784,7 +813,7 @@ export default function EmergencyGuideApp() {
         </div>
       </footer>
 
-      {/* MODAL DE RECEITUÁRIO (VISUAL PROFISSIONAL) */}
+      {/* MODAL DE RECEITUÁRIO */}
       {showPrescriptionModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 print:p-0 animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-3xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] print:max-h-none print:h-full print:rounded-none print:shadow-none">
@@ -797,14 +826,7 @@ export default function EmergencyGuideApp() {
               <header className="flex flex-col items-center border-b-4 border-double border-slate-800 pb-6 mb-8"><h1 className="text-3xl font-bold tracking-widest uppercase text-slate-900">{currentUser?.name || "NOME DO MÉDICO"}</h1><div className="flex items-center gap-2 mt-2 text-sm font-bold text-slate-600 uppercase tracking-wide"><span>CRM: {currentUser?.crm || "00000/UF"}</span><span>•</span><span>CLÍNICA MÉDICA</span></div></header>
               <div className="flex-1 space-y-8">
                 {['USO ORAL', 'USO TÓPICO', 'USO RETAL', 'USO INALATÓRIO', 'USO OFTÁLMICO', 'USO OTOLÓGICO'].map((usoType) => {
-                  // Lógica de agrupamento e fallback: Se não tem 'uso', cai no Oral
-                  const items = selectedPrescriptionItems.filter(item => {
-                    const usoItem = item.receita?.uso?.toUpperCase();
-                    const target = usoType.replace('USO ', '');
-                    if (usoType === 'USO ORAL') return !usoItem || usoItem.includes('ORAL');
-                    return usoItem && usoItem.includes(target);
-                  });
-                  
+                  const items = selectedPrescriptionItems.filter(item => item.receita?.uso?.toUpperCase().includes(usoType.replace('USO ', '')) || (usoType === 'USO ORAL' && !item.receita?.uso));
                   if (items.length === 0) return null;
                   return (
                     <div key={usoType}>
