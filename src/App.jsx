@@ -28,14 +28,23 @@ import {
 } from 'firebase/firestore';
 
 // --- CONFIGURAÇÃO SEGURA DO FIREBASE ---
+// Função auxiliar para acessar globais sem erro
+const getGlobalVar = (varName) => {
+  if (typeof window !== 'undefined' && window[varName]) return window[varName];
+  if (typeof globalThis !== 'undefined' && globalThis[varName]) return globalThis[varName];
+  return null;
+};
+
 let app = null;
 let auth = null;
 let db = null;
-let firebaseConfig = null;
 
 try {
-  if (typeof __firebase_config !== 'undefined') {
-    firebaseConfig = JSON.parse(__firebase_config);
+  // Tenta pegar a config do window ou escopo global para evitar ReferenceError
+  const rawConfig = getGlobalVar('__firebase_config');
+  
+  if (rawConfig) {
+    const firebaseConfig = JSON.parse(rawConfig);
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
@@ -46,7 +55,8 @@ try {
   console.error("Erro ao inicializar Firebase:", e);
 }
 
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const appId = getGlobalVar('__app_id') || 'default-app-id';
+const initialToken = getGlobalVar('__initial_auth_token');
 
 // --- URL DO LOGO (Link direto do Google Drive) ---
 const logoImg = "https://drive.google.com/uc?export=view&id=1NOTk8hlnegfrHc_EHIuFM9j3sqZ20OVC";
@@ -82,7 +92,7 @@ export default function EmergencyGuideApp() {
 
   // --- INICIALIZAÇÃO E AUTH ---
   useEffect(() => {
-    // Se auth não foi inicializado (config ausente), não faz nada
+    // Se auth não foi inicializado (config ausente), define como offline e retorna
     if (!auth) {
       setIsCloudConnected(false);
       return;
@@ -90,13 +100,15 @@ export default function EmergencyGuideApp() {
 
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
+        if (initialToken) {
+          await signInWithCustomToken(auth, initialToken);
         } else {
           await signInAnonymously(auth);
         }
       } catch (error) {
         console.error("Auth error:", error);
+        // Fallback para offline se a auth falhar
+        setIsCloudConnected(false);
       }
     };
     initAuth();
@@ -226,9 +238,9 @@ export default function EmergencyGuideApp() {
 
   useEffect(() => {
     const delayDebounceFn = setTimeout(async () => {
-      if (currentUser && firebaseUser) {
+      if (currentUser) {
         localStorage.setItem(`notes_${currentUser.username}`, userNotes);
-        if (db) {
+        if (db && firebaseUser) {
           setIsSaving(true);
           try {
             const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'notes', currentUser.username);
@@ -259,7 +271,6 @@ export default function EmergencyGuideApp() {
     }
 
     // Simulação de login para o ambiente de demonstração
-    // Em produção, isso verificaria a coleção 'registered_users'
     const mockUser = {
       username: usernameInput.toLowerCase().trim(),
       name: "Médico(a) Demo",
@@ -322,14 +333,12 @@ export default function EmergencyGuideApp() {
       });
       
       if (exists) {
-        // Remove se já existe
         return prev.filter(item => {
             const iName = item.farmaco || "Medicamento sem nome";
             const iComm = item.receita?.nome_comercial || iName;
             return (iName + iComm) !== itemId;
         });
       } else {
-        // Adiciona novo item, criando estrutura de receita se não existir
         const medType = inferMedType(med);
         const usoInferido = inferUsoFromType(med.tipo || medType, med.farmaco);
         
@@ -338,10 +347,10 @@ export default function EmergencyGuideApp() {
             dias_tratamento: med.receita?.dias_sugeridos || 5,
             receita: med.receita ? {
                 ...med.receita,
-                uso: med.receita.uso || usoInferido // Garante que tenha o campo uso
+                uso: med.receita.uso || usoInferido
             } : {
                 nome_comercial: med.farmaco,
-                quantidade: "1 cx/frasco", // Padrão genérico
+                quantidade: "1 cx/frasco",
                 uso: usoInferido,
                 instrucoes: med.sugestao_uso || "Conforme orientação médica.",
                 dias_sugeridos: 5
@@ -363,14 +372,11 @@ export default function EmergencyGuideApp() {
     if (index !== -1) {
       newItems[index].dias_tratamento = days;
       const item = newItems[index];
-      
-      // Tenta recalcular quantidade se possível
       if (item.receita?.calculo_qnt?.frequencia_diaria && days > 0) {
         const total = Math.ceil(item.receita.calculo_qnt.frequencia_diaria * days);
         const unidade = item.receita.calculo_qnt.unidade || 'unidades';
         item.receita.quantidade = `${total} ${unidade}`;
       }
-      
       setSelectedPrescriptionItems(newItems);
     }
   };
@@ -384,7 +390,6 @@ export default function EmergencyGuideApp() {
       if (!db || !firebaseUser) return;
       
       const favoritesRef = collection(db, 'artifacts', appId, 'users', firebaseUser.uid, 'conducts');
-      // Não usando orderBy ou limit para evitar problemas de indexação no Firebase em modo demo
       const q = firestoreQuery(favoritesRef); 
 
       const unsubscribe = onSnapshot(q, (querySnapshot) => {
@@ -403,8 +408,12 @@ export default function EmergencyGuideApp() {
   };
 
   const toggleFavorite = async () => {
-    if (!currentUser || !conduct || !isCloudConnected || !firebaseUser) {
-      showError("Necessário estar online para favoritar.");
+    // Se não houver conexão com a nuvem, não faz nada (ou salva localmente no futuro)
+    if (!currentUser || !conduct) return;
+    
+    // Verifica conexão com a nuvem
+    if (!isCloudConnected || !firebaseUser || !db) {
+      showError("Modo Offline: Favoritos na nuvem indisponíveis.");
       return;
     }
 
@@ -434,7 +443,7 @@ export default function EmergencyGuideApp() {
   };
   
   const removeFavoriteFromList = async (docId) => {
-      if (!currentUser || !isCloudConnected || !firebaseUser) return;
+      if (!currentUser || !isCloudConnected || !firebaseUser || !db) return;
       try {
           const docRef = doc(db, 'artifacts', appId, 'users', firebaseUser.uid, 'conducts', docId);
           await setDoc(docRef, { isFavorite: false }, { merge: true });
@@ -466,14 +475,13 @@ export default function EmergencyGuideApp() {
     const docId = getConductDocId(searchQuery, activeRoom);
 
     // 1. Tentar Cache
-    if (isCloudConnected && currentUser && firebaseUser) {
+    if (isCloudConnected && currentUser && firebaseUser && db) {
       try {
         const docRef = doc(db, 'artifacts', appId, 'users', firebaseUser.uid, 'conducts', docId);
         const docSnap = await getDoc(docRef);
 
         if (docSnap.exists()) {
           const data = docSnap.data();
-          // Verifica se o cache é recente (opcional, aqui aceitamos qualquer cache para velocidade)
           setConduct(data.conductData);
           setIsCurrentConductFavorite(data.isFavorite || false);
           await setDoc(docRef, { lastAccessed: new Date().toISOString() }, { merge: true });
@@ -486,7 +494,7 @@ export default function EmergencyGuideApp() {
       } catch (error) { console.error("Erro cache:", error); }
     }
 
-    // 2. Chamar Gemini API (Lógica portada do generate.js)
+    // 2. Chamar Gemini API
     try {
       const apiKey = ""; // Injetado pelo ambiente
       const roomContext = activeRoom === 'verde' ? 'SALA VERDE (AMBULATORIAL)' : 'SALA VERMELHA (EMERGÊNCIA/UTI)';
@@ -495,7 +503,6 @@ export default function EmergencyGuideApp() {
       let promptExtra = "";
       let roleDefinition = "";
 
-      // Lógica de Prompt do generate.js original
       if (activeRoom === 'vermelha') {
         roleDefinition = "Você é um médico INTENSIVISTA e EMERGENCISTA SÊNIOR. Sua prioridade é salvar a vida do paciente com precisão absoluta e tolerância zero para erros.";
         promptExtra += `
@@ -518,12 +525,11 @@ export default function EmergencyGuideApp() {
         **ESTRUTURA DE PRESCRIÇÃO E CATEGORIZAÇÃO:**
            - Categorias: "Dieta", "Hidratação", "DVA" (Drogas Vasoativas), "Antibiótico", "Sintomáticos", "Profilaxia", "Terapia Específica".
            - **DVA**: Use esta categoria EXCLUSIVAMENTE para drogas vasoativas: Noradrenalina, Dobutamina, Dopamina, Vasopressina, Adrenalina, Nitroprussiato, Nitroglicerina.
-           - Para medicamentos vasoativos/sedativos listados acima, use EXATAMENTE a diluição e concentração descrita.
            - Para **Hidratação**, se venosa, use "usa_peso": true se necessário. Decida a melhor estratégia (Bolus 30ml/kg, Manutenção em ml/kg/h ou Volume Total/24h).
            
         **DETALHAMENTO TÉCNICO:**
            - "diluicao_detalhada": Copie o texto do protocolo acima se aplicável.
-           - "concentracao_mg_ml": Use o valor numérico exato do protocolo (ex: Noradrenalina = 0.128, Precedex = 0.004).
+           - "concentracao_mg_ml": Use o valor numérico exato do protocolo.
            - "unidade_base": ATENÇÃO ÀS UNIDADES DE TEMPO! Use "mcg/kg/min", "mcg/kg/h", "mg/kg/h", "UI/min" ou "mcg/min" conforme o protocolo da droga. Para hidratação use "ml/kg", "ml/kg/h" ou "ml/kg/24h".
         `;
       } else {
@@ -537,18 +543,10 @@ export default function EmergencyGuideApp() {
         `;
       }
 
-      if (lowerQuery.includes('dengue')) {
-        promptExtra += `\nPROTOCOLO DENGUE (MS BRASIL): Classifique A, B, C, D. Grupo C/D (Sala Vermelha): Expansão 20ml/kg.`;
-      }
-      if (lowerQuery.includes('sepse') || lowerQuery.includes('septico')) {
-        promptExtra += `\nPROTOCOLO SEPSE: Pacote de 1 hora, Lactato, Hemoculturas, Antibiótico, Cristaloide 30ml/kg.`;
-      }
-      if (lowerQuery.includes('iam') || lowerQuery.includes('infarto')) {
-        promptExtra += `\nPROTOCOLO IAM: Tempo porta-balão/agulha, Dupla antiagregação, Anticoagulação.`;
-      }
-      if (lowerQuery.includes('trauma') || lowerQuery.includes('acid') || lowerQuery.includes('poli')) {
-        promptExtra += `\nPROTOCOLO TRAUMA (ATLS): Preencher objeto "xabcde_trauma".`;
-      }
+      if (lowerQuery.includes('dengue')) promptExtra += `\nPROTOCOLO DENGUE (MS BRASIL): Classifique A, B, C, D. Grupo C/D (Sala Vermelha): Expansão 20ml/kg.`;
+      if (lowerQuery.includes('sepse') || lowerQuery.includes('septico')) promptExtra += `\nPROTOCOLO SEPSE: Pacote de 1 hora, Lactato, Hemoculturas, Antibiótico, Cristaloide 30ml/kg.`;
+      if (lowerQuery.includes('iam') || lowerQuery.includes('infarto')) promptExtra += `\nPROTOCOLO IAM: Tempo porta-balão/agulha, Dupla antiagregação, Anticoagulação.`;
+      if (lowerQuery.includes('trauma') || lowerQuery.includes('acid') || lowerQuery.includes('poli')) promptExtra += `\nPROTOCOLO TRAUMA (ATLS): Preencher objeto "xabcde_trauma".`;
 
       const promptText = `${roleDefinition}
       Gere a conduta clínica IMPECÁVEL para "${searchQuery}" na ${roomContext}.
@@ -619,8 +617,8 @@ export default function EmergencyGuideApp() {
       
       setConduct(parsedConduct);
 
-      // Salvar Cache se possível
-      if (isCloudConnected && currentUser && firebaseUser) {
+      // Salvar Cache se possível (apenas se online e com db)
+      if (isCloudConnected && currentUser && firebaseUser && db) {
         const docRef = doc(db, 'artifacts', appId, 'users', firebaseUser.uid, 'conducts', docId);
         await setDoc(docRef, {
           query: searchQuery,
@@ -692,15 +690,12 @@ export default function EmergencyGuideApp() {
   const groupMedsByCategory = (meds) => {
     if (!meds) return {};
     const groups = {};
-    // Adicionado 'DVA' na ordem de prioridade
     const defaultOrder = ['Dieta', 'Hidratação', 'DVA', 'Terapia Específica', 'Antibiótico', 'Sintomáticos', 'Profilaxia', 'Outros'];
     
     meds.forEach(med => {
       let cat = med.categoria || 'Outros';
-      // Normalização simples
       if (cat.toLowerCase().includes('dieta')) cat = 'Dieta';
       else if (cat.toLowerCase().includes('hidrat')) cat = 'Hidratação';
-      // Normalização específica para DVA
       else if (cat.toUpperCase() === 'DVA' || cat.toLowerCase().includes('vaso')) cat = 'DVA';
       else if (cat.toLowerCase().includes('anti') && cat.toLowerCase().includes('bi')) cat = 'Antibiótico';
       else if (cat.toLowerCase().includes('sintom')) cat = 'Sintomáticos';
@@ -711,12 +706,10 @@ export default function EmergencyGuideApp() {
       groups[cat].push(med);
     });
 
-    // Ordenar as chaves
     const orderedGroups = {};
     defaultOrder.forEach(key => {
       if (groups[key]) orderedGroups[key] = groups[key];
     });
-    // Adicionar categorias extras que não estavam na lista padrão
     Object.keys(groups).forEach(key => {
       if (!defaultOrder.includes(key) && !['Dieta', 'Hidratação', 'DVA', 'Antibiótico', 'Sintomáticos', 'Profilaxia', 'Terapia Específica'].includes(key)) {
         orderedGroups[key] = groups[key];
@@ -730,7 +723,7 @@ export default function EmergencyGuideApp() {
     switch (category) {
       case 'Dieta': return <Utensils size={18} />;
       case 'Hidratação': return <GlassWater size={18} />;
-      case 'DVA': return <Activity size={18} />; // Ícone para DVA
+      case 'DVA': return <Activity size={18} />;
       case 'Antibiótico': return <Tablets size={18} />;
       case 'Sintomáticos': return <Pill size={18} />;
       case 'Profilaxia': return <ShieldCheck size={18} />;
@@ -743,7 +736,7 @@ export default function EmergencyGuideApp() {
     switch (category) {
       case 'Dieta': return 'text-orange-600 bg-orange-50 border-orange-200';
       case 'Hidratação': return 'text-cyan-600 bg-cyan-50 border-cyan-200';
-      case 'DVA': return 'text-red-700 bg-red-50 border-red-200'; // Cor de destaque para DVA
+      case 'DVA': return 'text-red-700 bg-red-50 border-red-200'; 
       case 'Antibiótico': return 'text-rose-600 bg-rose-50 border-rose-200';
       case 'Sintomáticos': return 'text-purple-600 bg-purple-50 border-purple-200';
       case 'Profilaxia': return 'text-emerald-600 bg-emerald-50 border-emerald-200';
