@@ -29,45 +29,39 @@ export default async function handler(req, res) {
 
   if (activeRoom === 'verde') {
     promptExtra += `
-    CONTEXTO SALA VERDE:
-    - "receita_estruturada": OBRIGATÓRIO para itens de alta.
+    CONTEXTO SALA VERDE (RECEITA DE ALTA):
+    - OBRIGATÓRIO: Para cada item, preencha o objeto "receita".
+    - "receita": {
+        "uso": "USO ORAL", "USO TÓPICO", etc.
+        "nome_comercial": "Nome + Concentração" (ex: Dipirona 500mg),
+        "quantidade": "ex: 1 caixa",
+        "instrucoes": "ex: Tomar 1 cp de 6/6h se dor",
+        "dias_sugeridos": 5,
+        "calculo_qnt": { "frequencia_diaria": 4, "qtd_por_dose": 1, "unidade_form": "comprimidos" }
+    }
     `;
   } else {
     promptExtra += `
-    CONTEXTO SALA VERMELHA (CRÍTICO - CÁLCULO DE BIC):
-    Para medicamentos que exigem Bomba de Infusão (Noradrenalina, Dobutamina, Fentanil, Midazolam, Propofol, Nitroglicerina, Nitroprussiato, Amiodarona), utilize OBRIGATORIAMENTE os dados abaixo para preencher os campos de cálculo:
-
-    TABELA DE DILUIÇÕES PADRÃO (USE ESTES VALORES):
-    1. **Noradrenalina**: 4 ampolas (16mg) + SG5% 234ml (Total 250ml). Conc: 64 mcg/ml. Dose ref: 0.1 mcg/kg/min.
-    2. **Dobutamina**: 1 ampola (250mg) + SG5% 230ml (Total 250ml). Conc: 1000 mcg/ml (ou 1 mg/ml). Dose ref: 2.5 mcg/kg/min.
-    3. **Nitroprussiato**: 1 ampola (50mg) + SG5% 248ml (Total 250ml). Conc: 200 mcg/ml. Dose ref: 0.3 mcg/kg/min.
-    4. **Nitroglicerina**: 1 ampola (50mg) + SG5% 240ml (Total 250ml). Conc: 200 mcg/ml. Dose ref: 5 mcg/min (sem peso).
-    5. **Fentanil**: 5 ampolas (250mcg cada = 10ml) = 50ml PURO ou diluído para 50mcg/ml. Se usar padrão 500mcg em 100ml = 5 mcg/ml. USE PADRÃO: 50 mcg/ml (Puro). Dose ref: 0.02 mcg/kg/min.
-    6. **Midazolam**: 5 ampolas (50mg/10ml) + 40ml SF (Total 50ml). Conc: 1 mg/ml. Dose ref: 0.05 mg/kg/h.
-    7. **Propofol**: Puro 1%. Conc: 10 mg/ml. Dose ref: 1-3 mg/kg/h.
-    8. **Amiodarona**: Ataque 150mg/100ml. Manutenção: 900mg + SG5% 500ml. Conc: 1.8 mg/ml. Dose: 1 mg/min (6h) depois 0.5 mg/min.
-    
-    PREENCHIMENTO DO JSON PARA BIC:
-    - "usa_bic": true
-    - "dose_referencia": NÚMERO (ex: 0.1)
-    - "unidade_dose": "mcg/kg/min", "mg/kg/h", "mcg/min" ou "mg/min"
-    - "concentracao_solucao": NÚMERO da concentração final (ex: 64 para Nora)
-    - "unidade_concentracao": "mcg/ml" ou "mg/ml" (Deve ser compatível com a unidade da dose para facilitar conversão)
-    - "diluicao_contexto": Texto (ex: "4 Ampolas em 234ml SG5%")
+    CONTEXTO SALA VERMELHA (CÁLCULO DE DOSE/BIC):
+    - OBRIGATÓRIO: Para drogas vasoativas, sedativos ou antibióticos que usam peso.
+    - "usa_peso": true
+    - "dose_padrao_kg": NÚMERO DECIMAL (ex: 0.3 para 0.3mg/kg)
+    - "unidade_base": "mg/kg", "mcg/kg/min", "mg/kg/h"
+    - "concentracao_mg_ml": NÚMERO (Concentração final da solução. Ex: Nora 4mg em 250ml = 0.016 mg/ml ou 16 mcg/ml).
+    - "diluicao_contexto": Texto (ex: "4 Ampolas em 250ml SG5%").
+    - "receita": null.
     `;
   }
 
-  // Lógica Clínica
-  if (searchQuery.toLowerCase().includes('dengue')) promptExtra += `\nPROTOCOLO DENGUE: Classifique A, B, C, D.`;
-  if (searchQuery.toLowerCase().includes('trauma')) promptExtra += `\nPROTOCOLO TRAUMA: Preencha xabcde_trauma.`;
-
-  const promptText = `Atue como médico intensivista.
+  const promptText = `Atue como médico especialista em emergência.
   Gere conduta para "${searchQuery}" na ${roomContext}.
   ${promptExtra}
   
   REGRAS RÍGIDAS JSON:
-  1. "tratamento_medicamentoso": ARRAY.
-  2. "tipo": Use lista fechada [Comprimido, Injetável...].
+  1. JSON puro sem markdown.
+  2. "tratamento_medicamentoso": ARRAY.
+  3. "apresentacao": OBRIGATÓRIO (ex: Ampola 2ml, Comp 500mg).
+  4. "tipo": ['Comprimido', 'Gotas', 'Xarope', 'Injetável', 'Tópico', 'Inalatório'].
   
   ESTRUTURA JSON:
   {
@@ -82,14 +76,14 @@ export default async function handler(req, res) {
     "tratamento_medicamentoso": [ 
       { 
         "farmaco": "Nome", 
-        "tipo": "Injetável/Comprimido",
+        "apresentacao": "Ex: Ampola 2ml",
+        "tipo": "Injetável",
         "sugestao_uso": "...", 
-        "receita_estruturada": null,
-        "usa_bic": false, // TRUE PARA DROGAS DE BOMBA
-        "dose_referencia": 0, 
-        "unidade_dose": "...", 
-        "concentracao_solucao": 0, 
-        "unidade_concentracao": "...",
+        "receita": null, // OU OBJETO SE SALA VERDE
+        "usa_peso": false, // OU TRUE SE SALA VERMELHA
+        "dose_padrao_kg": 0, 
+        "unidade_base": "...", 
+        "concentracao_mg_ml": 0, 
         "diluicao_contexto": "...",
         "diluicao": "...", 
         "modo_admin": "...",
