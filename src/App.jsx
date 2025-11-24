@@ -3,7 +3,7 @@ import {
   Activity, AlertCircle, Search, Clock, Pill, FileText, Loader2, BookOpen, 
   Stethoscope, ClipboardCheck, AlertTriangle, ArrowRight, X, User, 
   CheckCircle2, Thermometer, Syringe, Siren, FlaskConical, Tag, Package,
-  ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Save, Cloud, CloudOff, Settings, Info,
+  ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save, Cloud, CloudOff, Settings, Info,
   HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine, Wind, Droplet, Timer, Skull, Printer, FilePlus, Calculator,
   Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2, SprayCan, CalendarDays
 } from 'lucide-react';
@@ -239,11 +239,10 @@ export default function EmergencyGuideApp() {
           setIsSaving(true);
           try {
             const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'notes', currentUser.username);
-            // CORREÇÃO DE SEGURANÇA: Garante que 'author' nunca seja undefined
             await setDoc(docRef, {
               content: userNotes || "",
               lastUpdated: new Date().toISOString(),
-              author: currentUser.name || currentUser.username || "Usuário",
+              author: currentUser.name || "Usuário",
               username: currentUser.username
             }, { merge: true });
           } catch (error) { console.error("Erro save nuvem:", error); } 
@@ -326,7 +325,6 @@ export default function EmergencyGuideApp() {
   const updateItemDays = (id, days) => {
     if (days < 1) days = 1;
     setSelectedPrescriptionItems(prev => prev.map(item => {
-      // ID composto para garantir unicidade
       if ((item.farmaco + (item.receita?.nome_comercial || "")) === id) {
         return { ...item, dias_tratamento: days };
       }
@@ -466,6 +464,7 @@ export default function EmergencyGuideApp() {
 
     const docId = getConductDocId(searchQuery, activeRoom);
 
+    // Verifica Cache
     if (isCloudConnected && currentUser) {
       try {
         const docRef = doc(db, 'artifacts', appId, 'users', currentUser.username, 'conducts', docId);
@@ -562,11 +561,6 @@ export default function EmergencyGuideApp() {
     return "Medicamento";
   };
 
-  const roomConfig = {
-    verde: { name: 'Sala Verde', color: 'emerald', accent: 'bg-emerald-500', border: 'border-emerald-500', text: 'text-emerald-800', light: 'bg-emerald-50', icon: <Stethoscope className="w-5 h-5" />, description: 'Ambulatorial / Baixa Complexidade' },
-    vermelha: { name: 'Sala Vermelha', color: 'rose', accent: 'bg-rose-600', border: 'border-rose-600', text: 'text-rose-800', light: 'bg-rose-50', icon: <Siren className="w-5 h-5" />, description: 'Emergência / Risco de Vida' }
-  };
-
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans text-slate-800">
@@ -613,17 +607,18 @@ export default function EmergencyGuideApp() {
         )}
 
         <div className="space-y-6">
+          {/* SELEÇÃO DE SALA */}
           <div className="grid md:grid-cols-2 gap-4">
-            {Object.entries(roomConfig).map(([key, config]) => {
-              const isActive = activeRoom === key;
-              return (
-                <button key={key} onClick={() => setActiveRoom(key)} className={`relative flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all ${isActive ? `bg-white ${config.border} shadow-md ring-1 ring-offset-2 ${config.accent.replace('bg-', 'ring-')}` : 'bg-white border-transparent hover:border-gray-200 shadow-sm'}`}>
-                  <div className={`p-3 rounded-xl ${isActive ? `${config.light} ${config.text}` : 'bg-gray-100 text-gray-400'}`}>{config.icon}</div>
-                  <div><h3 className={`font-bold ${isActive ? 'text-slate-800' : 'text-slate-500'}`}>{config.name}</h3><p className="text-xs text-slate-400">{config.description}</p></div>
-                  {isActive && <CheckCircle2 className={`ml-auto ${config.text}`} size={20} />}
-                </button>
-              );
-            })}
+            <button onClick={() => setActiveRoom('verde')} className={`relative flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all ${activeRoom === 'verde' ? `bg-white border-emerald-500 shadow-md ring-1 ring-offset-2 ring-emerald-500` : 'bg-white border-transparent hover:border-gray-200 shadow-sm'}`}>
+              <div className={`p-3 rounded-xl ${activeRoom === 'verde' ? `bg-emerald-50 text-emerald-800` : 'bg-gray-100 text-gray-400'}`}><Stethoscope className="w-6 h-6"/></div>
+              <div><h3 className={`font-bold ${activeRoom === 'verde' ? 'text-slate-800' : 'text-slate-500'}`}>Sala Verde</h3><p className="text-xs text-slate-400">Ambulatorial / Baixa Complexidade</p></div>
+              {activeRoom === 'verde' && <CheckCircle2 className={`ml-auto text-emerald-800`} size={20} />}
+            </button>
+            <button onClick={() => setActiveRoom('vermelha')} className={`relative flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all ${activeRoom === 'vermelha' ? `bg-white border-rose-600 shadow-md ring-1 ring-offset-2 ring-rose-600` : 'bg-white border-transparent hover:border-gray-200 shadow-sm'}`}>
+              <div className={`p-3 rounded-xl ${activeRoom === 'vermelha' ? `bg-rose-50 text-rose-800` : 'bg-gray-100 text-gray-400'}`}><Siren className="w-6 h-6"/></div>
+              <div><h3 className={`font-bold ${activeRoom === 'vermelha' ? 'text-slate-800' : 'text-slate-500'}`}>Sala Vermelha</h3><p className="text-xs text-slate-400">Emergência / Risco de Vida</p></div>
+              {activeRoom === 'vermelha' && <CheckCircle2 className={`ml-auto text-rose-800`} size={20} />}
+            </button>
           </div>
 
           <div className="bg-white p-2 rounded-2xl shadow-lg border border-gray-100 flex items-center gap-2">
