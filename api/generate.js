@@ -58,7 +58,7 @@ export default async function handler(req, res) {
     promptExtra += `
     CONTEXTO SALA VERDE (AMBULATORIAL):
     - Foco em alívio sintomático e tratamento domiciliar.
-    - "receita": OBRIGATÓRIO preencher objeto para prescrição de alta.
+    - "receita": OBRIGATÓRIO preencher objeto para prescrição de alta com "nome_comercial" (ex: "Novalgina 1g"), "uso" (ORAL, TÓPICO), "quantidade" e "instrucoes".
     - "instrucoes": Linguagem clara para o paciente (ex: "Tomar 1 cp após o almoço").
     `;
   }
@@ -139,7 +139,7 @@ export default async function handler(req, res) {
         "modo_admin": "BIC / Bolus Lento", 
         "cuidados": "Monitorizar QT, Risco de hipotensão...", 
         "indicacao": "Indicação precisa",
-        "receita": null, // Null na sala vermelha
+        "receita": { "nome_comercial": "Ex: Novalgina 1g", "quantidade": "1 cx", "instrucoes": "Tomar 1 cp de 6/6h", "uso": "ORAL", "dias_sugeridos": 5 }, // Null na sala vermelha
         "usa_peso": true, // Se a dose depende do peso
         "dose_padrao_kg": 0.0, // Apenas o número
         "unidade_base": "mcg/kg/min",
