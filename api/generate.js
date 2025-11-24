@@ -1,6 +1,3 @@
-// Este arquivo roda nos servidores da Vercel (Serverless Function).
-// Localização: /api/generate.js na raiz do projeto.
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -32,16 +29,18 @@ export default async function handler(req, res) {
 
   if (activeRoom === 'verde') {
     promptExtra += `
-    CONTEXTO SALA VERDE (RECEITA DE ALTA):
-    - "receita": OBRIGATÓRIO. Preencha para gerar o receituário.
-    - "calculo_qnt": Objeto com dados numéricos para calcular o total de caixas/comprimidos baseado nos dias.
+    CONTEXTO SALA VERDE (RECEITA):
+    - OBRIGATÓRIO: Preencha o objeto "receita" para CADA item.
+    - "calculo_qnt": ESSENCIAL para calcular quantidade total. Preencha com números (frequencia_diaria: 3 para 8/8h, 4 para 6/6h).
     `;
   } else {
     promptExtra += `
-    CONTEXTO SALA VERMELHA (CÁLCULO DE BOMBA/BIC):
-    - "receita": null.
+    CONTEXTO SALA VERMELHA (BOMBA/BIC):
     - "usa_peso": true para drogas tituláveis.
-    - "concentracao_mg_ml": Concentração final da solução padrão.
+    - "dose_padrao_kg": Número da dose inicial.
+    - "concentracao_mg_ml": Concentração final da solução (ex: 4mg/250ml = 0.016).
+    - "unidade_concentracao": mg/ml ou mcg/ml.
+    - "receita": null.
     `;
   }
 
@@ -52,7 +51,13 @@ export default async function handler(req, res) {
   Gere conduta para "${searchQuery}" na ${roomContext}.
   ${promptExtra}
   
-  ESTRUTURA JSON OBRIGATÓRIA:
+  REGRAS RÍGIDAS JSON:
+  1. JSON puro.
+  2. Separe apresentações diferentes em itens distintos do array.
+  3. "apresentacao": Ex: "Comprimido 500mg".
+  4. "sugestao_uso": Texto descritivo da administração (ex: "Tomar 1 cp de 6/6h").
+  
+  ESTRUTURA JSON:
   {
     "condicao": "Nome",
     "estadiamento": "...",
@@ -65,24 +70,25 @@ export default async function handler(req, res) {
     "tratamento_medicamentoso": [ 
       { 
         "farmaco": "Nome + Conc", 
-        "tipo": "Injetável/Comprimido",
-        "apresentacao": "Ampola/Caixa",
+        "apresentacao": "Ex: Ampola 2ml",
+        "tipo": "Injetável",
         "sugestao_uso": "...", 
         "receita": { // APENAS SALA VERDE
            "uso": "USO ORAL",
-           "nome_comercial": "Nome + Concentração",
-           "instrucoes": "Tomar 1 comprimido de 8/8h...",
+           "nome_comercial": "...",
+           "instrucoes": "...",
            "dias_sugeridos": 5,
            "calculo_qnt": { 
-               "qtd_por_dose": 1, // Quantos toma por vez (ex: 1 ou 2)
-               "frequencia_diaria": 3, // Quantas vezes ao dia (ex: 3 se for 8/8h)
-               "unidade_form": "comprimidos" // ou frascos, ml
+               "qtd_por_dose": 1, 
+               "frequencia_diaria": 3, 
+               "unidade_form": "comprimidos" 
            }
         },
         "usa_peso": false, 
         "dose_padrao_kg": 0, 
         "unidade_base": "...", 
         "concentracao_mg_ml": 0, 
+        "unidade_concentracao": "...",
         "diluicao_contexto": "...",
         "diluicao": "...", 
         "modo_admin": "...",
