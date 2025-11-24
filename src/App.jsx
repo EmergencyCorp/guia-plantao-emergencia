@@ -94,6 +94,95 @@ export default function EmergencyGuideApp() {
 
   const [isCurrentConductFavorite, setIsCurrentConductFavorite] = useState(false);
 
+  // --- HELPER FUNCTIONS (DEFINIDAS NO INÍCIO PARA EVITAR ERROS) ---
+
+  const calculateDose = (med) => {
+    if (!patientWeight || !med.dose_padrao_kg || !med.concentracao_solucao) return null;
+    
+    const weight = parseFloat(patientWeight);
+    const doseKg = parseFloat(med.dose_padrao_kg);
+    const concentration = parseFloat(med.concentracao_solucao);
+    const unit = med.unidade_base || ""; 
+
+    let totalDoseValue = doseKg * weight;
+    let doseDisplay = `${totalDoseValue.toFixed(2)}`;
+    
+    if (unit.includes("mcg")) {
+      doseDisplay += " mcg";
+      if (unit.includes("min")) doseDisplay += "/min";
+      else if (unit.includes("h")) doseDisplay += "/h";
+    } else {
+      doseDisplay += " mg";
+      if (unit.includes("min")) doseDisplay += "/min";
+      else if (unit.includes("h")) doseDisplay += "/h";
+    }
+
+    let rateMlH = 0;
+    if (concentration > 0) {
+       let doseInMg = totalDoseValue; 
+       
+       // Normalização de unidades (mcg vs mg)
+       if (unit.includes("mcg") && med.unidade_concentracao?.includes("mg")) {
+          doseInMg = totalDoseValue / 1000;
+       } else if (unit.includes("mg") && med.unidade_concentracao?.includes("mcg")) {
+          doseInMg = totalDoseValue * 1000;
+       }
+
+       // Normalização de tempo (min vs h)
+       if (unit.includes("/min")) {
+         rateMlH = (doseInMg * 60) / concentration;
+       } else {
+         rateMlH = doseInMg / concentration;
+       }
+    }
+    return { doseDisplay, rateMlH: rateMlH.toFixed(1) };
+  };
+
+  const inferMedType = (med) => {
+    if (med.tipo && med.tipo !== "N/A") return med.tipo;
+    const name = med.farmaco?.toLowerCase() || "";
+    const via = med.via?.toLowerCase() || "";
+    if (via.includes('ev') || via.includes('iv') || via.includes('im') || via.includes('sc')) return "Injetável";
+    if (name.includes('gotas')) return "Gotas";
+    if (name.includes('xarope')) return "Xarope";
+    if (name.includes('comprimido')) return "Comprimido";
+    if (name.includes('creme') || name.includes('pomada')) return "Tópico";
+    if (name.includes('spray') || name.includes('bombinha')) return "Inalatório";
+    return "Medicamento";
+  };
+
+  const getMedTypeColor = (type) => {
+    if (!type) return 'bg-slate-100 text-slate-500 border-slate-200';
+    const t = type.toLowerCase();
+    if (t.includes('injet')) return 'bg-rose-50 text-rose-700 border-rose-200';
+    if (t.includes('gota') || t.includes('solu') || t.includes('xarope')) return 'bg-blue-50 text-blue-700 border-blue-200';
+    if (t.includes('comp') || t.includes('cap')) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    if (t.includes('tópi')) return 'bg-amber-50 text-amber-700 border-amber-200';
+    return 'bg-slate-100 text-slate-500 border-slate-200';
+  };
+
+  const getMedTypeIcon = (type) => {
+    if (!type) return <Pill size={14} />;
+    const t = type.toLowerCase();
+    if (t.includes('injet')) return <SyringeIcon size={14} className="text-rose-500" />;
+    if (t.includes('gota') || t.includes('solu') || t.includes('xarope') || t.includes('susp')) return <Droplets size={14} className="text-blue-500" />;
+    if (t.includes('comp') || t.includes('cap')) return <Tablets size={14} className="text-emerald-500" />;
+    if (t.includes('tópi') || t.includes('pomada') || t.includes('creme')) return <Pipette size={14} className="text-amber-500" />;
+    if (t.includes('inal') || t.includes('spray')) return <SprayCan size={14} className="text-purple-500" />;
+    return <Pill size={14} className="text-slate-500" />;
+  };
+
+  const getVitalIcon = (text) => {
+    const t = text.toLowerCase();
+    if (t.includes('fc') || t.includes('bpm')) return <HeartPulse size={16} className="text-rose-500" />;
+    if (t.includes('pa') || t.includes('mmhg') || t.includes('pam')) return <Activity size={16} className="text-blue-500" />;
+    if (t.includes('sat') || t.includes('o2')) return <Droplet size={16} className="text-cyan-500" />;
+    if (t.includes('fr') || t.includes('resp')) return <Wind size={16} className="text-teal-500" />;
+    return <Activity size={16} className="text-slate-400" />;
+  };
+
+  // --- EFFECTS ---
+
   useEffect(() => {
     if (!firebaseConfig || !firebaseConfig.apiKey) {
       setConfigStatus('missing');
@@ -161,6 +250,8 @@ export default function EmergencyGuideApp() {
       setIsCurrentConductFavorite(false);
     }
   }, [conduct, favorites]);
+
+  // --- DATA MANAGEMENT ---
 
   const loadHistory = (username) => {
     try {
@@ -312,13 +403,12 @@ export default function EmergencyGuideApp() {
     if (activeRoom !== 'verde' || !med.receita) return;
 
     setSelectedPrescriptionItems(prev => {
-      const itemId = med.farmaco; // Identificador simples
+      const itemId = med.farmaco;
       const exists = prev.find(item => item.farmaco === itemId);
       
       if (exists) {
         return prev.filter(item => item.farmaco !== itemId);
       } else {
-        // Usa o dias_sugeridos da IA ou 5 como padrão
         return [...prev, { ...med, dias_tratamento: med.receita.dias_sugeridos || 5 }];
       }
     });
@@ -334,64 +424,11 @@ export default function EmergencyGuideApp() {
     }));
   };
 
-  // --- CÁLCULO DA RECEITA (SALA VERDE) ---
   const calculateTotalQuantity = (item) => {
     const rec = item.receita;
     if (!rec || !rec.calculo_qnt || !rec.calculo_qnt.frequencia_diaria) return rec?.quantidade || "1 caixa";
-    
-    // Cálculo: Qtd por dose * Freq Diária * Dias
-    const qtdDose = rec.calculo_qnt.qtd_por_dose || 1;
-    const freq = rec.calculo_qnt.frequencia_diaria || 1;
-    const dias = item.dias_tratamento || 1;
-    
-    const totalUnits = Math.ceil(qtdDose * freq * dias);
-    const unidade = rec.calculo_qnt.unidade_form || 'unidades';
-    
-    return `${totalUnits} ${unidade}`;
-  };
-
-  // --- CÁLCULO DE BOMBA (SALA VERMELHA) ---
-  const calculateInfusion = (med) => {
-    if (!patientWeight || !med.dose_padrao_kg || !med.concentracao_mg_ml) return null;
-    
-    const weight = parseFloat(patientWeight);
-    const doseRef = parseFloat(med.dose_padrao_kg);
-    const concentration = parseFloat(med.concentracao_mg_ml);
-    const unit = med.unidade_base || ""; 
-
-    // 1. Dose Alvo (Ex: 0.1 * 70 = 7 mcg/min)
-    let totalDoseValue = doseRef * weight;
-    let doseDisplay = `${totalDoseValue.toFixed(2)}`;
-    
-    if (unit.includes("mcg")) {
-      doseDisplay += " mcg";
-      if (unit.includes("min")) doseDisplay += "/min";
-      else if (unit.includes("h")) doseDisplay += "/h";
-    } else {
-      doseDisplay += " mg";
-      if (unit.includes("min")) doseDisplay += "/min";
-      else if (unit.includes("h")) doseDisplay += "/h";
-    }
-
-    // 2. Vazão (ml/h)
-    let rateMlH = 0;
-    if (concentration > 0) {
-       let doseForCalc = totalDoseValue;
-       
-       // Se dose é mcg e concentração mg, converte dose pra mg
-       if (unit.includes("mcg")) {
-         doseForCalc = totalDoseValue / 1000; // mcg -> mg
-       }
-       
-       // Se dose é /min, multiplica por 60 para virar /h
-       if (unit.includes("min")) {
-         rateMlH = (doseForCalc * 60) / concentration;
-       } else {
-         rateMlH = doseForCalc / concentration;
-       }
-    }
-
-    return { doseDisplay, rateMlH: rateMlH.toFixed(1) };
+    const totalUnits = Math.ceil(rec.calculo_qnt.qtd_por_dose * rec.calculo_qnt.frequencia_diaria * item.dias_tratamento);
+    return `${totalUnits} ${rec.calculo_qnt.unidade_form || 'unidades'}`;
   };
 
   const getConductDocId = (query, room) => {
@@ -532,51 +569,6 @@ export default function EmergencyGuideApp() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const showError = (msg) => { setErrorMsg(msg); setTimeout(() => setErrorMsg(''), 4000); };
-
-  const getVitalIcon = (text) => {
-    const t = text.toLowerCase();
-    if (t.includes('fc') || t.includes('bpm')) return <HeartPulse size={16} className="text-rose-500" />;
-    if (t.includes('pa') || t.includes('mmhg') || t.includes('pam')) return <Activity size={16} className="text-blue-500" />;
-    if (t.includes('sat') || t.includes('o2')) return <Droplet size={16} className="text-cyan-500" />;
-    if (t.includes('fr') || t.includes('resp')) return <Wind size={16} className="text-teal-500" />;
-    return <Activity size={16} className="text-slate-400" />;
-  };
-
-  const getMedTypeIcon = (type) => {
-    if (!type) return <Pill size={14} />;
-    const t = type.toLowerCase();
-    if (t.includes('injet')) return <SyringeIcon size={14} className="text-rose-500" />;
-    if (t.includes('gota') || t.includes('solu') || t.includes('xarope') || t.includes('susp')) return <Droplets size={14} className="text-blue-500" />;
-    if (t.includes('comp') || t.includes('cap')) return <Tablets size={14} className="text-emerald-500" />;
-    if (t.includes('tópi') || t.includes('pomada') || t.includes('creme')) return <Pipette size={14} className="text-amber-500" />;
-    if (t.includes('inal') || t.includes('spray')) return <SprayCan size={14} className="text-purple-500" />;
-    return <Pill size={14} className="text-slate-500" />;
-  };
-
-  const getMedTypeColor = (type) => {
-    if (!type) return 'bg-slate-100 text-slate-500 border-slate-200';
-    const t = type.toLowerCase();
-    if (t.includes('injet')) return 'bg-rose-50 text-rose-700 border-rose-200';
-    if (t.includes('gota') || t.includes('solu') || t.includes('xarope')) return 'bg-blue-50 text-blue-700 border-blue-200';
-    if (t.includes('comp') || t.includes('cap')) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-    if (t.includes('tópi')) return 'bg-amber-50 text-amber-700 border-amber-200';
-    return 'bg-slate-100 text-slate-500 border-slate-200';
-  };
-
-  const inferMedType = (med) => {
-    if (med.tipo && med.tipo !== "N/A") return med.tipo;
-    const name = med.farmaco?.toLowerCase() || "";
-    const via = med.via?.toLowerCase() || "";
-    if (via.includes('ev') || via.includes('iv') || via.includes('im') || via.includes('sc')) return "Injetável";
-    if (name.includes('gotas')) return "Gotas";
-    if (name.includes('xarope')) return "Xarope";
-    if (name.includes('comprimido')) return "Comprimido";
-    if (name.includes('creme') || name.includes('pomada')) return "Tópico";
-    if (name.includes('spray') || name.includes('bombinha')) return "Inalatório";
-    return "Medicamento";
   };
 
   const roomConfig = {
@@ -732,8 +724,8 @@ export default function EmergencyGuideApp() {
                 <div className="space-y-4">
                    <div className="flex items-center gap-2 text-emerald-800 mb-2 px-2"><div className="bg-emerald-100 p-1.5 rounded"><Pill size={18}/></div><h3 className="font-bold text-lg">Prescrição e Conduta</h3></div>
                    {conduct.tratamento_medicamentoso?.map((med, idx) => {
-                     const itemId = med.farmaco + (med.receita?.nome_comercial || "");
-                     const isSelected = selectedPrescriptionItems.some(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
+                     const itemId = med.farmaco;
+                     const isSelected = selectedPrescriptionItems.some(item => item.farmaco === itemId);
                      const canSelect = activeRoom === 'verde' && med.receita;
                      const medType = inferMedType(med); 
                      const isInjectable = medType.toLowerCase().includes('injet');
@@ -747,7 +739,7 @@ export default function EmergencyGuideApp() {
                        volumeFinal = dose?.rateMlH ? dose.rateMlH + " ml/h" : null;
                      }
 
-                     const selectedItemState = selectedPrescriptionItems.find(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
+                     const selectedItemState = selectedPrescriptionItems.find(item => item.farmaco === itemId);
                      const currentDays = selectedItemState ? selectedItemState.dias_tratamento : (med.receita?.dias_sugeridos || 5);
 
                      return (
@@ -760,17 +752,12 @@ export default function EmergencyGuideApp() {
                           {canSelect && (<div className={`absolute top-4 right-4 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-300 text-transparent'}`}><CheckCircle2 size={14} /></div>)}
                           
                           <div className="absolute top-4 right-12">
-                             <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${getMedTypeColor(medType)}`}>
-                                {getMedTypeIcon(medType)} {medType}
-                             </span>
+                             <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${getMedTypeColor(medType)}`}>{getMedTypeIcon(medType)} {medType}</span>
                           </div>
 
                           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 mb-3 pl-3 pr-20">
                              <div>
-                                <div className="flex items-center gap-2">
-                                   <h4 className="text-xl font-bold text-slate-800">{med.farmaco}</h4>
-                                   {med.apresentacao && <span className="text-[10px] font-bold bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-slate-600 flex items-center gap-1"><Package size={10}/> {med.apresentacao}</span>}
-                                </div>
+                                <div className="flex items-center gap-2"><h4 className="text-xl font-bold text-slate-800">{med.farmaco}</h4></div>
                                 <span className="text-sm text-slate-500 italic">{med.indicacao}</span>
                              </div>
                              {med.via && <span className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-100">{med.via}</span>}
