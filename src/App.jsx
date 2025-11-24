@@ -34,6 +34,9 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
+// --- URL DO LOGO (Link direto do Google Drive) ---
+const logoImg = "https://drive.google.com/uc?export=view&id=1NOTk8hlnegfrHc_EHIuFM9j3sqZ20OVC";
+
 export default function EmergencyGuideApp() {
   const [currentUser, setCurrentUser] = useState(null);
   const [usernameInput, setUsernameInput] = useState('');
@@ -260,34 +263,94 @@ export default function EmergencyGuideApp() {
     localStorage.removeItem('emergency_app_user');
   };
 
-  // --- LÓGICA DE PRESCRIÇÃO ---
+  // --- HELPER PARA INFERIR USO DO TIPO DE MEDICAÇÃO ---
+  const inferUsoFromType = (tipo, farmaco = "") => {
+    if (!tipo) return "USO ORAL";
+    const t = tipo.toLowerCase();
+    const f = farmaco.toLowerCase();
+    
+    if (t.includes('oftálmico') || t.includes('colírio')) return "USO OFTÁLMICO";
+    if (t.includes('otológico')) return "USO OTOLÓGICO";
+    if (t.includes('nasal')) return "USO NASAL";
+    if (t.includes('inalatório') || t.includes('spray') || t.includes('bombinha')) return "USO INALATÓRIO";
+    if (t.includes('tópico') || t.includes('creme') || t.includes('pomada') || t.includes('gel')) return "USO TÓPICO";
+    if (t.includes('retal') || t.includes('supositório')) return "USO RETAL";
+    if (t.includes('injetável') || t.includes('ampola') || t.includes('ev') || t.includes('im') || t.includes('iv') || t.includes('subcut')) return "USO INJETÁVEL";
+    if (t.includes('vaginal') || t.includes('óvulo')) return "USO VAGINAL";
+    
+    // Fallbacks baseados no nome se o tipo for genérico
+    if (f.includes('creme') || f.includes('pomada')) return "USO TÓPICO";
+    if (f.includes('colírio')) return "USO OFTÁLMICO";
+    
+    return "USO ORAL";
+  };
+
+  // --- LÓGICA DE PRESCRIÇÃO ATUALIZADA ---
   const togglePrescriptionItem = (med) => {
-    if (activeRoom !== 'verde' || !med.receita) return;
+    if (activeRoom !== 'verde') return;
 
     setSelectedPrescriptionItems(prev => {
-      const itemId = med.farmaco + (med.receita?.nome_comercial || "");
-      const exists = prev.find(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
+      // Cria um ID único baseado no fármaco e nome comercial (ou fallback para fármaco)
+      const medName = med.farmaco || "Medicamento sem nome";
+      const commercialName = med.receita?.nome_comercial || medName; 
+      const itemId = medName + commercialName;
+      
+      const exists = prev.find(item => {
+        const iName = item.farmaco || "Medicamento sem nome";
+        const iComm = item.receita?.nome_comercial || iName;
+        return (iName + iComm) === itemId;
+      });
       
       if (exists) {
-        return prev.filter(item => (item.farmaco + (item.receita?.nome_comercial || "")) !== itemId);
+        // Remove se já existe
+        return prev.filter(item => {
+            const iName = item.farmaco || "Medicamento sem nome";
+            const iComm = item.receita?.nome_comercial || iName;
+            return (iName + iComm) !== itemId;
+        });
       } else {
-        return [...prev, { ...med, dias_tratamento: med.receita.dias_sugeridos || 5 }];
+        // Adiciona novo item, criando estrutura de receita se não existir
+        const medType = inferMedType(med);
+        const usoInferido = inferUsoFromType(med.tipo || medType, med.farmaco);
+        
+        const newItem = {
+            ...med,
+            dias_tratamento: med.receita?.dias_sugeridos || 5,
+            receita: med.receita ? {
+                ...med.receita,
+                uso: med.receita.uso || usoInferido // Garante que tenha o campo uso
+            } : {
+                nome_comercial: med.farmaco,
+                quantidade: "1 cx/frasco", // Padrão genérico
+                uso: usoInferido,
+                instrucoes: med.sugestao_uso || "Conforme orientação médica.",
+                dias_sugeridos: 5
+            }
+        };
+        return [...prev, newItem];
       }
     });
   };
 
   const updateItemDays = (id, days) => {
     const newItems = [...selectedPrescriptionItems];
-    const index = newItems.findIndex(item => (item.farmaco + (item.receita?.nome_comercial || "")) === id);
+    const index = newItems.findIndex(item => {
+        const iName = item.farmaco || "Medicamento sem nome";
+        const iComm = item.receita?.nome_comercial || iName;
+        return (iName + iComm) === id;
+    });
     
     if (index !== -1) {
       newItems[index].dias_tratamento = days;
       const item = newItems[index];
+      
+      // Tenta recalcular quantidade se possível
       if (item.receita?.calculo_qnt?.frequencia_diaria && days > 0) {
         const total = Math.ceil(item.receita.calculo_qnt.frequencia_diaria * days);
         const unidade = item.receita.calculo_qnt.unidade || 'unidades';
         item.receita.quantidade = `${total} ${unidade}`;
       }
+      
       setSelectedPrescriptionItems(newItems);
     }
   };
@@ -433,21 +496,24 @@ export default function EmergencyGuideApp() {
         12. **Cisatracúrio:** 5 ampolas (10mg/5mL) + 25mL SF 0,9%. Concentração: 1 mg/mL. Dose em mcg/kg/min.
 
         **ESTRUTURA DE PRESCRIÇÃO E CATEGORIZAÇÃO:**
-           - Categorias: "Dieta", "Hidratação", "Antibiótico", "Sintomáticos", "Profilaxia", "Terapia Específica".
+           - Categorias: "Dieta", "Hidratação", "DVA" (Drogas Vasoativas), "Antibiótico", "Sintomáticos", "Profilaxia", "Terapia Específica".
+           - **DVA**: Use esta categoria EXCLUSIVAMENTE para drogas vasoativas: Noradrenalina, Dobutamina, Dopamina, Vasopressina, Adrenalina, Nitroprussiato, Nitroglicerina.
            - Para medicamentos vasoativos/sedativos listados acima, use EXATAMENTE a diluição e concentração descrita.
-           - Para **Hidratação**, se venosa, use "usa_peso": true e em "dose_padrao_kg" forneça o volume total em 24h.
+           - Para **Hidratação**, se venosa, use "usa_peso": true se necessário. Decida a melhor estratégia (Bolus 30ml/kg, Manutenção em ml/kg/h ou Volume Total/24h).
            
         **DETALHAMENTO TÉCNICO:**
            - "diluicao_detalhada": Copie o texto do protocolo acima se aplicável.
            - "concentracao_mg_ml": Use o valor numérico exato do protocolo (ex: Noradrenalina = 0.128, Precedex = 0.004).
-           - "unidade_base": ATENÇÃO ÀS UNIDADES DE TEMPO! Use "mcg/kg/min", "mcg/kg/h", "mg/kg/h", "UI/min" ou "mcg/min" conforme o protocolo da droga.
+           - "unidade_base": ATENÇÃO ÀS UNIDADES DE TEMPO! Use "mcg/kg/min", "mcg/kg/h", "mg/kg/h", "UI/min" ou "mcg/min" conforme o protocolo da droga. Para hidratação use "ml/kg", "ml/kg/h" ou "ml/kg/24h".
         `;
       } else {
         roleDefinition = "Você é um médico generalista experiente em pronto atendimento.";
         promptExtra += `
         CONTEXTO SALA VERDE (AMBULATORIAL):
         - Foco em alívio sintomático e tratamento domiciliar.
-        - "receita": OBRIGATÓRIO preencher objeto para prescrição de alta.
+        - "receita": OBRIGATÓRIO para TODOS os medicamentos (seja Oral, Tópico, Injetável, etc).
+        - No objeto "receita", o campo "uso" deve ser EXATO: "USO ORAL", "USO TÓPICO", "USO INJETÁVEL", "USO OFTÁLMICO", "USO OTOLÓGICO", "USO RETAL", "USO INALATÓRIO".
+        - "instrucoes": Linguagem clara para o paciente.
         `;
       }
 
@@ -471,7 +537,7 @@ export default function EmergencyGuideApp() {
       REGRAS DE FORMATO (JSON):
       1. Retorne APENAS JSON válido.
       2. Separe apresentações diferentes em objetos diferentes.
-      3. "tipo" OBRIGATÓRIO: ['Comprimido', 'Cápsula', 'Xarope', 'Suspensão', 'Gotas', 'Solução Oral', 'Injetável', 'Tópico', 'Inalatório', 'Supositório'].
+      3. "tipo" OBRIGATÓRIO: ['Comprimido', 'Cápsula', 'Xarope', 'Suspensão', 'Gotas', 'Solução Oral', 'Injetável', 'Tópico', 'Inalatório', 'Supositório', 'Colírio'].
       4. "sugestao_uso": Sala Verde (Instruções paciente), Sala Vermelha (Instruções adminstração resumida).
       
       ESTRUTURA JSON ESPERADA:
@@ -501,10 +567,10 @@ export default function EmergencyGuideApp() {
             "cuidados_especificos": "...",
             "tempo_infusao": "...",
             "indicacao": "...",
-            "receita": null,
+            "receita": { "nome_comercial": "...", "quantidade": "...", "uso": "USO ORAL", "instrucoes": "...", "dias_sugeridos": 5, "calculo_qnt": {"frequencia_diaria": 1, "unidade": "cp"} },
             "usa_peso": false, 
             "dose_padrao_kg": 0.0, 
-            "unidade_base": "mcg/kg/min", // ou mcg/kg/h, mg/kg/h, UI/min
+            "unidade_base": "mcg/kg/min", 
             "concentracao_mg_ml": 0.0
           } 
         ],
@@ -606,17 +672,20 @@ export default function EmergencyGuideApp() {
   const groupMedsByCategory = (meds) => {
     if (!meds) return {};
     const groups = {};
-    const defaultOrder = ['Dieta', 'Hidratação', 'Terapia Específica', 'Antibiótico', 'Sintomáticos', 'Profilaxia', 'Outros'];
+    // Adicionado 'DVA' na ordem de prioridade
+    const defaultOrder = ['Dieta', 'Hidratação', 'DVA', 'Terapia Específica', 'Antibiótico', 'Sintomáticos', 'Profilaxia', 'Outros'];
     
     meds.forEach(med => {
       let cat = med.categoria || 'Outros';
       // Normalização simples
       if (cat.toLowerCase().includes('dieta')) cat = 'Dieta';
       else if (cat.toLowerCase().includes('hidrat')) cat = 'Hidratação';
+      // Normalização específica para DVA
+      else if (cat.toUpperCase() === 'DVA' || cat.toLowerCase().includes('vaso')) cat = 'DVA';
       else if (cat.toLowerCase().includes('anti') && cat.toLowerCase().includes('bi')) cat = 'Antibiótico';
       else if (cat.toLowerCase().includes('sintom')) cat = 'Sintomáticos';
       else if (cat.toLowerCase().includes('profilax')) cat = 'Profilaxia';
-      else if (cat.toLowerCase().includes('espec') || cat.toLowerCase().includes('vaso') || cat.toLowerCase().includes('seda')) cat = 'Terapia Específica';
+      else if (cat.toLowerCase().includes('espec') || cat.toLowerCase().includes('seda')) cat = 'Terapia Específica';
       
       if (!groups[cat]) groups[cat] = [];
       groups[cat].push(med);
@@ -629,7 +698,7 @@ export default function EmergencyGuideApp() {
     });
     // Adicionar categorias extras que não estavam na lista padrão
     Object.keys(groups).forEach(key => {
-      if (!defaultOrder.includes(key) && !['Dieta', 'Hidratação', 'Antibiótico', 'Sintomáticos', 'Profilaxia', 'Terapia Específica'].includes(key)) {
+      if (!defaultOrder.includes(key) && !['Dieta', 'Hidratação', 'DVA', 'Antibiótico', 'Sintomáticos', 'Profilaxia', 'Terapia Específica'].includes(key)) {
         orderedGroups[key] = groups[key];
       }
     });
@@ -641,6 +710,7 @@ export default function EmergencyGuideApp() {
     switch (category) {
       case 'Dieta': return <Utensils size={18} />;
       case 'Hidratação': return <GlassWater size={18} />;
+      case 'DVA': return <Activity size={18} />; // Ícone para DVA
       case 'Antibiótico': return <Tablets size={18} />;
       case 'Sintomáticos': return <Pill size={18} />;
       case 'Profilaxia': return <ShieldCheck size={18} />;
@@ -653,6 +723,7 @@ export default function EmergencyGuideApp() {
     switch (category) {
       case 'Dieta': return 'text-orange-600 bg-orange-50 border-orange-200';
       case 'Hidratação': return 'text-cyan-600 bg-cyan-50 border-cyan-200';
+      case 'DVA': return 'text-red-700 bg-red-50 border-red-200'; // Cor de destaque para DVA
       case 'Antibiótico': return 'text-rose-600 bg-rose-50 border-rose-200';
       case 'Sintomáticos': return 'text-purple-600 bg-purple-50 border-purple-200';
       case 'Profilaxia': return 'text-emerald-600 bg-emerald-50 border-emerald-200';
@@ -672,7 +743,7 @@ export default function EmergencyGuideApp() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans text-slate-800">
         <div className="bg-white rounded-3xl shadow-xl border border-gray-100 max-w-md w-full overflow-hidden">
           <div className="bg-gradient-to-br from-blue-900 to-slate-800 p-8 text-center text-white relative">
-            <Shield size={40} className="mx-auto mb-3 text-blue-300" />
+            <img src={logoImg} alt="Logo do Sistema" className="mx-auto mb-3 h-24 w-auto rounded-xl shadow-2xl border-4 border-white/20 object-cover bg-white p-1" />
             <h1 className="text-2xl font-bold mb-1">Guia de Plantão</h1>
             <p className="text-blue-200 text-sm font-medium">Acesso Exclusivo Médico</p>
           </div>
@@ -700,7 +771,10 @@ export default function EmergencyGuideApp() {
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800 selection:bg-blue-100">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3"><div className="bg-blue-900 p-2 rounded-lg text-white"><ClipboardCheck size={20} /></div><div><h1 className="text-lg font-bold text-slate-800 leading-none">Guia de Plantão</h1><span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Suporte Médico</span></div></div>
+          <div className="flex items-center gap-3">
+            <img src={logoImg} alt="Logo" className="w-10 h-10 rounded-lg object-cover shadow-sm border border-gray-200" />
+            <div><h1 className="text-lg font-bold text-slate-800 leading-none">Guia de Plantão</h1><span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Suporte Médico</span></div>
+          </div>
           <div className="flex items-center gap-3">
              <div className="hidden sm:flex flex-col items-end mr-2"><span className="text-xs font-bold text-slate-700">{currentUser.name}</span><span className="text-[10px] text-slate-400 uppercase">{currentUser.role}</span></div>
              <button onClick={() => setShowFavoritesModal(true)} className="p-2 text-yellow-500 hover:bg-yellow-50 rounded-full transition-colors" title="Meus Favoritos"><Star size={20} /></button>
@@ -846,12 +920,22 @@ export default function EmergencyGuideApp() {
                
                                       // === LÓGICA DE CÁLCULO AVANÇADA PARA BIC (mL/h) ===
                                       
-                                      // 1. HIDRATAÇÃO (Volume Total 24h)
+                                      // 1. HIDRATAÇÃO (Flexible Logic)
                                       if (category === 'Hidratação' && med.usa_peso) {
-                                        const volume24h = totalDose; // dose_padrao_kg = ml/kg/24h
-                                        const flowRate = volume24h / 24;
-                                        volumeFinal = `Total: ${volume24h.toFixed(0)} ml/24h (Vazão: ${flowRate.toFixed(1)} ml/h)`;
-                                        doseFinal = `${doseRef} ml/kg/24h`;
+                                         if (unit.includes('24h') || unit.includes('dia')) {
+                                            const volume24h = totalDose; 
+                                            const flowRate = volume24h / 24;
+                                            volumeFinal = `Total: ${volume24h.toFixed(0)} ml/24h (Vazão: ${flowRate.toFixed(1)} ml/h)`;
+                                         } else if (unit.includes('h') && !unit.includes('24')) {
+                                            // ml/kg/h
+                                            const flowRate = totalDose; // doseRef * weight
+                                            volumeFinal = `Vazão: ${flowRate.toFixed(1)} ml/h`;
+                                         } else {
+                                            // Bolus (ml/kg)
+                                            volumeFinal = `Volume Total: ${totalDose.toFixed(0)} ml`;
+                                         }
+                                         // Atualiza doseFinal para mostrar a unidade correta
+                                         doseFinal = `${doseRef} ${med.unidade_base}`;
                                       } 
                                       
                                       // 2. CÁLCULOS ESPECÍFICOS DE VAZÃO (DROGAS)
@@ -945,13 +1029,28 @@ export default function EmergencyGuideApp() {
                    ) : (
                      /* RENDERIZAÇÃO PADRÃO (SALA VERDE OU SEM CATEGORIAS) */
                      conduct.tratamento_medicamentoso?.map((med, idx) => {
-                       const itemId = med.farmaco + (med.receita?.nome_comercial || "");
-                       const isSelected = selectedPrescriptionItems.some(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
-                       const canSelect = activeRoom === 'verde' && med.receita;
+                       // CORREÇÃO: Lógica de ID simplificada para corresponder ao togglePrescriptionItem
+                       const medName = med.farmaco || "Medicamento sem nome";
+                       // Se não tem receita, o toggle vai criar uma com nome_comercial = medName
+                       // Se tem receita, usa o nome_comercial existente
+                       const commercialName = med.receita?.nome_comercial || medName;
+                       const itemId = medName + commercialName;
+
+                       const isSelected = selectedPrescriptionItems.some(item => {
+                           const iName = item.farmaco || "Medicamento sem nome";
+                           const iComm = item.receita?.nome_comercial || iName;
+                           return (iName + iComm) === itemId;
+                       });
+                       
+                       const canSelect = activeRoom === 'verde'; 
                        const medType = inferMedType(med); 
                        const isInjectable = medType.toLowerCase().includes('injet');
                        
-                       const selectedItemState = selectedPrescriptionItems.find(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
+                       const selectedItemState = selectedPrescriptionItems.find(item => {
+                           const iName = item.farmaco || "Medicamento sem nome";
+                           const iComm = item.receita?.nome_comercial || iName;
+                           return (iName + iComm) === itemId;
+                       });
                        const currentDays = selectedItemState ? selectedItemState.dias_tratamento : (med.receita?.dias_sugeridos || 5);
 
                        return (
@@ -975,12 +1074,12 @@ export default function EmergencyGuideApp() {
                                {med.via && <span className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-100">{med.via}</span>}
                             </div>
                             
-                            <div className="bg-slate-50 rounded-lg p-3 ml-3 mb-3 font-mono text-sm text-slate-700 border border-slate-100"><strong className="text-slate-500 block text-xs uppercase mb-1">Sugestão de Uso / Dose:</strong>{med.sugestao_uso || med.dose}</div>
+                            <div className="bg-slate-50 rounded-lg p-3 ml-3 mb-3 font-mono text-sm text-slate-700 border border-slate-100"><strong className="text-slate-500 block text-xs uppercase mb-1">Sugestão de Uso / Dose:</strong>{med.sugestao_uso || med.dose || med.receita?.instrucoes}</div>
                             
                             {canSelect && isSelected && (
                               <div className="ml-3 mb-3 animate-in slide-in-from-top-1" onClick={(e) => e.stopPropagation()}>
                                  <label className="text-xs font-bold text-blue-700 flex items-center gap-1 mb-1"><CalendarDays size={12} /> Duração (Dias):</label>
-                                 <input type="number" min="1" className="w-20 px-2 py-1 text-sm border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-blue-900 font-bold" value={currentDays} onChange={(e) => updateItemDays(itemId, parseInt(e.target.value))} />
+                                 <input type="number" min="1" className="w-20 px-2 py-1 text-sm border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-blue-900 font-bold" value={currentDays} onChange={(e) => updateItemDays(itemId || med.farmaco, parseInt(e.target.value))} />
                               </div>
                             )}
 
@@ -1035,9 +1134,20 @@ export default function EmergencyGuideApp() {
               <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none"><Activity size={400} /></div>
               <header className="flex flex-col items-center border-b-4 border-double border-slate-800 pb-6 mb-8"><h1 className="text-3xl font-bold tracking-widest uppercase text-slate-900">{currentUser?.name || "NOME DO MÉDICO"}</h1><div className="flex items-center gap-2 mt-2 text-sm font-bold text-slate-600 uppercase tracking-wide"><span>CRM: {currentUser?.crm || "00000/UF"}</span><span>•</span><span>CLÍNICA MÉDICA</span></div></header>
               <div className="flex-1 space-y-8">
-                {['USO ORAL', 'USO TÓPICO', 'USO RETAL', 'USO INALATÓRIO', 'USO OFTÁLMICO', 'USO OTOLÓGICO'].map((usoType) => {
-                  const items = selectedPrescriptionItems.filter(item => item.receita?.uso?.toUpperCase().includes(usoType.replace('USO ', '')) || (usoType === 'USO ORAL' && !item.receita?.uso));
+                {['USO ORAL', 'USO TÓPICO', 'USO RETAL', 'USO INALATÓRIO', 'USO OFTÁLMICO', 'USO OTOLÓGICO', 'USO INJETÁVEL', 'OUTROS'].map((usoType) => {
+                  const items = selectedPrescriptionItems.filter(item => {
+                      const usoItem = item.receita?.uso?.toUpperCase() || 'OUTROS';
+                      // Se o usoType for 'OUTROS', pega tudo que não caiu nos anteriores
+                      if (usoType === 'OUTROS') {
+                          const knownTypes = ['USO ORAL', 'USO TÓPICO', 'USO RETAL', 'USO INALATÓRIO', 'USO OFTÁLMICO', 'USO OTOLÓGICO', 'USO INJETÁVEL'];
+                          return !knownTypes.includes(usoItem);
+                      }
+                      // Senão, faz match exato ou parcial (removendo 'USO ')
+                      return usoItem.includes(usoType.replace('USO ', '')) || usoItem === usoType;
+                  });
+                  
                   if (items.length === 0) return null;
+                  
                   return (
                     <div key={usoType}>
                       <div className="flex items-center gap-4 mb-4"><h3 className="font-bold text-lg underline decoration-2 underline-offset-4">{usoType}</h3></div>
