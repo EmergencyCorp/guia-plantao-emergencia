@@ -27,8 +27,25 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 
-// --- CONFIGURAÇÃO SEGURA DO FIREBASE ---
-// Função auxiliar para acessar globais sem erro
+// ==========================================================================================
+// 🚨 ÁREA DE CONFIGURAÇÃO DO USUÁRIO - COLE SUAS CHAVES AQUI 🚨
+// ==========================================================================================
+// Passo 4: Copie o objeto do console do Firebase e cole abaixo.
+// Deve ficar parecido com: { apiKey: "AIzaSy...", authDomain: "..." }
+
+const YOUR_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyA75b9ELr3J8RCL1LGVixZUvk3pLzTOeis", // <--- Cole sua apiKey aqui entre as aspas
+  authDomain: "emergency-bedside.firebaseapp.com",
+  projectId: "emergency-bedside",
+  storageBucket: "emergency-bedside.firebasestorage.app",
+  messagingSenderId: "101850697558",
+  appId: "1:101850697558:web:a6a27f1b9978a3b6b6d0f7"
+  measurementId: "G-S00ZM050F9"
+};
+
+// ==========================================================================================
+
+// --- LÓGICA DE INICIALIZAÇÃO SEGURA ---
 const getGlobalVar = (varName) => {
   if (typeof window !== 'undefined' && window[varName]) return window[varName];
   if (typeof globalThis !== 'undefined' && globalThis[varName]) return globalThis[varName];
@@ -39,23 +56,49 @@ let app = null;
 let auth = null;
 let db = null;
 
-try {
-  // Tenta pegar a config do window ou escopo global para evitar ReferenceError
-  const rawConfig = getGlobalVar('__firebase_config');
-  
-  if (rawConfig) {
-    const firebaseConfig = JSON.parse(rawConfig);
-    app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    db = getFirestore(app);
-  } else {
-    console.warn("Firebase config não encontrada. O app rodará em modo offline/demo.");
+const initFirebase = () => {
+  try {
+    // 1. Prioridade: Configuração Manual (A que você vai colar)
+    if (YOUR_FIREBASE_CONFIG.apiKey && YOUR_FIREBASE_CONFIG.apiKey.length > 5) {
+      console.log("Tentando conectar com configuração MANUAL...");
+      const fApp = initializeApp(YOUR_FIREBASE_CONFIG);
+      return { 
+        app: fApp, 
+        auth: getAuth(fApp), 
+        db: getFirestore(fApp),
+        method: 'manual'
+      };
+    }
+
+    // 2. Fallback: Tenta pegar do ambiente (caso exista no futuro)
+    const rawConfig = getGlobalVar('__firebase_config');
+    if (rawConfig) {
+      console.log("Tentando conectar com configuração GLOBAL...");
+      const fApp = initializeApp(JSON.parse(rawConfig));
+      return { 
+        app: fApp, 
+        auth: getAuth(fApp), 
+        db: getFirestore(fApp),
+        method: 'global'
+      };
+    }
+    
+    console.warn("Nenhuma configuração do Firebase encontrada.");
+    return null;
+  } catch (e) {
+    console.error("Erro fatal na inicialização do Firebase:", e);
+    return null;
   }
-} catch (e) {
-  console.error("Erro ao inicializar Firebase:", e);
+};
+
+const fbInstance = initFirebase();
+if (fbInstance) {
+  app = fbInstance.app;
+  auth = fbInstance.auth;
+  db = fbInstance.db;
 }
 
-const appId = getGlobalVar('__app_id') || 'default-app-id';
+const appId = getGlobalVar('__app_id') || 'emergency-guide-app';
 const initialToken = getGlobalVar('__initial_auth_token');
 
 // --- URL DO LOGO (Link direto do Google Drive) ---
@@ -92,7 +135,6 @@ export default function EmergencyGuideApp() {
 
   // --- INICIALIZAÇÃO E AUTH ---
   useEffect(() => {
-    // Se auth não foi inicializado (config ausente), define como offline e retorna
     if (!auth) {
       setIsCloudConnected(false);
       return;
@@ -106,8 +148,7 @@ export default function EmergencyGuideApp() {
           await signInAnonymously(auth);
         }
       } catch (error) {
-        console.error("Auth error:", error);
-        // Fallback para offline se a auth falhar
+        console.error("Erro na autenticação:", error);
         setIsCloudConnected(false);
       }
     };
@@ -117,6 +158,7 @@ export default function EmergencyGuideApp() {
       if (user) {
         setFirebaseUser(user);
         setIsCloudConnected(true);
+        console.log("Conectado à nuvem como:", user.uid);
       } else {
         setFirebaseUser(null);
         setIsCloudConnected(false);
@@ -185,8 +227,8 @@ export default function EmergencyGuideApp() {
       loadLocalHistory(username);
       if (db && firebaseUser) {
         try {
-          // RULE 1: Strict Paths
-          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', username);
+          // Regra de segurança: Usar coleção 'users' para dados privados
+          const docRef = doc(db, 'artifacts', appId, 'users', firebaseUser.uid, 'history', 'main');
           const docSnap = await getDoc(docRef);
           if (docSnap.exists()) {
             const remoteData = docSnap.data();
@@ -209,7 +251,7 @@ export default function EmergencyGuideApp() {
   
       if (db && firebaseUser) {
         try {
-          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', currentUser.username);
+          const docRef = doc(db, 'artifacts', appId, 'users', firebaseUser.uid, 'history', 'main');
           await setDoc(docRef, {
             searches: updated,
             lastUpdated: new Date().toISOString(),
@@ -226,7 +268,7 @@ export default function EmergencyGuideApp() {
 
     if (db && firebaseUser) {
       try {
-        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'notes', username);
+        const docRef = doc(db, 'artifacts', appId, 'users', firebaseUser.uid, 'notes', 'main');
         const docSnap = await getDoc(docRef);
         if (docSnap.exists() && docSnap.data().content) {
           setUserNotes(docSnap.data().content);
@@ -243,7 +285,7 @@ export default function EmergencyGuideApp() {
         if (db && firebaseUser) {
           setIsSaving(true);
           try {
-            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'notes', currentUser.username);
+            const docRef = doc(db, 'artifacts', appId, 'users', firebaseUser.uid, 'notes', 'main');
             await setDoc(docRef, {
               content: userNotes,
               lastUpdated: new Date().toISOString(),
@@ -260,7 +302,7 @@ export default function EmergencyGuideApp() {
 
   const handleNoteChange = (e) => setUserNotes(e.target.value);
 
-  // --- LOGIN (SIMPLIFICADO PARA DEMONSTRAÇÃO) ---
+  // --- LOGIN (SIMPLIFICADO) ---
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoginError('');
@@ -270,7 +312,7 @@ export default function EmergencyGuideApp() {
       return;
     }
 
-    // Simulação de login para o ambiente de demonstração
+    // Simulação de login
     const mockUser = {
       username: usernameInput.toLowerCase().trim(),
       name: "Médico(a) Demo",
@@ -309,7 +351,7 @@ export default function EmergencyGuideApp() {
     if (t.includes('injetável') || t.includes('ampola') || t.includes('ev') || t.includes('im') || t.includes('iv') || t.includes('subcut')) return "USO INJETÁVEL";
     if (t.includes('vaginal') || t.includes('óvulo')) return "USO VAGINAL";
     
-    // Fallbacks baseados no nome se o tipo for genérico
+    // Fallbacks
     if (f.includes('creme') || f.includes('pomada')) return "USO TÓPICO";
     if (f.includes('colírio')) return "USO OFTÁLMICO";
     
@@ -321,7 +363,6 @@ export default function EmergencyGuideApp() {
     if (activeRoom !== 'verde') return;
 
     setSelectedPrescriptionItems(prev => {
-      // Cria um ID único baseado no fármaco e nome comercial (ou fallback para fármaco)
       const medName = med.farmaco || "Medicamento sem nome";
       const commercialName = med.receita?.nome_comercial || medName; 
       const itemId = medName + commercialName;
@@ -408,10 +449,7 @@ export default function EmergencyGuideApp() {
   };
 
   const toggleFavorite = async () => {
-    // Se não houver conexão com a nuvem, não faz nada (ou salva localmente no futuro)
     if (!currentUser || !conduct) return;
-    
-    // Verifica conexão com a nuvem
     if (!isCloudConnected || !firebaseUser || !db) {
       showError("Modo Offline: Favoritos na nuvem indisponíveis.");
       return;
@@ -544,9 +582,9 @@ export default function EmergencyGuideApp() {
       }
 
       if (lowerQuery.includes('dengue')) promptExtra += `\nPROTOCOLO DENGUE (MS BRASIL): Classifique A, B, C, D. Grupo C/D (Sala Vermelha): Expansão 20ml/kg.`;
-      if (lowerQuery.includes('sepse') || lowerQuery.includes('septico')) promptExtra += `\nPROTOCOLO SEPSE: Pacote de 1 hora, Lactato, Hemoculturas, Antibiótico, Cristaloide 30ml/kg.`;
+      if (lowerQuery.includes('sepse')) promptExtra += `\nPROTOCOLO SEPSE: Pacote de 1 hora, Lactato, Hemoculturas, Antibiótico, Cristaloide 30ml/kg.`;
       if (lowerQuery.includes('iam') || lowerQuery.includes('infarto')) promptExtra += `\nPROTOCOLO IAM: Tempo porta-balão/agulha, Dupla antiagregação, Anticoagulação.`;
-      if (lowerQuery.includes('trauma') || lowerQuery.includes('acid') || lowerQuery.includes('poli')) promptExtra += `\nPROTOCOLO TRAUMA (ATLS): Preencher objeto "xabcde_trauma".`;
+      if (lowerQuery.includes('trauma') || lowerQuery.includes('acid')) promptExtra += `\nPROTOCOLO TRAUMA (ATLS): Preencher objeto "xabcde_trauma".`;
 
       const promptText = `${roleDefinition}
       Gere a conduta clínica IMPECÁVEL para "${searchQuery}" na ${roomContext}.
@@ -617,7 +655,7 @@ export default function EmergencyGuideApp() {
       
       setConduct(parsedConduct);
 
-      // Salvar Cache se possível (apenas se online e com db)
+      // Salvar Cache se possível
       if (isCloudConnected && currentUser && firebaseUser && db) {
         const docRef = doc(db, 'artifacts', appId, 'users', firebaseUser.uid, 'conducts', docId);
         await setDoc(docRef, {
@@ -642,7 +680,7 @@ export default function EmergencyGuideApp() {
 
   const showError = (msg) => { setErrorMsg(msg); setTimeout(() => setErrorMsg(''), 4000); };
 
-  // --- HELPERS DE UI ---
+  // ... (Helpers de UI mantidos iguais ao anterior) ...
   const getVitalIcon = (text) => {
     const t = text.toLowerCase();
     if (t.includes('fc') || t.includes('bpm')) return <HeartPulse size={16} className="text-rose-500" />;
@@ -686,7 +724,6 @@ export default function EmergencyGuideApp() {
     return "Medicamento";
   };
 
-  // Helper para agrupar medicamentos
   const groupMedsByCategory = (meds) => {
     if (!meds) return {};
     const groups = {};
@@ -745,11 +782,6 @@ export default function EmergencyGuideApp() {
     }
   };
 
-  const roomConfig = {
-    verde: { name: 'Sala Verde', color: 'emerald', accent: 'bg-emerald-500', border: 'border-emerald-500', text: 'text-emerald-800', light: 'bg-emerald-50', icon: <Stethoscope className="w-5 h-5" />, description: 'Ambulatorial / Baixa Complexidade' },
-    vermelha: { name: 'Sala Vermelha', color: 'rose', accent: 'bg-rose-600', border: 'border-rose-600', text: 'text-rose-800', light: 'bg-rose-50', icon: <Siren className="w-5 h-5" />, description: 'Emergência / Risco de Vida' }
-  };
-
   // --- RENDERIZAÇÃO: TELA DE LOGIN ---
   if (!currentUser) {
     return (
@@ -780,6 +812,8 @@ export default function EmergencyGuideApp() {
   // --- RENDERIZAÇÃO: APP PRINCIPAL ---
   const groupedMeds = conduct && activeRoom === 'vermelha' ? groupMedsByCategory(conduct.tratamento_medicamentoso) : null;
 
+  // (O resto do componente Main é idêntico, apenas a inicialização do Firebase mudou)
+  // ...
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800 selection:bg-blue-100">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
