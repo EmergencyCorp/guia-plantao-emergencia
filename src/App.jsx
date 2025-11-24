@@ -94,47 +94,56 @@ export default function EmergencyGuideApp() {
 
   const [isCurrentConductFavorite, setIsCurrentConductFavorite] = useState(false);
 
-  // --- HELPER FUNCTIONS (DEFINIDAS NO INÍCIO PARA EVITAR ERROS) ---
+  // --- HELPER FUNCTIONS ---
 
   const calculateDose = (med) => {
-    if (!patientWeight || !med.dose_padrao_kg || !med.concentracao_solucao) return null;
+    // CORREÇÃO: Verifica por concentracao_mg_ml (que é o que a IA manda) E concentracao_solucao (legacy)
+    const concValue = med.concentracao_mg_ml || med.concentracao_solucao;
+    
+    if (!patientWeight || !med.dose_padrao_kg || !concValue) return null;
     
     const weight = parseFloat(patientWeight);
     const doseKg = parseFloat(med.dose_padrao_kg);
-    const concentration = parseFloat(med.concentracao_solucao);
+    const concentration = parseFloat(concValue);
     const unit = med.unidade_base || ""; 
 
+    // 1. Cálculo da Dose Alvo (Massa)
     let totalDoseValue = doseKg * weight;
     let doseDisplay = `${totalDoseValue.toFixed(2)}`;
     
-    if (unit.includes("mcg")) {
-      doseDisplay += " mcg";
-      if (unit.includes("min")) doseDisplay += "/min";
-      else if (unit.includes("h")) doseDisplay += "/h";
-    } else {
-      doseDisplay += " mg";
-      if (unit.includes("min")) doseDisplay += "/min";
-      else if (unit.includes("h")) doseDisplay += "/h";
-    }
+    // Formata a exibição da dose (ex: 14 mcg/min)
+    if (unit.includes("mcg")) doseDisplay += " mcg";
+    else if (unit.includes("mg")) doseDisplay += " mg";
+    else if (unit.includes("UI")) doseDisplay += " UI";
 
+    if (unit.includes("min")) doseDisplay += "/min";
+    else if (unit.includes("h")) doseDisplay += "/h";
+
+    // 2. Cálculo da Vazão (ml/h)
     let rateMlH = 0;
     if (concentration > 0) {
-       let doseInMg = totalDoseValue; 
+       let doseForCalc = totalDoseValue; 
        
-       // Normalização de unidades (mcg vs mg)
+       // Normalização de Unidades de Massa (se a IA informou as unidades)
+       // Se a dose é em mcg e a concentração em mg, divide a dose por 1000
        if (unit.includes("mcg") && med.unidade_concentracao?.includes("mg")) {
-          doseInMg = totalDoseValue / 1000;
-       } else if (unit.includes("mg") && med.unidade_concentracao?.includes("mcg")) {
-          doseInMg = totalDoseValue * 1000;
+          doseForCalc = totalDoseValue / 1000;
+       } 
+       // Se a dose é em mg e a concentração em mcg, multiplica a dose por 1000
+       else if (unit.includes("mg") && med.unidade_concentracao?.includes("mcg")) {
+          doseForCalc = totalDoseValue * 1000;
        }
 
-       // Normalização de tempo (min vs h)
-       if (unit.includes("/min")) {
-         rateMlH = (doseInMg * 60) / concentration;
+       // Normalização de Tempo (tudo para Hora)
+       if (unit.includes("/min") || unit.includes("min")) {
+         // Dose por minuto -> ml/h = (Dose * 60) / Concentração
+         rateMlH = (doseForCalc * 60) / concentration;
        } else {
-         rateMlH = doseInMg / concentration;
+         // Dose por hora ou bolus -> ml = Dose / Concentração
+         rateMlH = doseForCalc / concentration;
        }
     }
+    
     return { doseDisplay, rateMlH: rateMlH.toFixed(1) };
   };
 
@@ -571,11 +580,6 @@ export default function EmergencyGuideApp() {
     }
   };
 
-  const roomConfig = {
-    verde: { name: 'Sala Verde', color: 'emerald', accent: 'bg-emerald-500', border: 'border-emerald-500', text: 'text-emerald-800', light: 'bg-emerald-50', icon: <Stethoscope className="w-5 h-5" />, description: 'Ambulatorial / Baixa Complexidade' },
-    vermelha: { name: 'Sala Vermelha', color: 'rose', accent: 'bg-rose-600', border: 'border-rose-600', text: 'text-rose-800', light: 'bg-rose-50', icon: <Siren className="w-5 h-5" />, description: 'Emergência / Risco de Vida' }
-  };
-
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans text-slate-800">
@@ -617,6 +621,7 @@ export default function EmergencyGuideApp() {
       </header>
 
       <main className="flex-grow max-w-6xl mx-auto px-4 py-8 space-y-8 w-full relative">
+        {/* BOTÃO FLUTUANTE DE RECEITA (SÓ SALA VERDE) */}
         {activeRoom === 'verde' && selectedPrescriptionItems.length > 0 && (
           <button onClick={() => setShowPrescriptionModal(true)} className="fixed bottom-8 right-8 z-50 bg-blue-600 hover:bg-blue-700 text-white px-6 py-4 rounded-full shadow-xl flex items-center gap-3 font-bold transition-all animate-in slide-in-from-bottom-4"><Printer size={24} /> Gerar Receita ({selectedPrescriptionItems.length})</button>
         )}
@@ -830,8 +835,14 @@ export default function EmergencyGuideApp() {
               <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none"><Activity size={400} /></div>
               <header className="flex flex-col items-center border-b-4 border-double border-slate-800 pb-6 mb-8"><h1 className="text-3xl font-bold tracking-widest uppercase text-slate-900">{currentUser?.name || "NOME DO MÉDICO"}</h1><div className="flex items-center gap-2 mt-2 text-sm font-bold text-slate-600 uppercase tracking-wide"><span>CRM: {currentUser?.crm || "00000/UF"}</span><span>•</span><span>CLÍNICA MÉDICA</span></div></header>
               <div className="flex-1 space-y-8">
-                {['USO ORAL', 'USO TÓPICO', 'USO RETAL', 'USO INALATÓRIO', 'USO OFTÁLMICO', 'USO OTOLÓGICO'].map((usoType) => {
-                  const items = selectedPrescriptionItems.filter(item => item.receita?.uso?.toUpperCase().includes(usoType.replace('USO ', '')) || (usoType === 'USO ORAL' && !item.receita?.uso));
+                {['USO ORAL', 'USO TÓPICO', 'USO RETAL', 'USO INALATÓRIO', 'USO OFTÁLMICO', 'USO OTOLÓGICO', 'OUTROS / USO GERAL'].map((usoType) => {
+                  const items = selectedPrescriptionItems.filter(item => {
+                    const itemUso = item.receita?.uso?.toUpperCase() || "USO ORAL";
+                    if (usoType === 'OUTROS / USO GERAL') {
+                       return !itemUso.includes('ORAL') && !itemUso.includes('TÓPICO') && !itemUso.includes('RETAL') && !itemUso.includes('INAL') && !itemUso.includes('OFT') && !itemUso.includes('OTOL');
+                    }
+                    return itemUso.includes(usoType.replace('USO ', ''));
+                  });
                   if (items.length === 0) return null;
                   return (
                     <div key={usoType}>
