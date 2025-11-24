@@ -352,15 +352,17 @@ export default function EmergencyGuideApp() {
     const index = newItems.findIndex(item => (item.farmaco + (item.receita?.nome_comercial || "")) === id);
     
     if (index !== -1) {
-      newItems[index].dias_tratamento = days;
+      // Cria uma cópia rasa do item para garantir que a atualização de estado seja detectada
+      const updatedItem = { ...newItems[index], dias_tratamento: days };
       
-      const item = newItems[index];
-      if (item.receita?.calculo_qnt?.frequencia_diaria && days > 0) {
-        const total = Math.ceil(item.receita.calculo_qnt.frequencia_diaria * days);
-        const unidade = item.receita.calculo_qnt.unidade || 'unidades';
-        item.receita.quantidade = `${total} ${unidade}`;
+      if (updatedItem.receita?.calculo_qnt?.frequencia_diaria && days > 0) {
+        const total = Math.ceil(updatedItem.receita.calculo_qnt.frequencia_diaria * days);
+        const unidade = updatedItem.receita.calculo_qnt.unidade || 'unidades';
+        // Atualiza a quantidade se possível (cria cópia da receita para evitar mutação direta profunda)
+        updatedItem.receita = { ...updatedItem.receita, quantidade: `${total} ${unidade}` };
       }
       
+      newItems[index] = updatedItem;
       setSelectedPrescriptionItems(newItems);
     }
   };
@@ -841,7 +843,7 @@ export default function EmergencyGuideApp() {
                   return (
                     <div key={usoType}>
                       <div className="flex items-center gap-4 mb-4"><h3 className="font-bold text-lg underline decoration-2 underline-offset-4">{usoType}</h3></div>
-                      <ul className="space-y-6 list-none">{items.map((item, index) => (<li key={index} className="relative pl-6"><span className="absolute left-0 top-0 font-bold text-lg">{index + 1}.</span><div className="flex items-end mb-1 w-full"><span className="font-bold text-xl">{item.receita?.nome_comercial || item.farmaco}</span><div className="flex-1 mx-2 border-b-2 border-dotted border-slate-400 mb-1.5"></div><span className="font-bold text-lg whitespace-nowrap">{item.receita.quantidade}</span></div><p className="text-base leading-relaxed text-slate-800 mt-1 pl-2 border-l-4 border-slate-200">{item.receita.instrucoes}</p></li>))}</ul>
+                      <ul className="space-y-6 list-none">{items.map((item, index) => (<li key={index} className="relative pl-6"><span className="absolute left-0 top-0 font-bold text-lg">{index + 1}.</span><div className="flex items-end mb-1 w-full"><span className="font-bold text-xl">{item.receita?.nome_comercial || item.farmaco}</span><div className="flex-1 mx-2 border-b-2 border-dotted border-slate-400 mb-1.5"></div><span className="font-bold text-lg whitespace-nowrap">{item.receita.quantidade}</span></div><p className="text-base leading-relaxed text-slate-800 mt-1 pl-2 border-l-4 border-slate-200">{item.receita.instrucoes}{item.dias_tratamento ? ` (Uso por ${item.dias_tratamento} dias)` : ''}</p></li>))}</ul>
                     </div>
                   )
                 })}
