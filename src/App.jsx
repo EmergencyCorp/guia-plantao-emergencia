@@ -64,9 +64,6 @@ if (firebaseConfig && firebaseConfig.apiKey) {
 const appId = (typeof __app_id !== 'undefined') ? __app_id : 'emergency-guide-app';
 const initialToken = (typeof __initial_auth_token !== 'undefined') ? __initial_auth_token : null;
 
-// NOTA: USUÁRIOS HARDCODED FORAM REMOVIDOS POR SEGURANÇA.
-// O acesso agora é exclusivo via Firebase Firestore.
-
 export default function EmergencyGuideApp() {
   const [currentUser, setCurrentUser] = useState(null);
   const [usernameInput, setUsernameInput] = useState('');
@@ -133,16 +130,6 @@ export default function EmergencyGuideApp() {
     if (savedUser) {
       try {
         const parsedUser = JSON.parse(savedUser);
-        
-        // Verifica validade ao recarregar
-        if (parsedUser.expiresAt) {
-          const expires = new Date(parsedUser.expiresAt);
-          if (new Date() > expires) {
-             localStorage.removeItem('emergency_app_user');
-             return;
-          }
-        }
-
         setCurrentUser(parsedUser);
         loadHistory(parsedUser.username);
       } catch (e) {}
@@ -268,7 +255,6 @@ export default function EmergencyGuideApp() {
 
   const handleNoteChange = (e) => setUserNotes(e.target.value);
 
-  // --- LÓGICA DE LOGIN SEGURA (SEM BACKDOOR) ---
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoginError('');
@@ -280,18 +266,12 @@ export default function EmergencyGuideApp() {
 
     try {
       const userId = usernameInput.toLowerCase().trim();
-      // CAMINHO EXATO ONDE O APP PROCURA:
-      const path = `artifacts/${appId}/public/data/registered_users/${userId}`;
-      console.log("🔍 Tentando buscar usuário em:", path);
-
       const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'registered_users', userId);
       const userSnap = await getDoc(userDocRef);
 
       if (userSnap.exists()) {
         const userData = userSnap.data();
-        
         if (userData.password === passwordInput) {
-          // Verifica Validade
           if (userData.expiresAt) {
              const expirationDate = new Date(userData.expiresAt);
              const now = new Date();
@@ -300,8 +280,6 @@ export default function EmergencyGuideApp() {
                return;
              }
           }
-          
-          // Login Sucesso
           const userSession = { ...userData, username: userId };
           setCurrentUser(userSession);
           localStorage.setItem('emergency_app_user', JSON.stringify(userSession));
@@ -311,12 +289,11 @@ export default function EmergencyGuideApp() {
           setLoginError("Senha incorreta.");
         }
       } else {
-        console.warn("Documento não encontrado no Firestore.");
-        setLoginError(`Usuário não encontrado. (Debug: Verifique se criou a coleção em 'artifacts -> emergency-guide-app -> public -> data -> registered_users')`);
+        setLoginError("Usuário não encontrado.");
       }
     } catch (err) {
       console.error("Erro crítico no login:", err);
-      setLoginError("Erro técnico ao tentar login (verifique console).");
+      setLoginError("Erro técnico ao tentar login.");
     }
   };
 
@@ -329,8 +306,6 @@ export default function EmergencyGuideApp() {
     setFavorites([]);
     localStorage.removeItem('emergency_app_user');
   };
-
-  // --- PRESCRIPTION LOGIC ---
 
   const togglePrescriptionItem = (med) => {
     if (activeRoom !== 'verde' || !med.receita) return;
@@ -353,19 +328,15 @@ export default function EmergencyGuideApp() {
     
     if (index !== -1) {
       newItems[index].dias_tratamento = days;
-      
       const item = newItems[index];
       if (item.receita?.calculo_qnt?.frequencia_diaria && days > 0) {
         const total = Math.ceil(item.receita.calculo_qnt.frequencia_diaria * days);
         const unidade = item.receita.calculo_qnt.unidade || 'unidades';
         item.receita.quantidade = `${total} ${unidade}`;
       }
-      
       setSelectedPrescriptionItems(newItems);
     }
   };
-
-  // --- CACHE & FAVORITES ---
 
   const getConductDocId = (query, room) => {
     return `${query.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}_${room}`;
@@ -373,10 +344,8 @@ export default function EmergencyGuideApp() {
 
   const subscribeToFavorites = (username) => {
       if (!db) return;
-      
       const favoritesRef = collection(db, 'artifacts', appId, 'users', username, 'conducts');
       const q = firestoreQuery(favoritesRef, where("isFavorite", "==", true));
-
       const unsubscribe = onSnapshot(q, (querySnapshot) => {
           const favs = [];
           querySnapshot.forEach((doc) => {
@@ -413,7 +382,6 @@ export default function EmergencyGuideApp() {
       } else {
           await setDoc(docRef, { isFavorite: false }, { merge: true });
       }
-
     } catch (error) {
       console.error("Erro ao favoritar:", error);
       setIsCurrentConductFavorite(!newStatus);
@@ -444,7 +412,6 @@ export default function EmergencyGuideApp() {
     try {
       const conductsRef = collection(db, 'artifacts', appId, 'users', username, 'conducts');
       const q = firestoreQuery(conductsRef, where("isFavorite", "==", false), orderBy("lastAccessed", "desc"));
-      
       const snapshot = await getDocs(q);
       if (snapshot.size > 10) {
         const docsToDelete = snapshot.docs.slice(10);
@@ -453,8 +420,6 @@ export default function EmergencyGuideApp() {
       }
     } catch (error) { console.error("Erro ao limpar cache:", error); }
   };
-
-  // --- GENERATE ---
 
   const generateConduct = async () => {
     if (!searchQuery.trim()) {
@@ -469,7 +434,6 @@ export default function EmergencyGuideApp() {
 
     const docId = getConductDocId(searchQuery, activeRoom);
 
-    // Verifica Cache
     if (isCloudConnected && currentUser) {
       try {
         const docRef = doc(db, 'artifacts', appId, 'users', currentUser.username, 'conducts', docId);
@@ -480,7 +444,6 @@ export default function EmergencyGuideApp() {
           setConduct(data.conductData);
           setIsCurrentConductFavorite(data.isFavorite || false);
           await setDoc(docRef, { lastAccessed: new Date().toISOString() }, { merge: true });
-          
           setLoading(false);
           saveToHistory(searchQuery, activeRoom);
           setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
@@ -489,7 +452,6 @@ export default function EmergencyGuideApp() {
       } catch (error) { console.error("Erro cache:", error); }
     }
 
-    // Chama API
     try {
       const response = await fetch('/api/generate', {
         method: 'POST',
@@ -587,7 +549,7 @@ export default function EmergencyGuideApp() {
             <p className="text-blue-200 text-sm font-medium">Acesso Exclusivo Médico</p>
           </div>
           <div className="p-8 space-y-6">
-            {loginError && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-xs flex items-center gap-2 border border-red-100 font-mono">{loginError}</div>}
+            {loginError && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-xs flex items-center gap-2 border border-red-100"><AlertCircle size={14} /> {loginError}</div>}
             <form onSubmit={handleLogin} className="space-y-4">
               <div><label className="text-xs font-bold text-slate-500 uppercase ml-1">Usuário</label><div className="relative"><User className="absolute left-3 top-3 text-gray-400 w-5 h-5" /><input type="text" value={usernameInput} onChange={(e)=>setUsernameInput(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-900" placeholder="Ex: admin" /></div></div>
               <div><label className="text-xs font-bold text-slate-500 uppercase ml-1">Senha</label><div className="relative"><KeyRound className="absolute left-3 top-3 text-gray-400 w-5 h-5" /><input type="password" value={passwordInput} onChange={(e)=>setPasswordInput(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-900" placeholder="••••••" /></div></div>
@@ -595,7 +557,7 @@ export default function EmergencyGuideApp() {
             </form>
             <div className="text-center flex flex-col items-center gap-3 pt-2 border-t border-gray-100">
               <div className={`flex items-center justify-center gap-2 text-[10px] px-3 py-1.5 rounded-full mx-auto w-fit ${configStatus === 'missing' ? 'bg-red-50 text-red-700' : isCloudConnected ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>{configStatus === 'missing' ? <Settings size={12}/> : isCloudConnected ? <Cloud size={12}/> : <CloudOff size={12}/>}<span>{configStatus === 'missing' ? 'Erro: Variáveis de Ambiente' : isCloudConnected ? 'Banco de Dados Conectado' : 'Modo Offline (Dados Locais)'}</span></div>
-              <p className="text-[10px] text-slate-400 leading-tight max-w-xs">ATENÇÃO: Ferramenta auxiliar. Não substitui o julgamento clínico. O autor isenta-se de responsabilidade.</p>
+              <p className="text-[10px] text-slate-400 leading-tight max-w-xs">ATENÇÃO: Ferramenta auxiliar. Não substitui o julgamento clínico. O autor isenta-se de responsabilidade. Uso proibido para leigos.</p>
             </div>
           </div>
         </div>
@@ -618,7 +580,6 @@ export default function EmergencyGuideApp() {
       </header>
 
       <main className="flex-grow max-w-6xl mx-auto px-4 py-8 space-y-8 w-full relative">
-        {/* BOTÃO FLUTUANTE DE RECEITA (SÓ SALA VERDE) */}
         {activeRoom === 'verde' && selectedPrescriptionItems.length > 0 && (
           <button onClick={() => setShowPrescriptionModal(true)} className="fixed bottom-8 right-8 z-50 bg-blue-600 hover:bg-blue-700 text-white px-6 py-4 rounded-full shadow-xl flex items-center gap-3 font-bold transition-all animate-in slide-in-from-bottom-4"><Printer size={24} /> Gerar Receita ({selectedPrescriptionItems.length})</button>
         )}
@@ -669,7 +630,7 @@ export default function EmergencyGuideApp() {
             {conduct.xabcde_trauma && (
               <div className="bg-orange-50 border border-orange-200 p-5 rounded-2xl">
                 <h3 className="text-orange-900 font-bold flex items-center gap-2 mb-3 uppercase tracking-wide"><Skull size={20}/> Protocolo de Trauma (ATLS - xABCDE)</h3>
-                <div className="space-y-3">{Object.entries(conduct.xabcde_trauma).map(([key, value]) => (<div key={key} className="flex gap-3 items-start bg-white/60 p-2 rounded border border-orange-100"><div className="bg-orange-600 text-white w-6 h-6 rounded flex items-center justify-center font-bold uppercase text-xs shrink-0">{key}</div><p className="text-sm text-orange-950">{value}</p></div>))}</div>
+                <div className="space-y-3">{Object.entries(conduct.xabcde_trauma).map(([key, value]) => (<div key={key} className="flex gap-3 items-start bg-white/60 p-2 rounded border border-orange-100"><div className="bg-orange-600 text-white w-6 h-6 rounded flex items-center justify-center font-bold uppercase text-xs shrink-0">{key.charAt(0).toUpperCase()}</div><p className="text-sm text-orange-950">{value}</p></div>))}</div>
               </div>
             )}
 
@@ -692,7 +653,6 @@ export default function EmergencyGuideApp() {
 
             <div className="grid lg:grid-cols-12 gap-6 items-start">
               <div className="lg:col-span-4 space-y-6">
-                {/* AVALIAÇÃO E ALVOS */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                    <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center gap-2"><Activity size={18} className="text-slate-500"/><h3 className="font-bold text-slate-700 text-sm uppercase">Avaliação Inicial</h3></div>
                    <div className="p-5 space-y-5 text-sm">
@@ -823,7 +783,7 @@ export default function EmergencyGuideApp() {
         </div>
       </footer>
 
-      {/* MODAL DE RECEITUÁRIO */}
+      {/* MODAL DE RECEITUÁRIO (VISUAL PROFISSIONAL) */}
       {showPrescriptionModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 print:p-0 animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-3xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] print:max-h-none print:h-full print:rounded-none print:shadow-none">
@@ -863,20 +823,6 @@ export default function EmergencyGuideApp() {
             <div className="p-2 max-h-[60vh] overflow-y-auto bg-slate-50">
               {favorites.length === 0 ? (<div className="text-center p-8 text-slate-400 text-sm">Você ainda não tem favoritos.</div>) : (<div className="space-y-2">{favorites.map((fav) => (<div key={fav.id} className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm flex items-center justify-between group hover:border-blue-300 transition-colors"><button onClick={() => loadFavoriteConduct(fav)} className="flex-1 text-left"><div className="flex items-center gap-2"><div className={`w-2 h-2 rounded-full shrink-0 ${fav.room === 'verde' ? 'bg-emerald-500' : 'bg-rose-500'}`} /><span className="font-bold text-slate-700 text-sm">{fav.query}</span></div><span className="text-[10px] text-slate-400 ml-4">{new Date(fav.lastAccessed).toLocaleDateString()}</span></button><button onClick={(e) => { e.stopPropagation(); removeFavoriteFromList(fav.id); }} className="p-2 text-slate-300 hover:text-red-500 transition-colors" title="Remover"><Trash2 size={16} /></button></div>))}</div>)}
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL DE BLOCO DE NOTAS */}
-      {showNotepad && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200 print:hidden">
-          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col h-[80vh] overflow-hidden">
-            <div className="bg-gray-50 p-4 border-b border-gray-200 flex justify-between items-center">
-              <div className="flex items-center gap-3"><div className="bg-blue-100 p-2 rounded-lg text-blue-600"><Edit size={20} /></div><div><h3 className="font-bold text-slate-800 leading-none">Meu Caderno</h3><div className="flex items-center gap-2 mt-1"><span className="text-xs text-slate-500">Anotações de {currentUser?.name}</span><span className="text-gray-300">•</span>{isCloudConnected ? (<span className="flex items-center gap-1 text-[10px] text-green-600 font-medium"><Cloud size={10} /> Nuvem Ativa</span>) : (<span className="flex items-center gap-1 text-[10px] text-amber-600 font-medium"><CloudOff size={10} /> Offline</span>)}</div></div></div>
-              <button onClick={() => setShowNotepad(false)} className="p-2 hover:bg-gray-200 rounded-full text-gray-500 transition-colors"><X size={20} /></button>
-            </div>
-            <div className="flex-1 bg-yellow-50 relative"><textarea className="w-full h-full p-6 resize-none focus:outline-none text-slate-700 leading-relaxed bg-transparent text-lg font-medium font-serif" placeholder="Escreva suas anotações..." value={userNotes} onChange={handleNoteChange} style={{ backgroundImage: 'linear-gradient(transparent, transparent 31px, #e5e7eb 31px)', backgroundSize: '100% 32px', lineHeight: '32px' }} /></div>
-            <div className="p-3 bg-white border-t border-gray-200 flex justify-between items-center text-xs text-gray-500"><div className="flex items-center gap-1.5">{isSaving ? (<><Loader2 size={14} className="text-blue-600 animate-spin" /><span className="text-blue-600">Salvando...</span></>) : (<><Save size={14} className="text-green-600" /><span>{isCloudConnected ? "Salvo na nuvem" : "Salvo localmente"}</span></>)}</div><span>{userNotes.length} caracteres</span></div>
           </div>
         </div>
       )}
