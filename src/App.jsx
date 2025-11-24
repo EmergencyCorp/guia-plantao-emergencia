@@ -212,7 +212,7 @@ export default function EmergencyGuideApp() {
       if (!currentUser) return;
       const newEntry = { query: term, room, timestamp: new Date().toISOString() };
       const hist = recentSearches.filter(s => s.query.toLowerCase() !== term.toLowerCase());
-      const updated = [newEntry, ...hist].slice(0, 10);
+      const updated = [newEntry, ...hist].slice(10);
       setRecentSearches(updated);
       localStorage.setItem(`history_${currentUser.username}`, JSON.stringify(updated));
   
@@ -355,15 +355,8 @@ export default function EmergencyGuideApp() {
       newItems[index].dias_tratamento = days;
       
       const item = newItems[index];
-      const frequencia = item.receita?.calculo_qnt?.frequencia_diaria;
-
-      // CORREÇÃO: Validação rigorosa para evitar "NaN" na quantidade.
-      // Verifica se frequencia e days são números válidos antes de calcular.
-      const isFrequenciaValid = typeof frequencia === 'number' && !isNaN(frequencia);
-      const isDaysValid = typeof days === 'number' && !isNaN(days) && days > 0;
-
-      if (isFrequenciaValid && isDaysValid) {
-        const total = Math.ceil(frequencia * days);
+      if (item.receita?.calculo_qnt?.frequencia_diaria && days > 0) {
+        const total = Math.ceil(item.receita.calculo_qnt.frequencia_diaria * days);
         const unidade = item.receita.calculo_qnt.unidade || 'unidades';
         item.receita.quantidade = `${total} ${unidade}`;
       }
@@ -848,7 +841,7 @@ export default function EmergencyGuideApp() {
                   return (
                     <div key={usoType}>
                       <div className="flex items-center gap-4 mb-4"><h3 className="font-bold text-lg underline decoration-2 underline-offset-4">{usoType}</h3></div>
-                      <ul className="space-y-6 list-none">{items.map((item, index) => (<li key={index} className="relative pl-6"><span className="absolute left-0 top-0 font-bold text-lg">{index + 1}.</span><div className="flex items-end mb-1 w-full"><span className="font-bold text-xl">{item.receita.nome_comercial}</span><div className="flex-1 mx-2 border-b-2 border-dotted border-slate-400 mb-1.5"></div><span className="font-bold text-lg whitespace-nowrap">{item.receita.quantidade}</span></div><p className="text-base leading-relaxed text-slate-800 mt-1 pl-2 border-l-4 border-slate-200">{item.receita.instrucoes}</p></li>))}</ul>
+                      <ul className="space-y-6 list-none">{items.map((item, index) => (<li key={index} className="relative pl-6"><span className="absolute left-0 top-0 font-bold text-lg">{index + 1}.</span><div className="flex items-end mb-1 w-full"><span className="font-bold text-xl">{item.receita?.nome_comercial || item.farmaco}</span><div className="flex-1 mx-2 border-b-2 border-dotted border-slate-400 mb-1.5"></div><span className="font-bold text-lg whitespace-nowrap">{item.receita.quantidade}</span></div><p className="text-base leading-relaxed text-slate-800 mt-1 pl-2 border-l-4 border-slate-200">{item.receita.instrucoes}</p></li>))}</ul>
                     </div>
                   )
                 })}
