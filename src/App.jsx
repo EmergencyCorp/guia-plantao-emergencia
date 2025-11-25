@@ -69,21 +69,17 @@ const initialToken = (typeof __initial_auth_token !== 'undefined') ? __initial_a
 const ThemeToggle = ({ darkMode, setDarkMode }) => (
   <button
     onClick={() => setDarkMode(!darkMode)}
-    className={`relative w-16 h-8 rounded-full p-1 transition-colors duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-      darkMode ? 'bg-slate-700 ring-slate-600' : 'bg-blue-100 ring-blue-200'
+    className={`relative w-14 h-8 rounded-full p-1 transition-colors duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+      darkMode ? 'bg-slate-700 ring-1 ring-slate-600' : 'bg-blue-100 ring-1 ring-blue-200'
     }`}
-    title="Alternar Tema"
+    title={darkMode ? "Modo Claro" : "Modo Escuro"}
   >
     <div
-      className={`absolute top-1 left-1 w-6 h-6 rounded-full shadow-md transform transition-transform duration-300 ease-in-out flex items-center justify-center ${
-        darkMode ? 'translate-x-8 bg-slate-800' : 'translate-x-0 bg-white'
+      className={`absolute top-1 left-1 w-6 h-6 rounded-full shadow-sm transform transition-transform duration-300 ease-in-out flex items-center justify-center ${
+        darkMode ? 'translate-x-6 bg-slate-800 text-blue-300' : 'translate-x-0 bg-white text-orange-500'
       }`}
     >
-      {darkMode ? (
-        <Moon size={14} className="text-blue-300" />
-      ) : (
-        <Sun size={14} className="text-orange-500" />
-      )}
+      {darkMode ? <Moon size={14} /> : <Sun size={14} />}
     </div>
   </button>
 );
@@ -790,9 +786,30 @@ export default function EmergencyGuideApp() {
      );
   };
 
+  // CONFIGURAÇÃO DE SALAS COM CORES ADAPTATIVAS
   const roomConfig = {
-    verde: { name: 'Sala Verde', color: 'emerald', accent: 'bg-emerald-500', border: 'border-emerald-500', text: 'text-emerald-800 dark:text-emerald-200', light: 'bg-emerald-50 dark:bg-emerald-900/30', icon: <Stethoscope className="w-5 h-5" />, description: 'Ambulatorial / Baixa Complexidade' },
-    vermelha: { name: 'Sala Vermelha', color: 'rose', accent: 'bg-rose-600', border: 'border-rose-600', text: 'text-rose-800 dark:text-rose-200', light: 'bg-rose-50 dark:bg-rose-900/30', icon: <Siren className="w-5 h-5" />, description: 'Emergência / Risco de Vida' }
+    verde: { 
+      name: 'Sala Verde', 
+      // Cores normais
+      color: 'emerald', 
+      accent: 'bg-emerald-500', 
+      // Classes responsivas ao tema
+      border: 'border-emerald-500 dark:border-emerald-400', 
+      text: 'text-emerald-800 dark:text-emerald-200', 
+      light: 'bg-emerald-50 dark:bg-emerald-900/30', 
+      icon: <Stethoscope className="w-5 h-5" />, 
+      description: 'Ambulatorial / Baixa Complexidade' 
+    },
+    vermelha: { 
+      name: 'Sala Vermelha', 
+      color: 'rose', 
+      accent: 'bg-rose-600', 
+      border: 'border-rose-600 dark:border-rose-500', 
+      text: 'text-rose-800 dark:text-rose-200', 
+      light: 'bg-rose-50 dark:bg-rose-900/30', 
+      icon: <Siren className="w-5 h-5" />, 
+      description: 'Emergência / Risco de Vida' 
+    }
   };
   
   // Categorias para Sala Vermelha
@@ -808,8 +825,8 @@ export default function EmergencyGuideApp() {
 
   if (!currentUser) {
     return (
-      <div className={`min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4 font-sans text-slate-800 dark:text-slate-200 transition-colors duration-300 ease-in-out ${darkMode ? 'dark' : ''}`}>
-        <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 max-w-md w-full overflow-hidden relative">
+      <div className={`min-h-screen flex items-center justify-center p-4 font-sans transition-colors duration-300 ease-in-out ${darkMode ? 'dark bg-gray-900 text-slate-200' : 'bg-gray-50 text-slate-800'}`}>
+        <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 max-w-md w-full overflow-hidden relative transition-colors">
           
           {/* BOTÃO DE MODO ESCURO NO LOGIN */}
           <div className="absolute top-4 right-4 z-10">
@@ -824,9 +841,9 @@ export default function EmergencyGuideApp() {
           <div className="p-8 space-y-6">
             {loginError && <div className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-300 p-3 rounded-lg text-xs flex items-center gap-2 border border-red-100 dark:border-red-800 font-mono">{loginError}</div>}
             <form onSubmit={handleLogin} className="space-y-4">
-              <div><label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase ml-1">Usuário</label><div className="relative"><User className="absolute left-3 top-3 text-gray-400 w-5 h-5" /><input type="text" value={usernameInput} onChange={(e)=>setUsernameInput(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-900 dark:text-white transition-colors" placeholder="Ex: admin" /></div></div>
-              <div><label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase ml-1">Senha</label><div className="relative"><KeyRound className="absolute left-3 top-3 text-gray-400 w-5 h-5" /><input type="password" value={passwordInput} onChange={(e)=>setPasswordInput(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-900 dark:text-white transition-colors" placeholder="••••••" /></div></div>
-              <button type="submit" className="w-full flex items-center justify-center gap-3 bg-blue-900 text-white font-bold p-3.5 rounded-xl hover:bg-blue-800 transition-all shadow-lg mt-2"><LogIn className="w-5 h-5" /> Acessar Sistema</button>
+              <div><label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase ml-1">Usuário</label><div className="relative"><User className="absolute left-3 top-3 text-gray-400 dark:text-gray-500 w-5 h-5" /><input type="text" value={usernameInput} onChange={(e)=>setUsernameInput(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-900 dark:text-white dark:placeholder-gray-400 transition-colors" placeholder="Ex: admin" /></div></div>
+              <div><label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase ml-1">Senha</label><div className="relative"><KeyRound className="absolute left-3 top-3 text-gray-400 dark:text-gray-500 w-5 h-5" /><input type="password" value={passwordInput} onChange={(e)=>setPasswordInput(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-900 dark:text-white dark:placeholder-gray-400 transition-colors" placeholder="••••••" /></div></div>
+              <button type="submit" className="w-full flex items-center justify-center gap-3 bg-blue-900 hover:bg-blue-800 text-white font-bold p-3.5 rounded-xl transition-all shadow-lg mt-2"><LogIn className="w-5 h-5" /> Acessar Sistema</button>
             </form>
             <div className="text-center flex flex-col items-center gap-3 pt-2 border-t border-gray-100 dark:border-gray-700">
               <div className={`flex items-center justify-center gap-2 text-[10px] px-3 py-1.5 rounded-full mx-auto w-fit ${configStatus === 'missing' ? 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300' : isCloudConnected ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300' : 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'}`}>{configStatus === 'missing' ? <Settings size={12}/> : isCloudConnected ? <Cloud size={12}/> : <CloudOff size={12}/>}<span>{configStatus === 'missing' ? 'Erro: Variáveis de Ambiente' : isCloudConnected ? 'Banco de Dados Conectado' : 'Modo Offline (Dados Locais)'}</span></div>
