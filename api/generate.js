@@ -66,12 +66,11 @@ export default async function handler(req, res) {
       const data = await response.json();
       const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
       
-      // Tenta extrair o JSON se vier encapsulado, senão usa o texto puro
       let finalAnalysis = textResponse;
       try {
          const parsed = JSON.parse(textResponse);
          if(parsed.analysis) finalAnalysis = parsed.analysis;
-         else if (parsed.analise_ecg) finalAnalysis = JSON.stringify(parsed.analise_ecg); // Fallback
+         else if (parsed.analise_ecg) finalAnalysis = JSON.stringify(parsed.analise_ecg);
       } catch(e) {}
 
       res.status(200).json({ analysis: finalAnalysis });
@@ -100,21 +99,32 @@ export default async function handler(req, res) {
     roleDefinition = "Você é um médico INTENSIVISTA e EMERGENCISTA SÊNIOR. Sua prioridade é salvar a vida do paciente com precisão absoluta e tolerância zero para erros.";
     promptExtra += `
     CRITICIDADE MÁXIMA (SALA VERMELHA):
-    1. **Alvos Terapêuticos:** Defina metas numéricas precisas.
-    2. **Exames:** Seja específico.
-    3. **Cálculo de Doses:** Usa peso, unidade base, concentração padrão.
-    4. **CATEGORIZAÇÃO RIGOROSA:** Classifique os medicamentos em: 'Dieta', 'Hidratação', 'Drogas Vasoativas', 'Antibiótico', 'Sintomáticos', 'Profilaxias', 'Outros'.
+    1. **Alvos Terapêuticos (Obrigatório):** Defina metas numéricas precisas. Inclua PAM (Pressão Arterial Média), PAS/PAD, FC, FR, SatO2, Diurese (>0.5ml/kg/h), Lactato e Glicemia se pertinente.
+    2. **Exames (Obrigatório):** Seja específico. Não peça "Laboratório", peça "Gasometria Arterial c/ Lactato, Troponina US, Creatinina...". Em imagem, especifique o protocolo (ex: "Angio-TC de Tórax protocolo TEP").
+    3. **Cálculo de Doses:** - "usa_peso": true
+       - "dose_padrao_kg": número exato (ex: 0.05 a 2 mcg/kg/min para Nora, use o valor inicial padrão)
+       - "unidade_base": ex: "mcg/kg/min", "mg/kg"
+       - "concentracao_mg_ml": Concentração da solução padrão da sua instituição fictícia (ex: Nora 4mg/4ml em 250ml SG5% = 64mcg/ml -> Se for ampola pura, use a da ampola).
+       - "diluicao_contexto": Ex: "4mg em 250ml SG5% (Solução Padrão)"
+    4. **CATEGORIZAÇÃO RIGOROSA:** Você DEVE classificar CADA item de medicamento em uma das seguintes categorias:
+       - 'Dieta'
+       - 'Hidratação'
+       - 'Drogas Vasoativas'
+       - 'Antibiótico'
+       - 'Sintomáticos'
+       - 'Profilaxias'
+       - 'Outros'
     `;
   } else {
     roleDefinition = "Você é um médico generalista experiente em pronto atendimento.";
     promptExtra += `
     CONTEXTO SALA VERDE (AMBULATORIAL):
     - Foco em alívio sintomático e tratamento domiciliar.
-    - "receita": OBRIGATÓRIO preencher.
+    - "receita": OBRIGATÓRIO preencher objeto para prescrição de alta.
+    - "instrucoes": Linguagem clara para o paciente (ex: "Tomar 1 cp após o almoço").
     `;
   }
 
-  // Protocolos específicos
   if (lowerQuery.includes('dengue')) promptExtra += ` PROTOCOLO DENGUE (MS BRASIL)... `;
   if (lowerQuery.includes('sepse') || lowerQuery.includes('septico')) promptExtra += ` PROTOCOLO SEPSE... `;
   if (lowerQuery.includes('iam') || lowerQuery.includes('infarto')) promptExtra += ` PROTOCOLO IAM... `;
@@ -125,23 +135,58 @@ export default async function handler(req, res) {
   ${promptExtra}
   
   REGRAS DE FORMATO (JSON):
-  Retorne APENAS JSON válido.
+  1. Retorne APENAS JSON válido.
+  2. Separe apresentações diferentes (Comprimido vs Injetável) em objetos diferentes no array "tratamento_medicamentoso".
+  3. "tipo": OBRIGATÓRIO da lista: ['Comprimido', 'Cápsula', 'Xarope', 'Suspensão', 'Gotas', 'Solução Oral', 'Injetável', 'Tópico', 'Inalatório', 'Supositório'].
+  4. "sugestao_uso": 
+     - Sala Verde: "Tomar X comp de Y/Y horas..."
+     - Sala Vermelha: "Ataque: X mg EV Bolus. Manutenção: Y mg/h em BIC."
+  5. "avaliacao_inicial.sinais_vitais_alvos": Lista de strings com ALVOS CLÍNICOS (ex: "PAM ≥ 65mmHg", "SatO2 94-98%", "Diurese ≥ 0.5ml/kg/h").
+  
   ESTRUTURA JSON ESPERADA:
   {
-    "condicao": "...",
-    "estadiamento": "...",
+    "condicao": "Nome Técnico Completo",
+    "estadiamento": "Classificação de Risco/Gravidade",
     "classificacao": "${roomContext}",
-    "resumo_clinico": "...",
-    "xabcde_trauma": null,
-    "avaliacao_inicial": { ... },
-    "achados_exames": { ... },
-    "criterios_gravidade": [...],
-    "tratamento_medicamentoso": [...],
-    "escalonamento_terapeutico": [...],
-    "medidas_gerais": [...],
-    "criterios_internacao": [...],
-    "criterios_alta": [...],
-    "guideline_referencia": "..."
+    "resumo_clinico": "Texto técnico detalhado sobre fisiopatologia...",
+    "xabcde_trauma": null, 
+    "avaliacao_inicial": { 
+      "sinais_vitais_alvos": ["PAM ≥ 65mmHg", "FC < 100bpm", "Lactato < 2mmol/L", "SatO2 > 94%"], 
+      "exames_prioridade1": ["Gasometria Arterial", "Lactato", "Hemoculturas x2"], 
+      "exames_complementares": ["..."] 
+    },
+    "achados_exames": { 
+      "ecg": "Descrição precisa das alterações (ex: Infra ST > 0.5mm em V5-V6)", 
+      "laboratorio": "Alterações esperadas e valores críticos", 
+      "imagem": "Padrão radiológico específico" 
+    },
+    "criterios_gravidade": ["Sinal 1", "Sinal 2"],
+    "tratamento_medicamentoso": [ 
+      { 
+        "farmaco": "Nome + Concentração", 
+        "tipo": "Injetável",
+        "categoria": "Antibiótico", // OBRIGATÓRIO na sala vermelha para funcionar o filtro
+        "sugestao_uso": "Texto descritivo da administração...",
+        "diluicao": "Ex: 1 amp em 100ml SF0.9%", 
+        "modo_admin": "BIC / Bolus Lento", 
+        "cuidados": "Monitorizar QT, Risco de hipotensão...", 
+        "indicacao": "Indicação precisa",
+        "receita": null, 
+        "usa_peso": true,
+        "dose_padrao_kg": 0.0,
+        "unidade_base": "mcg/kg/min",
+        "concentracao_mg_ml": 0.0,
+        "diluicao_contexto": "Ex: Solução Padrão (4mg/4ml em 246ml SF)"
+      } 
+    ],
+    "escalonamento_terapeutico": [ 
+      { "passo": "1. Estabilização Inicial", "descricao": "..." },
+      { "passo": "2. Terapia Específica", "descricao": "..." }
+    ],
+    "medidas_gerais": ["Cabeceira elevada", "Jejum", "Acesso venoso calibroso"],
+    "criterios_internacao": ["Critério UTI 1", "..."],
+    "criterios_alta": ["Critério Estabilidade 1", "..."],
+    "guideline_referencia": "Fonte (Ex: Surviving Sepsis Campaign 2021)"
   }
   Baseie-se em doses para adulto 70kg (padrão).`;
 
@@ -164,12 +209,8 @@ export default async function handler(req, res) {
     const data = await response.json();
     const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    // --- CORREÇÃO ROBUSTA DE JSON ---
-    // 1. Remove blocos Markdown
+    // --- CORREÇÃO ROBUSTA DE JSON (Mantida) ---
     let cleanText = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-
-    // 2. Extrai APENAS o objeto JSON (do primeiro '{' ao último '}')
-    // Isso evita erros se a IA responder: "Aqui está o JSON: { ... }"
     const firstBrace = cleanText.indexOf('{');
     const lastBrace = cleanText.lastIndexOf('}');
 
@@ -181,7 +222,7 @@ export default async function handler(req, res) {
         res.status(200).json(JSON.parse(cleanText));
     } catch (parseError) {
         console.error("Erro Fatal Parse JSON:", parseError);
-        console.log("Texto recebido da IA:", textResponse); // Log para debug
+        console.log("Texto recebido da IA:", textResponse); 
         throw new Error("A IA retornou um formato inválido (não é JSON).");
     }
 
