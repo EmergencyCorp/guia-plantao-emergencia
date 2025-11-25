@@ -90,7 +90,17 @@ export default function EmergencyGuideApp() {
 
   const [selectedPrescriptionItems, setSelectedPrescriptionItems] = useState([]);
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
-  const [patientWeight, setPatientWeight] = useState('');
+
+  // --- ESTADOS DA CALCULADORA DE INFUSÃO ---
+  const [showCalculatorModal, setShowCalculatorModal] = useState(false);
+  const [calcInputs, setCalcInputs] = useState({
+    dose: '',
+    peso: '',
+    conc: '',
+    tp_dose: 'mcgmin', // Default: mcg/kg/min
+    tp_conc: 'mgml'    // Default: mg/ml
+  });
+  const [calcResult, setCalcResult] = useState('---');
 
   const [isCurrentConductFavorite, setIsCurrentConductFavorite] = useState(false);
 
@@ -158,7 +168,6 @@ export default function EmergencyGuideApp() {
 
   useEffect(() => {
     setSelectedPrescriptionItems([]);
-    setPatientWeight('');
     
     if (conduct && favorites.length > 0) {
       const docId = getConductDocId(conduct.condicao || searchQuery, activeRoom);
@@ -168,6 +177,63 @@ export default function EmergencyGuideApp() {
       setIsCurrentConductFavorite(false);
     }
   }, [conduct, favorites]);
+
+  // --- LÓGICA DA CALCULADORA (Baseado no código fornecido) ---
+  const calcularMl = () => {
+    const dose = parseFloat(calcInputs.dose);
+    const peso = parseFloat(calcInputs.peso);
+    const conc = parseFloat(calcInputs.conc);
+    const tp_dose = calcInputs.tp_dose;
+    const tp_conc = calcInputs.tp_conc;
+
+    // Validação
+    if (isNaN(dose) || isNaN(peso) || isNaN(conc) || dose <= 0 || peso <= 0 || conc <= 0) {
+      setCalcResult("Preencha valores válidos.");
+      return;
+    }
+
+    // 1. Ajusta Dose Pelo Peso
+    let dosePeloPeso = dose * peso;
+
+    // 2. Ajusta pelo Tempo
+    let doseTotalHora = 0;
+    if (tp_dose.includes('min')) {
+      doseTotalHora = dosePeloPeso * 60;
+    } else {
+      doseTotalHora = dosePeloPeso;
+    }
+
+    // 3. Padroniza Unidades (para mcg)
+    if (tp_dose.includes('mg')) {
+      doseTotalHora = doseTotalHora * 1000;
+    }
+
+    // Converte concentração para mcg/ml
+    let concPadronizada = conc;
+    if (tp_conc === 'mgml') {
+      concPadronizada = conc * 1000;
+    }
+
+    // 4. Cálculo Final
+    let resultado = doseTotalHora / concPadronizada;
+
+    if (resultado < 1) {
+      setCalcResult(resultado.toFixed(2) + " ml/h");
+    } else {
+      setCalcResult(resultado.toFixed(1) + " ml/h");
+    }
+  };
+
+  // Recalcular sempre que os inputs mudarem (UX melhor que botão de clique, mas mantém a lógica)
+  useEffect(() => {
+    if (showCalculatorModal) {
+       calcularMl();
+    }
+  }, [calcInputs]);
+
+  const handleCalcChange = (field, value) => {
+    setCalcInputs(prev => ({ ...prev, [field]: value }));
+  };
 
   const loadHistory = (username) => {
     try {
@@ -557,18 +623,6 @@ export default function EmergencyGuideApp() {
      const medType = inferMedType(med); 
      const isInjectable = medType.toLowerCase().includes('injet');
      
-     let doseFinal = null;
-     let volumeFinal = null;
-     
-     if (activeRoom === 'vermelha' && med.usa_peso && patientWeight && med.dose_padrao_kg) {
-       const doseNum = parseFloat(med.dose_padrao_kg) * parseFloat(patientWeight);
-       doseFinal = doseNum.toFixed(1) + " " + med.unidade_base.split('/')[0];
-       if (med.concentracao_mg_ml) {
-         const vol = doseNum / parseFloat(med.concentracao_mg_ml);
-         volumeFinal = vol.toFixed(1) + " ml";
-       }
-     }
-
      const selectedItemState = selectedPrescriptionItems.find(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
      const currentDays = selectedItemState ? selectedItemState.dias_tratamento : (med.receita?.dias_sugeridos || 5);
 
@@ -601,15 +655,7 @@ export default function EmergencyGuideApp() {
                <input type="number" min="1" className="w-20 px-2 py-1 text-sm border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-blue-900 font-bold" value={currentDays} onChange={(e) => updateItemDays(itemId, parseInt(e.target.value))} />
             </div>
           )}
-
-          {activeRoom === 'vermelha' && med.usa_peso && (
-            <div className="bg-rose-50 rounded-lg p-3 ml-3 mb-3 border border-rose-100">
-               <div className="flex justify-between items-center mb-1"><span className="text-xs font-bold text-rose-800 uppercase">Dose Calculada ({patientWeight || '?'}kg):</span><span className="text-[10px] text-rose-600">Ref: {med.dose_padrao_kg} {med.unidade_base}</span></div>
-               <div className="flex gap-4">{doseFinal ? <span className="text-lg font-bold text-rose-900">{doseFinal}</span> : <span className="italic text-sm text-rose-400">Insira o peso</span>}{volumeFinal && <span className="text-lg font-bold text-rose-700 border-l pl-4 border-rose-200">Volume: {volumeFinal}</span>}</div>
-               {med.diluicao_contexto && <div className="text-[10px] text-rose-500 mt-1 bg-white/50 p-1 rounded">{med.diluicao_contexto}</div>}
-            </div>
-          )}
-
+          
           <div className="grid sm:grid-cols-2 gap-4 ml-3 text-sm">
              {isInjectable && med.diluicao && (<div className="flex gap-2 text-blue-700"><FlaskConical size={16} className="shrink-0 mt-0.5"/><span><strong>Diluição:</strong> {med.diluicao}</span></div>)}
              {isInjectable && med.modo_admin && (<div className="flex gap-2 text-purple-700"><Timer size={16} className="shrink-0 mt-0.5"/><span><strong>Infusão:</strong> {med.modo_admin} {med.tempo_infusao ? `(${med.tempo_infusao})` : ''}</span></div>)}
@@ -695,6 +741,15 @@ export default function EmergencyGuideApp() {
             })}
           </div>
 
+          {/* BOTÃO PARA ABRIR CALCULADORA (APENAS SALA VERMELHA) */}
+          {activeRoom === 'vermelha' && (
+             <div className="flex justify-center">
+                <button onClick={() => setShowCalculatorModal(true)} className="bg-rose-100 hover:bg-rose-200 text-rose-800 border border-rose-300 px-6 py-2 rounded-full font-bold text-sm flex items-center gap-2 transition-colors">
+                   <Calculator size={16}/> Calculadora de Infusão
+                </button>
+             </div>
+          )}
+
           <div className="bg-white p-2 rounded-2xl shadow-lg border border-gray-100 flex items-center gap-2">
             <Search className="ml-3 text-gray-400" size={20} />
             <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && generateConduct()} placeholder="Digite o quadro clínico (ex: Cetoacidose, IAM...)" className="flex-1 py-3 bg-transparent outline-none text-slate-800 font-medium" />
@@ -735,16 +790,6 @@ export default function EmergencyGuideApp() {
               <div className="bg-rose-50 border border-rose-100 p-5 rounded-2xl">
                 <h3 className="text-rose-800 font-bold flex items-center gap-2 mb-3 text-sm uppercase"><AlertTriangle size={18}/> Sinais de Alarme</h3>
                 <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-3">{conduct.criterios_gravidade.map((crit, i) => (<div key={i} className="bg-white/80 p-2.5 rounded-lg border border-rose-100/50 text-sm text-rose-900 font-medium flex gap-2"><div className="mt-1 w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"/>{crit}</div>))}</div>
-              </div>
-            )}
-
-            {activeRoom === 'vermelha' && (
-              <div className="bg-rose-100 border-l-4 border-rose-600 p-4 rounded shadow-sm flex flex-col md:flex-row items-center gap-4 animate-in slide-in-from-top-2">
-                <div className="flex items-center gap-2 text-rose-900 font-bold"><Calculator size={20} /><span>Cálculo de Doses (Peso)</span></div>
-                <div className="flex items-center gap-2 flex-1 w-full">
-                  <input type="number" value={patientWeight} onChange={(e) => setPatientWeight(e.target.value)} placeholder="Peso (kg)" className="px-4 py-2 rounded border border-rose-300 focus:ring-2 focus:ring-rose-500 w-full md:w-48 text-slate-800 font-bold" />
-                  <span className="text-xs text-rose-700">*Insira o peso para calcular doses automaticamente</span>
-                </div>
               </div>
             )}
 
@@ -868,6 +913,60 @@ export default function EmergencyGuideApp() {
                 })}
               </div>
               <footer className="mt-auto pt-12"><div className="flex justify-between items-end"><div className="text-sm"><p className="font-bold">Data:</p><div className="w-40 border-b border-slate-800 mt-4 text-center relative top-1">{new Date().toLocaleDateString('pt-BR')}</div></div><div className="text-center"><div className="w-64 border-b border-slate-800 mb-2"></div><p className="font-bold uppercase text-sm">{currentUser?.name}</p><p className="text-xs text-slate-500">Assinatura e Carimbo</p></div></div><div className="text-center mt-8 pt-4 border-t border-slate-200 text-[10px] text-slate-400 uppercase">Rua da Medicina, 123 • Centro • Cidade/UF • Tel: (00) 1234-5678</div></footer>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CALCULADORA DE INFUSÃO */}
+      {showCalculatorModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
+            <div className="bg-rose-50 p-4 border-b border-rose-100 flex justify-between items-center">
+              <h3 className="font-bold text-rose-800 flex items-center gap-2"><Calculator size={20} /> Calculadora de Infusão</h3>
+              <button onClick={() => setShowCalculatorModal(false)} className="p-2 hover:bg-rose-100 rounded-full text-rose-700 transition-colors"><X size={20}/></button>
+            </div>
+            <div className="p-6 space-y-4">
+              {/* Peso */}
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase ml-1 mb-1 block">Peso do Paciente</label>
+                <div className="relative">
+                   <input type="number" id="peso" value={calcInputs.peso} onChange={(e) => handleCalcChange('peso', e.target.value)} placeholder="0.0" className="w-full pl-4 pr-12 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-rose-500 font-bold text-slate-800" />
+                   <span className="absolute right-4 top-3.5 text-xs font-bold text-gray-400">kg</span>
+                </div>
+              </div>
+
+              {/* Dose */}
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase ml-1 mb-1 block">Dose Desejada</label>
+                <div className="flex gap-2">
+                   <input type="number" id="dose" value={calcInputs.dose} onChange={(e) => handleCalcChange('dose', e.target.value)} placeholder="0.0" className="w-1/2 pl-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-rose-500 font-bold text-slate-800" />
+                   <select id="tp_dose" value={calcInputs.tp_dose} onChange={(e) => handleCalcChange('tp_dose', e.target.value)} className="w-1/2 px-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-slate-600 focus:ring-2 focus:ring-rose-500 outline-none">
+                      <option value="mcgmin">mcg/kg/min</option>
+                      <option value="mgmin">mg/kg/min</option>
+                      <option value="mcgh">mcg/kg/h</option>
+                      <option value="mgh">mg/kg/h</option>
+                   </select>
+                </div>
+              </div>
+
+              {/* Concentração */}
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase ml-1 mb-1 block">Concentração da Solução</label>
+                <div className="flex gap-2">
+                   <input type="number" id="conc" value={calcInputs.conc} onChange={(e) => handleCalcChange('conc', e.target.value)} placeholder="0.0" className="w-1/2 pl-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-rose-500 font-bold text-slate-800" />
+                   <select id="tp_conc" value={calcInputs.tp_conc} onChange={(e) => handleCalcChange('tp_conc', e.target.value)} className="w-1/2 px-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-slate-600 focus:ring-2 focus:ring-rose-500 outline-none">
+                      <option value="mgml">mg/ml</option>
+                      <option value="mcgml">mcg/ml</option>
+                   </select>
+                </div>
+              </div>
+
+              {/* Resultado */}
+              <div className="bg-rose-100 rounded-xl p-6 text-center mt-6">
+                <span className="text-xs font-bold text-rose-600 uppercase mb-1 block">Velocidade de Infusão</span>
+                <div id="resultado" className="text-3xl font-extrabold text-rose-900">{calcResult}</div>
+              </div>
             </div>
           </div>
         </div>
