@@ -66,23 +66,30 @@ const appId = (typeof __app_id !== 'undefined') ? __app_id : 'emergency-guide-ap
 const initialToken = (typeof __initial_auth_token !== 'undefined') ? __initial_auth_token : null;
 
 export default function EmergencyGuideApp() {
-  // --- ESTADO DO MODO ESCURO ---
+  // --- ESTADO DO MODO ESCURO (COM PROTEÇÃO CONTRA ERROS) ---
   const [darkMode, setDarkMode] = useState(() => {
-    // Recupera preferência salva ou define false (claro) como padrão
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('theme') === 'dark';
+    try {
+      if (typeof window !== 'undefined') {
+        return localStorage.getItem('theme') === 'dark';
+      }
+    } catch (e) {
+      console.warn("Acesso ao localStorage bloqueado:", e);
     }
     return false;
   });
 
   // Efeito para aplicar a classe 'dark' no elemento raiz HTML
   useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
+    try {
+      if (darkMode) {
+        document.documentElement.classList.add('dark');
+        localStorage.setItem('theme', 'dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+        localStorage.setItem('theme', 'light');
+      }
+    } catch (e) {
+      // Falha silenciosa se localStorage estiver indisponível
     }
   }, [darkMode]);
 
