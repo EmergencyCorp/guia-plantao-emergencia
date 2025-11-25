@@ -52,6 +52,14 @@ export default async function handler(req, res) {
        - "unidade_base": ex: "mcg/kg/min", "mg/kg"
        - "concentracao_mg_ml": Concentração da solução padrão da sua instituição fictícia (ex: Nora 4mg/4ml em 250ml SG5% = 64mcg/ml -> Se for ampola pura, use a da ampola).
        - "diluicao_contexto": Ex: "4mg em 250ml SG5% (Solução Padrão)"
+    4. **CATEGORIZAÇÃO RIGOROSA:** Você DEVE classificar CADA item de medicamento em uma das seguintes categorias:
+       - 'Dieta'
+       - 'Hidratação'
+       - 'Drogas Vasoativas'
+       - 'Antibiótico'
+       - 'Sintomáticos'
+       - 'Profilaxias'
+       - 'Outros'
     `;
   } else {
     roleDefinition = "Você é um médico generalista experiente em pronto atendimento.";
@@ -134,6 +142,7 @@ export default async function handler(req, res) {
       { 
         "farmaco": "Nome + Concentração", 
         "tipo": "Injetável",
+        "categoria": "Antibiótico", // Campo OBRIGATÓRIO para Sala Vermelha
         "sugestao_uso": "Texto descritivo da administração...",
         "diluicao": "Ex: 1 amp em 100ml SF0.9%", 
         "modo_admin": "BIC / Bolus Lento", 
