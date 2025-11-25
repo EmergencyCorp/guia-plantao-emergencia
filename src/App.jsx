@@ -5,7 +5,7 @@ import {
   CheckCircle2, Thermometer, Syringe, Siren, FlaskConical, Tag, Package,
   ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save, Cloud, CloudOff, Settings, Info,
   HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine, Wind, Droplet, Timer, Skull, Printer, FilePlus, Calculator,
-  Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2, SprayCan, CalendarDays, Utensils, Zap
+  Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2, SprayCan, CalendarDays, Utensils, Zap, Camera, Upload, Eye
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -102,6 +102,13 @@ export default function EmergencyGuideApp() {
   });
   const [calcResult, setCalcResult] = useState('---');
 
+  // --- ESTADOS DA ANÁLISE DE IMAGEM (IA VISION) ---
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null); // Base64 string
+  const [imageQuery, setImageQuery] = useState('');
+  const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
+  const [imageAnalysisResult, setImageAnalysisResult] = useState(null);
+
   const [isCurrentConductFavorite, setIsCurrentConductFavorite] = useState(false);
 
   useEffect(() => {
@@ -178,7 +185,65 @@ export default function EmergencyGuideApp() {
     }
   }, [conduct, favorites]);
 
-  // --- LÓGICA DA CALCULADORA (Baseado no código fornecido) ---
+  // --- LÓGICA DE UPLOAD E ANÁLISE DE IMAGEM ---
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setSelectedImage(reader.result);
+        setImageAnalysisResult(null); // Limpa resultado anterior ao trocar imagem
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleAnalyzeImage = async () => {
+    if (!selectedImage || !imageQuery.trim()) {
+      showError("Por favor, selecione uma imagem e faça uma pergunta.");
+      return;
+    }
+
+    setIsAnalyzingImage(true);
+    setImageAnalysisResult(null);
+
+    try {
+      // Envia base64 direto para API (sem salvar no banco)
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          image: selectedImage, 
+          prompt: imageQuery 
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Erro ao analisar imagem.');
+      }
+
+      const data = await response.json();
+      setImageAnalysisResult(data.analysis);
+
+    } catch (error) {
+      console.error("Erro na análise:", error);
+      showError("Falha na análise da imagem. Tente novamente.");
+    } finally {
+      setIsAnalyzingImage(false);
+    }
+  };
+
+  const closeImageModal = () => {
+    setShowImageModal(false);
+    // Limpa tudo para garantir que nada fica salvo na memória/sessão (simulando deletar)
+    setTimeout(() => {
+      setSelectedImage(null);
+      setImageQuery('');
+      setImageAnalysisResult(null);
+    }, 300);
+  };
+
+  // --- LÓGICA DA CALCULADORA ---
   const calcularMl = () => {
     const dose = parseFloat(calcInputs.dose);
     const peso = parseFloat(calcInputs.peso);
@@ -186,16 +251,12 @@ export default function EmergencyGuideApp() {
     const tp_dose = calcInputs.tp_dose;
     const tp_conc = calcInputs.tp_conc;
 
-    // Validação
     if (isNaN(dose) || isNaN(peso) || isNaN(conc) || dose <= 0 || peso <= 0 || conc <= 0) {
       setCalcResult("Preencha valores válidos.");
       return;
     }
 
-    // 1. Ajusta Dose Pelo Peso
     let dosePeloPeso = dose * peso;
-
-    // 2. Ajusta pelo Tempo
     let doseTotalHora = 0;
     if (tp_dose.includes('min')) {
       doseTotalHora = dosePeloPeso * 60;
@@ -203,18 +264,15 @@ export default function EmergencyGuideApp() {
       doseTotalHora = dosePeloPeso;
     }
 
-    // 3. Padroniza Unidades (para mcg)
     if (tp_dose.includes('mg')) {
       doseTotalHora = doseTotalHora * 1000;
     }
 
-    // Converte concentração para mcg/ml
     let concPadronizada = conc;
     if (tp_conc === 'mgml') {
       concPadronizada = conc * 1000;
     }
 
-    // 4. Cálculo Final
     let resultado = doseTotalHora / concPadronizada;
 
     if (resultado < 1) {
@@ -224,7 +282,6 @@ export default function EmergencyGuideApp() {
     }
   };
 
-  // Recalcular sempre que os inputs mudarem (UX melhor que botão de clique, mas mantém a lógica)
   useEffect(() => {
     if (showCalculatorModal) {
        calcularMl();
@@ -272,7 +329,6 @@ export default function EmergencyGuideApp() {
       if (!currentUser) return;
       const newEntry = { query: term, room, timestamp: new Date().toISOString() };
       const hist = recentSearches.filter(s => s.query.toLowerCase() !== term.toLowerCase());
-      // CORREÇÃO AQUI: slice(0, 10) em vez de slice(10)
       const updated = [newEntry, ...hist].slice(0, 10);
       setRecentSearches(updated);
       localStorage.setItem(`history_${currentUser.username}`, JSON.stringify(updated));
@@ -715,6 +771,13 @@ export default function EmergencyGuideApp() {
           <div className="flex items-center gap-3"><div className="bg-blue-900 p-2 rounded-lg text-white"><ClipboardCheck size={20} /></div><div><h1 className="text-lg font-bold text-slate-800 leading-none">Guia de Plantão</h1><span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Suporte Médico</span></div></div>
           <div className="flex items-center gap-3">
              <div className="hidden sm:flex flex-col items-end mr-2"><span className="text-xs font-bold text-slate-700">{currentUser.name}</span><span className="text-[10px] text-slate-400 uppercase">{currentUser.role}</span></div>
+             
+             {/* BOTÃO DE IA VISION (NOVO) */}
+             <button onClick={() => setShowImageModal(true)} className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-full transition-colors flex items-center gap-2" title="Análise de Imagem IA">
+                <Camera size={20} />
+                <span className="text-xs font-bold hidden sm:inline">IA Vision</span>
+             </button>
+
              <button onClick={() => setShowFavoritesModal(true)} className="p-2 text-yellow-500 hover:bg-yellow-50 rounded-full transition-colors" title="Meus Favoritos"><Star size={20} /></button>
              <button onClick={() => setShowNotepad(true)} className="p-2 text-slate-600 hover:bg-slate-100 rounded-full"><Edit size={20} /></button>
              <button onClick={handleLogout} className="p-2 text-red-400 hover:bg-red-50 rounded-full"><LogOut size={20} /></button>
@@ -968,6 +1031,106 @@ export default function EmergencyGuideApp() {
                 <span className="text-xs font-bold text-rose-600 uppercase mb-1 block">Velocidade de Infusão</span>
                 <div id="resultado" className="text-3xl font-extrabold text-rose-900">{calcResult}</div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE IA VISION (ANÁLISE DE IMAGEM) */}
+      {showImageModal && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="bg-blue-600 p-4 border-b border-blue-700 flex justify-between items-center">
+              <h3 className="font-bold text-white flex items-center gap-2"><Camera size={24} /> IA Vision - Análise de Exames</h3>
+              <button onClick={closeImageModal} className="p-2 hover:bg-blue-700 rounded-full text-white transition-colors"><X size={20}/></button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1">
+              {!imageAnalysisResult ? (
+                <div className="space-y-6">
+                  {/* Área de Upload */}
+                  <div className="relative border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-blue-500 transition-colors bg-gray-50 group">
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleImageUpload}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
+                    />
+                    {selectedImage ? (
+                      <div className="relative h-64 w-full">
+                        <img src={selectedImage} alt="Preview" className="w-full h-full object-contain rounded-lg" />
+                        <div className="absolute bottom-2 right-2 bg-black/50 text-white px-3 py-1 rounded text-xs">Clique para trocar</div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2 pointer-events-none">
+                        <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto text-blue-600 group-hover:scale-110 transition-transform">
+                          <Upload size={32} />
+                        </div>
+                        <h4 className="font-bold text-slate-700">Arraste ou clique para enviar</h4>
+                        <p className="text-sm text-slate-500">Suporta: ECG, Raio-X, Tomografia, Fotos de Lesões...</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Input de Pergunta */}
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase ml-1 mb-1 block">O que você deseja saber?</label>
+                    <div className="relative">
+                      <input 
+                        type="text" 
+                        value={imageQuery} 
+                        onChange={(e) => setImageQuery(e.target.value)} 
+                        placeholder="Ex: Onde está a fratura? / Qual o ritmo deste ECG?" 
+                        className="w-full pl-4 pr-12 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 font-medium text-slate-800" 
+                      />
+                      <Eye className="absolute right-4 top-3 text-gray-400" size={20} />
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={handleAnalyzeImage} 
+                    disabled={isAnalyzingImage || !selectedImage}
+                    className={`w-full py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition-all shadow-lg ${isAnalyzingImage || !selectedImage ? 'bg-slate-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+                  >
+                    {isAnalyzingImage ? <Loader2 className="animate-spin" /> : <><Camera size={20}/> Analisar Imagem</>}
+                  </button>
+                  
+                  <div className="bg-yellow-50 border border-yellow-100 p-3 rounded-lg flex gap-3 items-start">
+                    <AlertTriangle className="text-yellow-600 shrink-0 w-5 h-5 mt-0.5" />
+                    <p className="text-xs text-yellow-800 text-justify">
+                      <strong>Atenção:</strong> As imagens são processadas em tempo real e <strong>deletadas imediatamente</strong> após fechar esta janela. Não substitui a avaliação do radiologista ou especialista.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+                  <div className="flex gap-4 items-start bg-slate-50 p-4 rounded-xl border border-slate-200">
+                    <div className="w-24 h-24 shrink-0 rounded-lg overflow-hidden bg-black border border-slate-300">
+                      <img src={selectedImage} alt="Miniatura" className="w-full h-full object-cover" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-slate-400 uppercase">Sua Pergunta:</span>
+                      <p className="font-medium text-slate-800">"{imageQuery}"</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-xl border border-blue-100 shadow-sm">
+                    <h4 className="font-bold text-blue-900 flex items-center gap-2 mb-4 border-b border-blue-50 pb-2">
+                      <Microscope size={20}/> Laudo Preliminar IA
+                    </h4>
+                    <div className="prose prose-sm max-w-none text-slate-700 leading-relaxed whitespace-pre-wrap">
+                      {imageAnalysisResult}
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={() => setImageAnalysisResult(null)} 
+                    className="w-full py-3 border-2 border-gray-200 rounded-xl font-bold text-slate-600 hover:bg-gray-50 transition-colors"
+                  >
+                    Nova Análise
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
