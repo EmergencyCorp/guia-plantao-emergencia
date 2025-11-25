@@ -128,10 +128,40 @@ export default async function handler(req, res) {
     `;
   }
 
-  if (lowerQuery.includes('dengue')) promptExtra += ` PROTOCOLO DENGUE (MS BRASIL)... `;
-  if (lowerQuery.includes('sepse') || lowerQuery.includes('septico')) promptExtra += ` PROTOCOLO SEPSE... `;
-  if (lowerQuery.includes('iam') || lowerQuery.includes('infarto')) promptExtra += ` PROTOCOLO IAM... `;
-  if (lowerQuery.includes('trauma')) promptExtra += ` PROTOCOLO TRAUMA... `;
+  // 2. Lógica Clínica Específica (Protocolos Restaurados)
+  if (lowerQuery.includes('dengue')) {
+    promptExtra += `
+    PROTOCOLO DENGUE (MS BRASIL):
+    - Classifique: Grupo A, B, C ou D.
+    - Grupo C/D (Sala Vermelha): Fase de Expansão Rápida (20ml/kg em 20 min). Reavaliação a cada etapa.
+    - Grupo A/B (Sala Verde): Hidratação oral escalonada.
+    `;
+  }
+
+  if (lowerQuery.includes('sepse') || lowerQuery.includes('septico')) {
+    promptExtra += `
+    PROTOCOLO SEPSE (Surviving Sepsis Campaign):
+    - Pacote de 1 hora: Lactato, Hemoculturas, Antibiótico amplo espectro, Cristaloide 30ml/kg (se hipotensão/lactato > 4), Vasopressor (se PAM < 65 pós volume).
+    `;
+  }
+
+  if (lowerQuery.includes('iam') || lowerQuery.includes('infarto') || lowerQuery.includes('scs')) {
+    promptExtra += `
+    PROTOCOLO IAM (SBC/AHA):
+    - Tempo porta-balão ou porta-agulha.
+    - Dupla antiagregação + Anticoagulação.
+    - Estatinas alta potência.
+    `;
+  }
+
+  if (lowerQuery.includes('trauma') || lowerQuery.includes('acid') || lowerQuery.includes('poli')) {
+    promptExtra += `
+    PROTOCOLO TRAUMA (ATLS 10ª Ed):
+    - OBRIGATÓRIO preencher objeto "xabcde_trauma" com a estrutura exata: chaves X, A, B, C, D, E.
+    - X: Controle de hemorragia exsanguinante.
+    - A: Via aérea + Colar.
+    `;
+  }
 
   const promptText = `${roleDefinition}
   Gere a conduta clínica IMPECÁVEL para "${searchQuery}" na ${roomContext}.
@@ -148,7 +178,14 @@ export default async function handler(req, res) {
     "estadiamento": "Classificação de Risco/Gravidade",
     "classificacao": "${roomContext}",
     "resumo_clinico": "Texto técnico detalhado sobre fisiopatologia...",
-    "xabcde_trauma": null, 
+    "xabcde_trauma": {
+       "X": "Controle de Hemorragia...",
+       "A": "Via Aérea...",
+       "B": "Respiração...",
+       "C": "Circulação...",
+       "D": "Neurológico...",
+       "E": "Exposição..."
+    }, // Preencher APENAS se for trauma, senão null
     "avaliacao_inicial": { 
       "sinais_vitais_alvos": ["PAM ≥ 65mmHg", "FC < 100bpm", "Lactato < 2mmol/L", "SatO2 > 94%"], 
       "exames_prioridade1": ["Gasometria Arterial", "Lactato", "Hemoculturas x2"], 
