@@ -833,7 +833,12 @@ export default function EmergencyGuideApp() {
             <div className="absolute top-4 right-4">
                <ThemeToggle isDarkMode={isDarkMode} toggleTheme={toggleTheme} />
             </div>
-            <Shield size={40} className="mx-auto mb-3 text-blue-300" />
+            {/* LOGO NO LOGIN */}
+            <img 
+               src="https://i.ibb.co/1SVLJDf/Gemini-Generated-Image-yq71wxyq71wxyq71.png" 
+               alt="Emergency Guide Logo" 
+               className="mx-auto mb-4 h-24 w-auto object-contain"
+            />
             <h1 className="text-2xl font-bold mb-1">Guia de Plantão</h1>
             <p className="text-blue-200 text-sm font-medium">Acesso Exclusivo Médico</p>
           </div>
@@ -870,7 +875,15 @@ export default function EmergencyGuideApp() {
     <div className={`min-h-screen flex flex-col font-sans selection:bg-blue-100 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
       <header className={`border-b sticky top-0 z-40 shadow-sm ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3"><div className="bg-blue-900 p-2 rounded-lg text-white"><ClipboardCheck size={20} /></div><div><h1 className={`text-lg font-bold leading-none ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>Guia de Plantão</h1><span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Suporte Médico</span></div></div>
+          <div className="flex items-center gap-3">
+             {/* LOGO NO HEADER */}
+             <img 
+               src="https://i.ibb.co/1SVLJDf/Gemini-Generated-Image-yq71wxyq71wxyq71.png" 
+               alt="Logo" 
+               className="h-12 w-auto object-contain rounded-lg" 
+             />
+             <div><h1 className={`text-lg font-bold leading-none ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>Guia de Plantão</h1><span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Suporte Médico</span></div>
+          </div>
           <div className="flex items-center gap-3">
              <div className="hidden sm:flex flex-col items-end mr-2"><span className={`text-xs font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{currentUser.name}</span><span className="text-[10px] text-slate-400 uppercase">{currentUser.role}</span></div>
              
