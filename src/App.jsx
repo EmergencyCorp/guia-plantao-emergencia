@@ -6,7 +6,7 @@ import {
   ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save, Cloud, CloudOff, Settings, Info,
   HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine, Wind, Droplet, Timer, Skull, Printer, FilePlus, Calculator,
   Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2, SprayCan, CalendarDays, Utensils, Zap, Camera, Upload, Eye,
-  Sun, Moon
+  Sun, Moon, BedDouble // Ícone novo para Observação
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -88,7 +88,6 @@ export default function EmergencyGuideApp() {
   const [isDarkMode, setIsDarkMode] = useState(false);
 
   useEffect(() => {
-    // Carrega preferência salva ou inicia como false (Claro)
     const savedTheme = localStorage.getItem('theme_preference');
     if (savedTheme === 'dark') {
       setIsDarkMode(true);
@@ -140,7 +139,7 @@ export default function EmergencyGuideApp() {
 
   // --- ESTADOS DA ANÁLISE DE IMAGEM (IA VISION) ---
   const [showImageModal, setShowImageModal] = useState(false);
-  const [selectedImage, setSelectedImage] = useState(null); // Base64 string
+  const [selectedImage, setSelectedImage] = useState(null); 
   const [imageQuery, setImageQuery] = useState('');
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
   const [imageAnalysisResult, setImageAnalysisResult] = useState(null);
@@ -386,7 +385,7 @@ export default function EmergencyGuideApp() {
       if (!currentUser) return;
       const newEntry = { query: term, room, timestamp: new Date().toISOString() };
       const hist = recentSearches.filter(s => s.query.toLowerCase() !== term.toLowerCase());
-      const updated = [newEntry, ...hist].slice(0, 10); // CORRIGIDO: de slice(10) para slice(0, 10)
+      const updated = [newEntry, ...hist].slice(0, 10);
       setRecentSearches(updated);
       localStorage.setItem(`history_${currentUser.username}`, JSON.stringify(updated));
   
@@ -616,18 +615,26 @@ export default function EmergencyGuideApp() {
     } catch (error) { console.error("Erro ao limpar cache:", error); }
   };
 
-  const generateConduct = async () => {
+  // Modificado para aceitar um overrideRoom (para a funcionalidade de transferir para observação)
+  const generateConduct = async (overrideRoom = null) => {
     if (!searchQuery.trim()) {
       showError('Digite uma condição clínica.');
       return;
     }
     
+    const targetRoom = overrideRoom || activeRoom; // Usa a sala passada ou a atual
+
     setLoading(true);
     setConduct(null);
     setErrorMsg('');
     setIsCurrentConductFavorite(false);
 
-    const docId = getConductDocId(searchQuery, activeRoom);
+    // Se for override (transferência), mudamos visualmente para a sala correspondente
+    if (overrideRoom) {
+        setActiveRoom(overrideRoom);
+    }
+
+    const docId = getConductDocId(searchQuery, targetRoom);
 
     if (isCloudConnected && currentUser) {
       try {
@@ -641,7 +648,7 @@ export default function EmergencyGuideApp() {
           await setDoc(docRef, { lastAccessed: new Date().toISOString() }, { merge: true });
           
           setLoading(false);
-          saveToHistory(searchQuery, activeRoom);
+          saveToHistory(searchQuery, targetRoom);
           setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
           return;
         }
@@ -652,7 +659,7 @@ export default function EmergencyGuideApp() {
       const response = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ searchQuery, activeRoom })
+        body: JSON.stringify({ searchQuery, activeRoom: targetRoom })
       });
 
       if (!response.ok) {
@@ -667,7 +674,7 @@ export default function EmergencyGuideApp() {
         const docRef = doc(db, 'artifacts', appId, 'users', currentUser.username, 'conducts', docId);
         await setDoc(docRef, {
           query: searchQuery,
-          room: activeRoom,
+          room: targetRoom,
           conductData: parsedConduct,
           isFavorite: false,
           lastAccessed: new Date().toISOString()
@@ -675,7 +682,7 @@ export default function EmergencyGuideApp() {
         manageCacheLimit(currentUser.username);
       }
 
-      saveToHistory(searchQuery, activeRoom);
+      saveToHistory(searchQuery, targetRoom);
       setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
 
     } catch (error) {
@@ -802,6 +809,16 @@ export default function EmergencyGuideApp() {
         icon: <Stethoscope className="w-5 h-5" />, 
         description: 'Ambulatorial / Baixa Complexidade' 
     },
+    amarela: { 
+      name: 'Sala Amarela', 
+      color: 'amber', 
+      accent: isDarkMode ? 'bg-amber-600' : 'bg-amber-500', 
+      border: isDarkMode ? 'border-amber-700' : 'border-amber-500', 
+      text: isDarkMode ? 'text-amber-300' : 'text-amber-800', 
+      light: isDarkMode ? 'bg-amber-900/30' : 'bg-amber-50', 
+      icon: <BedDouble className="w-5 h-5" />, 
+      description: 'Observação / Média Complexidade' 
+    },
     vermelha: { 
         name: 'Sala Vermelha', 
         color: 'rose', 
@@ -915,7 +932,10 @@ export default function EmergencyGuideApp() {
 
         <div className="space-y-6">
           <div className="grid md:grid-cols-2 gap-4">
-            {Object.entries(roomConfig).map(([key, config]) => {
+            {Object.entries(roomConfig)
+              // Filtra a Sala Amarela para não aparecer como aba selecionável inicialmente, já que é um estado de "transferência"
+              .filter(([key]) => key !== 'amarela' || activeRoom === 'amarela') 
+              .map(([key, config]) => {
               const isActive = activeRoom === key;
               return (
                 <button key={key} onClick={() => setActiveRoom(key)} className={`relative flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all ${isActive ? `${isDarkMode ? 'bg-slate-900' : 'bg-white'} ${config.border} shadow-md ring-1 ring-offset-2 ${isDarkMode ? 'ring-offset-slate-950' : ''} ${config.accent.replace('bg-', 'ring-')}` : `border-transparent shadow-sm ${isDarkMode ? 'bg-slate-900 hover:border-slate-700' : 'bg-white hover:border-gray-200'}`}`}>
@@ -927,8 +947,8 @@ export default function EmergencyGuideApp() {
             })}
           </div>
 
-          {/* BOTÃO PARA ABRIR CALCULADORA (APENAS SALA VERMELHA) */}
-          {activeRoom === 'vermelha' && (
+          {/* BOTÃO PARA ABRIR CALCULADORA (SALAS GRAVES) */}
+          {(activeRoom === 'vermelha' || activeRoom === 'amarela') && (
              <div className="flex justify-center">
                 <button onClick={() => setShowCalculatorModal(true)} className={`px-6 py-2 rounded-full font-bold text-sm flex items-center gap-2 transition-colors border ${isDarkMode ? 'bg-rose-900/30 text-rose-300 border-rose-800 hover:bg-rose-900/50' : 'bg-rose-100 hover:bg-rose-200 text-rose-800 border-rose-300'}`}>
                    <Calculator size={16}/> Calculadora de Infusão
@@ -939,18 +959,40 @@ export default function EmergencyGuideApp() {
           <div className={`p-2 rounded-2xl shadow-lg border flex items-center gap-2 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-100'}`}>
             <Search className="ml-3 text-gray-400" size={20} />
             <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && generateConduct()} placeholder="Digite o quadro clínico (ex: Cetoacidose, IAM...)" className={`flex-1 py-3 bg-transparent outline-none font-medium ${isDarkMode ? 'text-white placeholder-slate-600' : 'text-slate-800'}`} />
-            <button onClick={generateConduct} disabled={loading} className={`px-6 py-3 rounded-xl font-bold text-white flex items-center gap-2 transition-all ${loading ? 'bg-slate-600' : 'bg-blue-900 hover:bg-blue-800'}`}>{loading ? <Loader2 className="animate-spin" /> : <>Gerar <ArrowRight size={18} /></>}</button>
+            <button onClick={() => generateConduct()} disabled={loading} className={`px-6 py-3 rounded-xl font-bold text-white flex items-center gap-2 transition-all ${loading ? 'bg-slate-600' : 'bg-blue-900 hover:bg-blue-800'}`}>{loading ? <Loader2 className="animate-spin" /> : <>Gerar <ArrowRight size={18} /></>}</button>
           </div>
 
-          {recentSearches.length > 0 && (<div className="flex flex-wrap gap-2 px-1"><div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase mr-2"><History size={14} /> Recentes</div>{recentSearches.map((search, idx) => (<button key={idx} onClick={() => {setActiveRoom(search.room); setSearchQuery(search.query);}} className={`flex items-center gap-2 text-xs px-3 py-1 border rounded-full transition-colors ${isDarkMode ? 'bg-slate-900 border-slate-700 hover:border-blue-500 hover:text-blue-400 text-slate-300' : 'bg-white border-gray-200 hover:border-blue-300 hover:text-blue-700'}`}><div className={`w-2 h-2 rounded-full shrink-0 ${search.room === 'verde' ? 'bg-emerald-500' : 'bg-rose-500'}`} />{search.query}</button>))}</div>)}
+          {recentSearches.length > 0 && (<div className="flex flex-wrap gap-2 px-1"><div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase mr-2"><History size={14} /> Recentes</div>{recentSearches.map((search, idx) => (<button key={idx} onClick={() => {setActiveRoom(search.room); setSearchQuery(search.query);}} className={`flex items-center gap-2 text-xs px-3 py-1 border rounded-full transition-colors ${isDarkMode ? 'bg-slate-900 border-slate-700 hover:border-blue-500 hover:text-blue-400 text-slate-300' : 'bg-white border-gray-200 hover:border-blue-300 hover:text-blue-700'}`}><div className={`w-2 h-2 rounded-full shrink-0 ${search.room === 'verde' ? 'bg-emerald-500' : search.room === 'amarela' ? 'bg-amber-500' : 'bg-rose-500'}`} />{search.query}</button>))}</div>)}
           {errorMsg && <div className={`px-4 py-3 rounded-xl border flex items-center gap-3 text-sm font-medium ${isDarkMode ? 'bg-red-900/30 text-red-300 border-red-800' : 'bg-red-50 text-red-700 border-red-200'}`}><AlertCircle size={18} /> {errorMsg}</div>}
         </div>
 
         {conduct && (
           <div ref={resultsRef} className="animate-in slide-in-from-bottom-4 fade-in duration-500 space-y-6">
+            
+            {/* BOTÃO DE TRANSFERÊNCIA PARA OBSERVAÇÃO (SÓ APARECE NA SALA VERDE) */}
+            {activeRoom === 'verde' && (
+              <div className={`border-l-4 border-amber-500 p-4 rounded-r-xl flex items-center justify-between gap-4 ${isDarkMode ? 'bg-amber-900/20' : 'bg-amber-50'}`}>
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-full ${isDarkMode ? 'bg-amber-900/50 text-amber-400' : 'bg-amber-100 text-amber-600'}`}>
+                    <AlertTriangle size={20} />
+                  </div>
+                  <div>
+                    <h4 className={`text-sm font-bold ${isDarkMode ? 'text-amber-300' : 'text-amber-900'}`}>Caso mais grave que o esperado?</h4>
+                    <p className={`text-xs ${isDarkMode ? 'text-amber-400/70' : 'text-amber-700'}`}>Gere uma conduta de média complexidade.</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => generateConduct('amarela')} 
+                  className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide transition-all shadow-sm hover:shadow-md flex items-center gap-2 ${isDarkMode ? 'bg-amber-600 hover:bg-amber-500 text-white' : 'bg-amber-500 hover:bg-amber-600 text-white'}`}
+                >
+                  Transferir p/ Observação <ArrowRight size={14} />
+                </button>
+              </div>
+            )}
+
             <div className="flex justify-between items-start">
                <div>
-                  <div className="flex flex-wrap gap-2 mb-2"><span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase text-white ${activeRoom === 'verde' ? 'bg-emerald-500' : 'bg-rose-600'}`}>{conduct.classificacao}</span>{conduct.estadiamento && <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-800 text-white">{conduct.estadiamento}</span>}</div>
+                  <div className="flex flex-wrap gap-2 mb-2"><span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase text-white ${roomConfig[activeRoom].accent.replace('bg-', 'bg-')}`}>{conduct.classificacao}</span>{conduct.estadiamento && <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-800 text-white">{conduct.estadiamento}</span>}</div>
                   <h2 className={`text-3xl font-bold ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>{conduct.condicao}</h2>
                   {conduct.guideline_referencia && (<p className="text-xs text-slate-500 mt-1 flex items-center gap-1"><BookOpen size={12} /> Fonte: <span className="font-medium">{conduct.guideline_referencia}</span></p>)}
                </div>
@@ -1015,11 +1057,11 @@ export default function EmergencyGuideApp() {
                 <div className="space-y-4">
                    <div className={`flex items-center gap-2 mb-2 px-2 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}><div className={`p-1.5 rounded ${isDarkMode ? 'bg-emerald-900/50' : 'bg-emerald-100'}`}><Pill size={18}/></div><h3 className="font-bold text-lg">Prescrição e Conduta</h3></div>
                    
-                   {/* RENDERIZAÇÃO CONDICIONAL POR CATEGORIA (SALA VERMELHA) OU LISTA SIMPLES (VERDE) */}
+                   {/* RENDERIZAÇÃO CONDICIONAL POR CATEGORIA (SALA VERMELHA OU AMARELA) OU LISTA SIMPLES (VERDE) */}
                    {activeRoom === 'verde' ? (
                       conduct.tratamento_medicamentoso?.map((med, idx) => renderMedicationCard(med, idx))
                    ) : (
-                      // LÓGICA DE AGRUPAMENTO SALA VERMELHA
+                      // LÓGICA DE AGRUPAMENTO SALAS AMARELA E VERMELHA
                       <div className="space-y-8">
                          {RED_ROOM_CATEGORIES.map((catName) => {
                             const catItems = conduct.tratamento_medicamentoso?.filter(m => {
