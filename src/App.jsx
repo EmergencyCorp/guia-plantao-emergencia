@@ -5,8 +5,7 @@ import {
   CheckCircle2, Thermometer, Syringe, Siren, FlaskConical, Tag, Package,
   ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save, Cloud, CloudOff, Settings, Info,
   HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine, Wind, Droplet, Timer, Skull, Printer, FilePlus, Calculator,
-  Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2, SprayCan, CalendarDays, Utensils, Zap, Camera, Upload, Eye,
-  Moon, Sun
+  Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2, SprayCan, CalendarDays, Utensils, Zap, Camera, Upload, Eye
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -65,52 +64,7 @@ if (firebaseConfig && firebaseConfig.apiKey) {
 const appId = (typeof __app_id !== 'undefined') ? __app_id : 'emergency-guide-app';
 const initialToken = (typeof __initial_auth_token !== 'undefined') ? __initial_auth_token : null;
 
-// --- COMPONENTE DE SWITCH (SOL/LUA) ---
-const ThemeToggle = ({ darkMode, setDarkMode }) => (
-  <button
-    onClick={() => setDarkMode(!darkMode)}
-    className={`relative w-14 h-8 rounded-full p-1 transition-colors duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-      darkMode ? 'bg-slate-700 ring-1 ring-slate-600' : 'bg-blue-100 ring-1 ring-blue-200'
-    }`}
-    title={darkMode ? "Modo Claro" : "Modo Escuro"}
-  >
-    <div
-      className={`absolute top-1 left-1 w-6 h-6 rounded-full shadow-sm transform transition-transform duration-300 ease-in-out flex items-center justify-center ${
-        darkMode ? 'translate-x-6 bg-slate-800 text-blue-300' : 'translate-x-0 bg-white text-orange-500'
-      }`}
-    >
-      {darkMode ? <Moon size={14} /> : <Sun size={14} />}
-    </div>
-  </button>
-);
-
 export default function EmergencyGuideApp() {
-  // --- ESTADO DO MODO ESCURO ---
-  const [darkMode, setDarkMode] = useState(() => {
-    try {
-      if (typeof window !== 'undefined') {
-        return localStorage.getItem('theme') === 'dark';
-      }
-    } catch (e) {}
-    return false;
-  });
-
-  // Efeito para aplicar a classe dark e color-scheme
-  useEffect(() => {
-    try {
-      const root = window.document.documentElement;
-      if (darkMode) {
-        root.classList.add('dark');
-        root.style.colorScheme = 'dark'; 
-        localStorage.setItem('theme', 'dark');
-      } else {
-        root.classList.remove('dark');
-        root.style.colorScheme = 'light';
-        localStorage.setItem('theme', 'light');
-      }
-    } catch (e) {}
-  }, [darkMode]);
-
   const [currentUser, setCurrentUser] = useState(null);
   const [usernameInput, setUsernameInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
@@ -143,14 +97,14 @@ export default function EmergencyGuideApp() {
     dose: '',
     peso: '',
     conc: '',
-    tp_dose: 'mcgmin', 
-    tp_conc: 'mgml'
+    tp_dose: 'mcgmin', // Default: mcg/kg/min
+    tp_conc: 'mgml'    // Default: mg/ml
   });
   const [calcResult, setCalcResult] = useState('---');
 
   // --- ESTADOS DA ANÁLISE DE IMAGEM (IA VISION) ---
   const [showImageModal, setShowImageModal] = useState(false);
-  const [selectedImage, setSelectedImage] = useState(null);
+  const [selectedImage, setSelectedImage] = useState(null); // Base64 string
   const [imageQuery, setImageQuery] = useState('');
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
   const [imageAnalysisResult, setImageAnalysisResult] = useState(null);
@@ -231,13 +185,14 @@ export default function EmergencyGuideApp() {
     }
   }, [conduct, favorites]);
 
+  // --- LÓGICA DE UPLOAD E ANÁLISE DE IMAGEM ---
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
         setSelectedImage(reader.result);
-        setImageAnalysisResult(null); 
+        setImageAnalysisResult(null); // Limpa resultado anterior ao trocar imagem
       };
       reader.readAsDataURL(file);
     }
@@ -253,6 +208,7 @@ export default function EmergencyGuideApp() {
     setImageAnalysisResult(null);
 
     try {
+      // Envia base64 direto para API (sem salvar no banco)
       const response = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -264,11 +220,12 @@ export default function EmergencyGuideApp() {
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.details || errData.error || 'Erro ao analisar imagem.');
+        throw new Error(errData.details || 'Erro ao analisar imagem.');
       }
 
       const data = await response.json();
       
+      // CORREÇÃO: Tratamento para quando a IA retorna JSON ao invés de texto
       let finalResult = data.analysis;
       try {
         if (typeof finalResult === 'string' && finalResult.trim().startsWith('{')) {
@@ -286,7 +243,9 @@ export default function EmergencyGuideApp() {
               .join('\n\n');
           }
         }
-      } catch (e) {}
+      } catch (e) {
+        console.log("Resposta da IA já é texto ou formato desconhecido, mantendo original.");
+      }
 
       setImageAnalysisResult(finalResult);
 
@@ -300,6 +259,7 @@ export default function EmergencyGuideApp() {
 
   const closeImageModal = () => {
     setShowImageModal(false);
+    // Limpa tudo para garantir que nada fica salvo na memória/sessão (simulando deletar)
     setTimeout(() => {
       setSelectedImage(null);
       setImageQuery('');
@@ -307,6 +267,7 @@ export default function EmergencyGuideApp() {
     }, 300);
   };
 
+  // --- LÓGICA DA CALCULADORA ---
   const calcularMl = () => {
     const dose = parseFloat(calcInputs.dose);
     const peso = parseFloat(calcInputs.peso);
@@ -700,7 +661,7 @@ export default function EmergencyGuideApp() {
     if (t.includes('pa') || t.includes('mmhg') || t.includes('pam')) return <Activity size={16} className="text-blue-500" />;
     if (t.includes('sat') || t.includes('o2')) return <Droplet size={16} className="text-cyan-500" />;
     if (t.includes('fr') || t.includes('resp')) return <Wind size={16} className="text-teal-500" />;
-    return <Activity size={16} className="text-slate-400 dark:text-slate-500" />;
+    return <Activity size={16} className="text-slate-400" />;
   };
 
   const getMedTypeIcon = (type) => {
@@ -711,17 +672,17 @@ export default function EmergencyGuideApp() {
     if (t.includes('comp') || t.includes('cap')) return <Tablets size={14} className="text-emerald-500" />;
     if (t.includes('tópi') || t.includes('pomada') || t.includes('creme')) return <Pipette size={14} className="text-amber-500" />;
     if (t.includes('inal') || t.includes('spray')) return <SprayCan size={14} className="text-purple-500" />;
-    return <Pill size={14} className="text-slate-500 dark:text-slate-400" />;
+    return <Pill size={14} className="text-slate-500" />;
   };
 
   const getMedTypeColor = (type) => {
-    if (!type) return 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-gray-700 dark:text-slate-300 dark:border-gray-600';
+    if (!type) return 'bg-slate-100 text-slate-500 border-slate-200';
     const t = type.toLowerCase();
-    if (t.includes('injet')) return 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-800';
-    if (t.includes('gota') || t.includes('solu') || t.includes('xarope')) return 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800';
-    if (t.includes('comp') || t.includes('cap')) return 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800';
-    if (t.includes('tópi')) return 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800';
-    return 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-gray-700 dark:text-slate-300 dark:border-gray-600';
+    if (t.includes('injet')) return 'bg-rose-50 text-rose-700 border-rose-200';
+    if (t.includes('gota') || t.includes('solu') || t.includes('xarope')) return 'bg-blue-50 text-blue-700 border-blue-200';
+    if (t.includes('comp') || t.includes('cap')) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    if (t.includes('tópi')) return 'bg-amber-50 text-amber-700 border-amber-200';
+    return 'bg-slate-100 text-slate-500 border-slate-200';
   };
 
   const inferMedType = (med) => {
@@ -751,10 +712,10 @@ export default function EmergencyGuideApp() {
        <div 
          key={idx} 
          onClick={() => canSelect && togglePrescriptionItem(med)}
-         className={`bg-white dark:bg-gray-800 rounded-xl border p-5 shadow-sm transition-all relative overflow-hidden group mb-4 ${canSelect ? 'cursor-pointer hover:border-blue-300 dark:hover:border-blue-600 hover:shadow-md' : ''} ${isSelected ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50/30 dark:bg-blue-900/20' : 'border-gray-200 dark:border-gray-700'}`}
+         className={`bg-white rounded-xl border p-5 shadow-sm transition-all relative overflow-hidden group mb-4 ${canSelect ? 'cursor-pointer hover:border-blue-300 hover:shadow-md' : ''} ${isSelected ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50/30' : 'border-gray-200'}`}
        >
           <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${isSelected ? 'bg-blue-500' : 'bg-emerald-500'}`}></div>
-          {canSelect && (<div className={`absolute top-4 right-4 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-300 dark:border-gray-600 text-transparent'}`}><CheckCircle2 size={14} /></div>)}
+          {canSelect && (<div className={`absolute top-4 right-4 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-300 text-transparent'}`}><CheckCircle2 size={14} /></div>)}
           
           <div className="absolute top-4 right-12">
              <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${getMedTypeColor(medType)}`}>{getMedTypeIcon(medType)} {medType}</span>
@@ -762,54 +723,33 @@ export default function EmergencyGuideApp() {
 
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 mb-3 pl-3 pr-20">
              <div>
-                <div className="flex items-center gap-2"><h4 className="text-xl font-bold text-slate-800 dark:text-slate-100">{med.farmaco}</h4></div>
-                <span className="text-sm text-slate-500 dark:text-slate-400 italic">{med.indicacao}</span>
+                <div className="flex items-center gap-2"><h4 className="text-xl font-bold text-slate-800">{med.farmaco}</h4></div>
+                <span className="text-sm text-slate-500 italic">{med.indicacao}</span>
              </div>
-             {med.via && <span className="text-xs font-bold bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-3 py-1 rounded-full border border-emerald-100 dark:border-emerald-800">{med.via}</span>}
+             {med.via && <span className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-100">{med.via}</span>}
           </div>
           
-          <div className="bg-slate-50 dark:bg-gray-700 rounded-lg p-3 ml-3 mb-3 font-mono text-sm text-slate-700 dark:text-slate-200 border border-slate-100 dark:border-gray-600"><strong className="text-slate-500 dark:text-slate-400 block text-xs uppercase mb-1">Sugestão de Uso / Dose:</strong>{med.sugestao_uso || med.dose}</div>
+          <div className="bg-slate-50 rounded-lg p-3 ml-3 mb-3 font-mono text-sm text-slate-700 border border-slate-100"><strong className="text-slate-500 block text-xs uppercase mb-1">Sugestão de Uso / Dose:</strong>{med.sugestao_uso || med.dose}</div>
           
           {canSelect && isSelected && (
             <div className="ml-3 mb-3 animate-in slide-in-from-top-1" onClick={(e) => e.stopPropagation()}>
-               <label className="text-xs font-bold text-blue-700 dark:text-blue-300 flex items-center gap-1 mb-1"><CalendarDays size={12} /> Duração (Dias):</label>
-               <input type="number" min="1" className="w-20 px-2 py-1 text-sm border border-blue-300 dark:border-blue-600 rounded focus:ring-2 focus:ring-blue-500 outline-none text-blue-900 dark:text-blue-200 font-bold bg-white dark:bg-gray-800" value={currentDays} onChange={(e) => updateItemDays(itemId, parseInt(e.target.value))} />
+               <label className="text-xs font-bold text-blue-700 flex items-center gap-1 mb-1"><CalendarDays size={12} /> Duração (Dias):</label>
+               <input type="number" min="1" className="w-20 px-2 py-1 text-sm border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-blue-900 font-bold" value={currentDays} onChange={(e) => updateItemDays(itemId, parseInt(e.target.value))} />
             </div>
           )}
           
           <div className="grid sm:grid-cols-2 gap-4 ml-3 text-sm">
-             {isInjectable && med.diluicao && (<div className="flex gap-2 text-blue-700 dark:text-blue-300"><FlaskConical size={16} className="shrink-0 mt-0.5"/><span><strong>Diluição:</strong> {med.diluicao}</span></div>)}
-             {isInjectable && med.modo_admin && (<div className="flex gap-2 text-purple-700 dark:text-purple-300"><Timer size={16} className="shrink-0 mt-0.5"/><span><strong>Infusão:</strong> {med.modo_admin} {med.tempo_infusao ? `(${med.tempo_infusao})` : ''}</span></div>)}
-             {med.cuidados && <div className="flex gap-2 text-amber-700 dark:text-amber-400 col-span-2"><AlertTriangle size={16} className="shrink-0 mt-0.5"/><span><strong>Atenção:</strong> {med.cuidados}</span></div>}
+             {isInjectable && med.diluicao && (<div className="flex gap-2 text-blue-700"><FlaskConical size={16} className="shrink-0 mt-0.5"/><span><strong>Diluição:</strong> {med.diluicao}</span></div>)}
+             {isInjectable && med.modo_admin && (<div className="flex gap-2 text-purple-700"><Timer size={16} className="shrink-0 mt-0.5"/><span><strong>Infusão:</strong> {med.modo_admin} {med.tempo_infusao ? `(${med.tempo_infusao})` : ''}</span></div>)}
+             {med.cuidados && <div className="flex gap-2 text-amber-700 col-span-2"><AlertTriangle size={16} className="shrink-0 mt-0.5"/><span><strong>Atenção:</strong> {med.cuidados}</span></div>}
           </div>
        </div>
      );
   };
 
-  // CONFIGURAÇÃO DE SALAS COM CORES ADAPTATIVAS
   const roomConfig = {
-    verde: { 
-      name: 'Sala Verde', 
-      // Cores normais
-      color: 'emerald', 
-      accent: 'bg-emerald-500', 
-      // Classes responsivas ao tema
-      border: 'border-emerald-500 dark:border-emerald-400', 
-      text: 'text-emerald-800 dark:text-emerald-200', 
-      light: 'bg-emerald-50 dark:bg-emerald-900/30', 
-      icon: <Stethoscope className="w-5 h-5" />, 
-      description: 'Ambulatorial / Baixa Complexidade' 
-    },
-    vermelha: { 
-      name: 'Sala Vermelha', 
-      color: 'rose', 
-      accent: 'bg-rose-600', 
-      border: 'border-rose-600 dark:border-rose-500', 
-      text: 'text-rose-800 dark:text-rose-200', 
-      light: 'bg-rose-50 dark:bg-rose-900/30', 
-      icon: <Siren className="w-5 h-5" />, 
-      description: 'Emergência / Risco de Vida' 
-    }
+    verde: { name: 'Sala Verde', color: 'emerald', accent: 'bg-emerald-500', border: 'border-emerald-500', text: 'text-emerald-800', light: 'bg-emerald-50', icon: <Stethoscope className="w-5 h-5" />, description: 'Ambulatorial / Baixa Complexidade' },
+    vermelha: { name: 'Sala Vermelha', color: 'rose', accent: 'bg-rose-600', border: 'border-rose-600', text: 'text-rose-800', light: 'bg-rose-50', icon: <Siren className="w-5 h-5" />, description: 'Emergência / Risco de Vida' }
   };
   
   // Categorias para Sala Vermelha
@@ -825,29 +765,23 @@ export default function EmergencyGuideApp() {
 
   if (!currentUser) {
     return (
-      <div className={`min-h-screen flex items-center justify-center p-4 font-sans transition-colors duration-300 ease-in-out ${darkMode ? 'dark bg-gray-900 text-slate-200' : 'bg-gray-50 text-slate-800'}`}>
-        <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 max-w-md w-full overflow-hidden relative transition-colors">
-          
-          {/* BOTÃO DE MODO ESCURO NO LOGIN */}
-          <div className="absolute top-4 right-4 z-10">
-             <ThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
-          </div>
-
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans text-slate-800">
+        <div className="bg-white rounded-3xl shadow-xl border border-gray-100 max-w-md w-full overflow-hidden">
           <div className="bg-gradient-to-br from-blue-900 to-slate-800 p-8 text-center text-white relative">
             <Shield size={40} className="mx-auto mb-3 text-blue-300" />
             <h1 className="text-2xl font-bold mb-1">Guia de Plantão</h1>
             <p className="text-blue-200 text-sm font-medium">Acesso Exclusivo Médico</p>
           </div>
           <div className="p-8 space-y-6">
-            {loginError && <div className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-300 p-3 rounded-lg text-xs flex items-center gap-2 border border-red-100 dark:border-red-800 font-mono">{loginError}</div>}
+            {loginError && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-xs flex items-center gap-2 border border-red-100 font-mono">{loginError}</div>}
             <form onSubmit={handleLogin} className="space-y-4">
-              <div><label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase ml-1">Usuário</label><div className="relative"><User className="absolute left-3 top-3 text-gray-400 dark:text-gray-500 w-5 h-5" /><input type="text" value={usernameInput} onChange={(e)=>setUsernameInput(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-900 dark:text-white dark:placeholder-gray-400 transition-colors" placeholder="Ex: admin" /></div></div>
-              <div><label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase ml-1">Senha</label><div className="relative"><KeyRound className="absolute left-3 top-3 text-gray-400 dark:text-gray-500 w-5 h-5" /><input type="password" value={passwordInput} onChange={(e)=>setPasswordInput(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-900 dark:text-white dark:placeholder-gray-400 transition-colors" placeholder="••••••" /></div></div>
-              <button type="submit" className="w-full flex items-center justify-center gap-3 bg-blue-900 hover:bg-blue-800 text-white font-bold p-3.5 rounded-xl transition-all shadow-lg mt-2"><LogIn className="w-5 h-5" /> Acessar Sistema</button>
+              <div><label className="text-xs font-bold text-slate-500 uppercase ml-1">Usuário</label><div className="relative"><User className="absolute left-3 top-3 text-gray-400 w-5 h-5" /><input type="text" value={usernameInput} onChange={(e)=>setUsernameInput(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-900" placeholder="Ex: admin" /></div></div>
+              <div><label className="text-xs font-bold text-slate-500 uppercase ml-1">Senha</label><div className="relative"><KeyRound className="absolute left-3 top-3 text-gray-400 w-5 h-5" /><input type="password" value={passwordInput} onChange={(e)=>setPasswordInput(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-900" placeholder="••••••" /></div></div>
+              <button type="submit" className="w-full flex items-center justify-center gap-3 bg-blue-900 text-white font-bold p-3.5 rounded-xl hover:bg-blue-800 transition-all shadow-lg mt-2"><LogIn className="w-5 h-5" /> Acessar Sistema</button>
             </form>
-            <div className="text-center flex flex-col items-center gap-3 pt-2 border-t border-gray-100 dark:border-gray-700">
-              <div className={`flex items-center justify-center gap-2 text-[10px] px-3 py-1.5 rounded-full mx-auto w-fit ${configStatus === 'missing' ? 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300' : isCloudConnected ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300' : 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'}`}>{configStatus === 'missing' ? <Settings size={12}/> : isCloudConnected ? <Cloud size={12}/> : <CloudOff size={12}/>}<span>{configStatus === 'missing' ? 'Erro: Variáveis de Ambiente' : isCloudConnected ? 'Banco de Dados Conectado' : 'Modo Offline (Dados Locais)'}</span></div>
-              <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-tight max-w-xs">ATENÇÃO: Ferramenta auxiliar. Não substitui o julgamento clínico. O autor isenta-se de responsabilidade.</p>
+            <div className="text-center flex flex-col items-center gap-3 pt-2 border-t border-gray-100">
+              <div className={`flex items-center justify-center gap-2 text-[10px] px-3 py-1.5 rounded-full mx-auto w-fit ${configStatus === 'missing' ? 'bg-red-50 text-red-700' : isCloudConnected ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>{configStatus === 'missing' ? <Settings size={12}/> : isCloudConnected ? <Cloud size={12}/> : <CloudOff size={12}/>}<span>{configStatus === 'missing' ? 'Erro: Variáveis de Ambiente' : isCloudConnected ? 'Banco de Dados Conectado' : 'Modo Offline (Dados Locais)'}</span></div>
+              <p className="text-[10px] text-slate-400 leading-tight max-w-xs">ATENÇÃO: Ferramenta auxiliar. Não substitui o julgamento clínico. O autor isenta-se de responsabilidade.</p>
             </div>
           </div>
         </div>
@@ -856,24 +790,22 @@ export default function EmergencyGuideApp() {
   }
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans selection:bg-blue-100 dark:selection:bg-blue-900 transition-colors duration-300 ease-in-out ${darkMode ? 'dark bg-gray-900 text-slate-200' : 'bg-slate-50 text-slate-800'}`}>
-      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40 shadow-sm transition-colors duration-300">
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800 selection:bg-blue-100">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3"><div className="bg-blue-900 p-2 rounded-lg text-white"><ClipboardCheck size={20} /></div><div><h1 className="text-lg font-bold text-slate-800 dark:text-white leading-none">Guia de Plantão</h1><span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold">Suporte Médico</span></div></div>
+          <div className="flex items-center gap-3"><div className="bg-blue-900 p-2 rounded-lg text-white"><ClipboardCheck size={20} /></div><div><h1 className="text-lg font-bold text-slate-800 leading-none">Guia de Plantão</h1><span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Suporte Médico</span></div></div>
           <div className="flex items-center gap-3">
-             <div className="hidden sm:flex flex-col items-end mr-2"><span className="text-xs font-bold text-slate-700 dark:text-slate-200">{currentUser.name}</span><span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase">{currentUser.role}</span></div>
+             <div className="hidden sm:flex flex-col items-end mr-2"><span className="text-xs font-bold text-slate-700">{currentUser.name}</span><span className="text-[10px] text-slate-400 uppercase">{currentUser.role}</span></div>
              
-             <ThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
-
              {/* BOTÃO DE IA VISION (NOVO) */}
-             <button onClick={() => setShowImageModal(true)} className="p-2 text-blue-600 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-full transition-colors flex items-center gap-2" title="Análise de Imagem IA">
+             <button onClick={() => setShowImageModal(true)} className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-full transition-colors flex items-center gap-2" title="Análise de Imagem IA">
                 <Camera size={20} />
                 <span className="text-xs font-bold hidden sm:inline">IA Vision</span>
              </button>
 
-             <button onClick={() => setShowFavoritesModal(true)} className="p-2 text-yellow-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 rounded-full transition-colors" title="Meus Favoritos"><Star size={20} /></button>
-             <button onClick={() => setShowNotepad(true)} className="p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700 rounded-full"><Edit size={20} /></button>
-             <button onClick={handleLogout} className="p-2 text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full"><LogOut size={20} /></button>
+             <button onClick={() => setShowFavoritesModal(true)} className="p-2 text-yellow-500 hover:bg-yellow-50 rounded-full transition-colors" title="Meus Favoritos"><Star size={20} /></button>
+             <button onClick={() => setShowNotepad(true)} className="p-2 text-slate-600 hover:bg-slate-100 rounded-full"><Edit size={20} /></button>
+             <button onClick={handleLogout} className="p-2 text-red-400 hover:bg-red-50 rounded-full"><LogOut size={20} /></button>
           </div>
         </div>
       </header>
@@ -889,9 +821,9 @@ export default function EmergencyGuideApp() {
             {Object.entries(roomConfig).map(([key, config]) => {
               const isActive = activeRoom === key;
               return (
-                <button key={key} onClick={() => setActiveRoom(key)} className={`relative flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all ${isActive ? `bg-white dark:bg-gray-800 ${config.border} shadow-md ring-1 ring-offset-2 ${config.accent.replace('bg-', 'ring-')}` : 'bg-white dark:bg-gray-800 border-transparent hover:border-gray-200 dark:hover:border-gray-600 shadow-sm'}`}>
-                  <div className={`p-3 rounded-xl ${isActive ? `${config.light} ${config.text}` : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'}`}>{config.icon}</div>
-                  <div><h3 className={`font-bold ${isActive ? 'text-slate-800 dark:text-white' : 'text-slate-500 dark:text-gray-400'}`}>{config.name}</h3><p className="text-xs text-slate-400 dark:text-gray-500">{config.description}</p></div>
+                <button key={key} onClick={() => setActiveRoom(key)} className={`relative flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all ${isActive ? `bg-white ${config.border} shadow-md ring-1 ring-offset-2 ${config.accent.replace('bg-', 'ring-')}` : 'bg-white border-transparent hover:border-gray-200 shadow-sm'}`}>
+                  <div className={`p-3 rounded-xl ${isActive ? `${config.light} ${config.text}` : 'bg-gray-100 text-gray-400'}`}>{config.icon}</div>
+                  <div><h3 className={`font-bold ${isActive ? 'text-slate-800' : 'text-slate-500'}`}>{config.name}</h3><p className="text-xs text-slate-400">{config.description}</p></div>
                   {isActive && <CheckCircle2 className={`ml-auto ${config.text}`} size={20} />}
                 </button>
               );
@@ -901,20 +833,20 @@ export default function EmergencyGuideApp() {
           {/* BOTÃO PARA ABRIR CALCULADORA (APENAS SALA VERMELHA) */}
           {activeRoom === 'vermelha' && (
              <div className="flex justify-center">
-                <button onClick={() => setShowCalculatorModal(true)} className="bg-rose-100 dark:bg-rose-900/40 hover:bg-rose-200 dark:hover:bg-rose-900/60 text-rose-800 dark:text-rose-200 border border-rose-300 dark:border-rose-800 px-6 py-2 rounded-full font-bold text-sm flex items-center gap-2 transition-colors">
+                <button onClick={() => setShowCalculatorModal(true)} className="bg-rose-100 hover:bg-rose-200 text-rose-800 border border-rose-300 px-6 py-2 rounded-full font-bold text-sm flex items-center gap-2 transition-colors">
                    <Calculator size={16}/> Calculadora de Infusão
                 </button>
              </div>
           )}
 
-          <div className="bg-white dark:bg-gray-800 p-2 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700 flex items-center gap-2 transition-colors">
+          <div className="bg-white p-2 rounded-2xl shadow-lg border border-gray-100 flex items-center gap-2">
             <Search className="ml-3 text-gray-400" size={20} />
-            <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && generateConduct()} placeholder="Digite o quadro clínico (ex: Cetoacidose, IAM...)" className="flex-1 py-3 bg-transparent outline-none text-slate-800 dark:text-slate-100 font-medium placeholder-slate-400 dark:placeholder-slate-500" />
-            <button onClick={generateConduct} disabled={loading} className={`px-6 py-3 rounded-xl font-bold text-white flex items-center gap-2 transition-all ${loading ? 'bg-slate-300 dark:bg-slate-700' : 'bg-blue-900 hover:bg-blue-800'}`}>{loading ? <Loader2 className="animate-spin" /> : <>Gerar <ArrowRight size={18} /></>}</button>
+            <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && generateConduct()} placeholder="Digite o quadro clínico (ex: Cetoacidose, IAM...)" className="flex-1 py-3 bg-transparent outline-none text-slate-800 font-medium" />
+            <button onClick={generateConduct} disabled={loading} className={`px-6 py-3 rounded-xl font-bold text-white flex items-center gap-2 transition-all ${loading ? 'bg-slate-300' : 'bg-blue-900 hover:bg-blue-800'}`}>{loading ? <Loader2 className="animate-spin" /> : <>Gerar <ArrowRight size={18} /></>}</button>
           </div>
 
-          {recentSearches.length > 0 && (<div className="flex flex-wrap gap-2 px-1"><div className="flex items-center gap-2 text-xs font-bold text-gray-400 dark:text-gray-500 uppercase mr-2"><History size={14} /> Recentes</div>{recentSearches.map((search, idx) => (<button key={idx} onClick={() => {setActiveRoom(search.room); setSearchQuery(search.query);}} className="flex items-center gap-2 text-xs px-3 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full hover:border-blue-300 hover:text-blue-700 transition-colors text-slate-600 dark:text-slate-300"><div className={`w-2 h-2 rounded-full shrink-0 ${search.room === 'verde' ? 'bg-emerald-500' : 'bg-rose-500'}`} />{search.query}</button>))}</div>)}
-          {errorMsg && <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 px-4 py-3 rounded-xl border border-red-200 dark:border-red-800 flex items-center gap-3 text-sm font-medium"><AlertCircle size={18} /> {errorMsg}</div>}
+          {recentSearches.length > 0 && (<div className="flex flex-wrap gap-2 px-1"><div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase mr-2"><History size={14} /> Recentes</div>{recentSearches.map((search, idx) => (<button key={idx} onClick={() => {setActiveRoom(search.room); setSearchQuery(search.query);}} className="flex items-center gap-2 text-xs px-3 py-1 bg-white border border-gray-200 rounded-full hover:border-blue-300 hover:text-blue-700 transition-colors"><div className={`w-2 h-2 rounded-full shrink-0 ${search.room === 'verde' ? 'bg-emerald-500' : 'bg-rose-500'}`} />{search.query}</button>))}</div>)}
+          {errorMsg && <div className="bg-red-50 text-red-700 px-4 py-3 rounded-xl border border-red-200 flex items-center gap-3 text-sm font-medium"><AlertCircle size={18} /> {errorMsg}</div>}
         </div>
 
         {conduct && (
@@ -922,69 +854,69 @@ export default function EmergencyGuideApp() {
             <div className="flex justify-between items-start">
                <div>
                   <div className="flex flex-wrap gap-2 mb-2"><span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase text-white ${activeRoom === 'verde' ? 'bg-emerald-500' : 'bg-rose-600'}`}>{conduct.classificacao}</span>{conduct.estadiamento && <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-800 text-white">{conduct.estadiamento}</span>}</div>
-                  <h2 className="text-3xl font-bold text-slate-800 dark:text-white">{conduct.condicao}</h2>
-                  {conduct.guideline_referencia && (<p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1"><BookOpen size={12} /> Fonte: <span className="font-medium">{conduct.guideline_referencia}</span></p>)}
+                  <h2 className="text-3xl font-bold text-slate-800">{conduct.condicao}</h2>
+                  {conduct.guideline_referencia && (<p className="text-xs text-slate-500 mt-1 flex items-center gap-1"><BookOpen size={12} /> Fonte: <span className="font-medium">{conduct.guideline_referencia}</span></p>)}
                </div>
                <div className="flex gap-2">
-                 <button onClick={toggleFavorite} className={`p-2 rounded-full transition-colors ${isCurrentConductFavorite ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-500 hover:bg-yellow-200 dark:hover:bg-yellow-900/60' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-yellow-400'}`} title="Favoritar"><Star size={24} fill={isCurrentConductFavorite ? "currentColor" : "none"} /></button>
-                 <button onClick={() => setConduct(null)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-full text-gray-500 dark:text-gray-400"><X size={24}/></button>
+                 <button onClick={toggleFavorite} className={`p-2 rounded-full transition-colors ${isCurrentConductFavorite ? 'bg-yellow-100 text-yellow-500 hover:bg-yellow-200' : 'text-gray-400 hover:bg-gray-100 hover:text-yellow-400'}`} title="Favoritar"><Star size={24} fill={isCurrentConductFavorite ? "currentColor" : "none"} /></button>
+                 <button onClick={() => setConduct(null)} className="p-2 hover:bg-gray-200 rounded-full text-gray-500"><X size={24}/></button>
                </div>
             </div>
 
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 flex gap-4 transition-colors">
-               <div className="bg-blue-50 dark:bg-blue-900/20 p-2 rounded-full h-fit text-blue-600 dark:text-blue-400"><User size={24} /></div>
-               <div><h3 className="font-bold text-slate-900 dark:text-slate-100 mb-1">Resumo Clínico e Fisiopatologia</h3><p className="text-slate-700 dark:text-slate-300 leading-relaxed text-sm">{conduct.resumo_clinico}</p></div>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex gap-4">
+               <div className="bg-blue-50 p-2 rounded-full h-fit text-blue-600"><User size={24} /></div>
+               <div><h3 className="font-bold text-slate-900 mb-1">Resumo Clínico e Fisiopatologia</h3><p className="text-slate-700 leading-relaxed text-sm">{conduct.resumo_clinico}</p></div>
             </div>
 
             {conduct.xabcde_trauma && (
-              <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 p-5 rounded-2xl transition-colors">
-                <h3 className="text-orange-900 dark:text-orange-300 font-bold flex items-center gap-2 mb-3 uppercase tracking-wide"><Skull size={20}/> Protocolo de Trauma (ATLS - xABCDE)</h3>
-                <div className="space-y-3">{Object.entries(conduct.xabcde_trauma).map(([key, value]) => (<div key={key} className="flex gap-3 items-start bg-white/60 dark:bg-black/20 p-2 rounded border border-orange-100 dark:border-orange-800/50"><div className="bg-orange-600 text-white w-6 h-6 rounded flex items-center justify-center font-bold uppercase text-xs shrink-0">{key}</div><p className="text-sm text-orange-950 dark:text-orange-200">{value}</p></div>))}</div>
+              <div className="bg-orange-50 border border-orange-200 p-5 rounded-2xl">
+                <h3 className="text-orange-900 font-bold flex items-center gap-2 mb-3 uppercase tracking-wide"><Skull size={20}/> Protocolo de Trauma (ATLS - xABCDE)</h3>
+                <div className="space-y-3">{Object.entries(conduct.xabcde_trauma).map(([key, value]) => (<div key={key} className="flex gap-3 items-start bg-white/60 p-2 rounded border border-orange-100"><div className="bg-orange-600 text-white w-6 h-6 rounded flex items-center justify-center font-bold uppercase text-xs shrink-0">{key}</div><p className="text-sm text-orange-950">{value}</p></div>))}</div>
               </div>
             )}
 
             {conduct.criterios_gravidade?.length > 0 && (
-              <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-800 p-5 rounded-2xl transition-colors">
-                <h3 className="text-rose-800 dark:text-rose-300 font-bold flex items-center gap-2 mb-3 text-sm uppercase"><AlertTriangle size={18}/> Sinais de Alarme</h3>
-                <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-3">{conduct.criterios_gravidade.map((crit, i) => (<div key={i} className="bg-white/80 dark:bg-black/20 p-2.5 rounded-lg border border-rose-100/50 dark:border-rose-800/50 text-sm text-rose-900 dark:text-rose-200 font-medium flex gap-2"><div className="mt-1 w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"/>{crit}</div>))}</div>
+              <div className="bg-rose-50 border border-rose-100 p-5 rounded-2xl">
+                <h3 className="text-rose-800 font-bold flex items-center gap-2 mb-3 text-sm uppercase"><AlertTriangle size={18}/> Sinais de Alarme</h3>
+                <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-3">{conduct.criterios_gravidade.map((crit, i) => (<div key={i} className="bg-white/80 p-2.5 rounded-lg border border-rose-100/50 text-sm text-rose-900 font-medium flex gap-2"><div className="mt-1 w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"/>{crit}</div>))}</div>
               </div>
             )}
 
             <div className="grid lg:grid-cols-12 gap-6 items-start">
               <div className="lg:col-span-4 space-y-6">
                 {/* AVALIAÇÃO E ALVOS */}
-                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden transition-colors">
-                   <div className="bg-slate-50 dark:bg-gray-700 px-5 py-3 border-b border-slate-100 dark:border-gray-600 flex items-center gap-2"><Activity size={18} className="text-slate-500 dark:text-slate-400"/><h3 className="font-bold text-slate-700 dark:text-slate-200 text-sm uppercase">Avaliação Inicial</h3></div>
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                   <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex items-center gap-2"><Activity size={18} className="text-slate-500"/><h3 className="font-bold text-slate-700 text-sm uppercase">Avaliação Inicial</h3></div>
                    <div className="p-5 space-y-5 text-sm">
-                      {conduct.avaliacao_inicial?.sinais_vitais_alvos && (<div><span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase block mb-2">Alvos Terapêuticos</span><div className="grid grid-cols-1 gap-2">{conduct.avaliacao_inicial.sinais_vitais_alvos.map((s,i)=>(<div key={i} className="bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-lg border border-indigo-100 dark:border-indigo-800 flex items-center gap-3 text-indigo-900 dark:text-indigo-200">{getVitalIcon(s)} <span className="font-bold">{s}</span></div>))}</div></div>)}
+                      {conduct.avaliacao_inicial?.sinais_vitais_alvos && (<div><span className="text-xs font-bold text-slate-400 uppercase block mb-2">Alvos Terapêuticos</span><div className="grid grid-cols-1 gap-2">{conduct.avaliacao_inicial.sinais_vitais_alvos.map((s,i)=>(<div key={i} className="bg-indigo-50 p-3 rounded-lg border border-indigo-100 flex items-center gap-3 text-indigo-900">{getVitalIcon(s)} <span className="font-bold">{s}</span></div>))}</div></div>)}
                       <div className="space-y-3">
-                         <div><span className="text-xs font-bold text-rose-600 dark:text-rose-400 uppercase block mb-1">Prioridade 1 (Obrigatórios)</span><ul className="space-y-1">{conduct.avaliacao_inicial?.exames_prioridade1?.map((ex,i)=><li key={i} className="flex gap-2 items-start font-medium text-slate-700 dark:text-slate-300"><div className="mt-1.5 w-1.5 h-1.5 bg-rose-500 rounded-full shrink-0"/>{ex}</li>)}</ul></div>
-                         <div><span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase block mb-1">Complementares</span><ul className="space-y-1">{conduct.avaliacao_inicial?.exames_complementares?.map((ex,i)=><li key={i} className="flex gap-2 items-start text-slate-500 dark:text-slate-400"><div className="mt-1.5 w-1.5 h-1.5 bg-slate-300 dark:bg-slate-600 rounded-full shrink-0"/>{ex}</li>)}</ul></div>
+                         <div><span className="text-xs font-bold text-rose-600 uppercase block mb-1">Prioridade 1 (Obrigatórios)</span><ul className="space-y-1">{conduct.avaliacao_inicial?.exames_prioridade1?.map((ex,i)=><li key={i} className="flex gap-2 items-start font-medium text-slate-700"><div className="mt-1.5 w-1.5 h-1.5 bg-rose-500 rounded-full shrink-0"/>{ex}</li>)}</ul></div>
+                         <div><span className="text-xs font-bold text-slate-400 uppercase block mb-1">Complementares</span><ul className="space-y-1">{conduct.avaliacao_inicial?.exames_complementares?.map((ex,i)=><li key={i} className="flex gap-2 items-start text-slate-500"><div className="mt-1.5 w-1.5 h-1.5 bg-slate-300 rounded-full shrink-0"/>{ex}</li>)}</ul></div>
                       </div>
                    </div>
                 </div>
                 
-                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden transition-colors">
-                   <div className="bg-blue-50 dark:bg-blue-900/20 px-5 py-3 border-b border-blue-100 dark:border-blue-800 flex items-center gap-2"><Search size={18} className="text-blue-600 dark:text-blue-400"/><h3 className="font-bold text-blue-900 dark:text-blue-200 text-sm uppercase">Investigação Diagnóstica</h3></div>
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                   <div className="bg-blue-50 px-5 py-3 border-b border-blue-100 flex items-center gap-2"><Search size={18} className="text-blue-600"/><h3 className="font-bold text-blue-900 text-sm uppercase">Investigação Diagnóstica</h3></div>
                    <div className="p-5 space-y-4 text-sm">
-                      {conduct.achados_exames?.ecg && <div><div className="flex items-center gap-2 font-bold text-slate-700 dark:text-slate-200 mb-1"><HeartPulse size={14} className="text-rose-500"/> ECG</div><p className="bg-slate-50 dark:bg-gray-700 p-2 rounded border border-slate-100 dark:border-gray-600 text-slate-600 dark:text-slate-300">{conduct.achados_exames.ecg}</p></div>}
-                      {conduct.achados_exames?.laboratorio && <div><div className="flex items-center gap-2 font-bold text-slate-700 dark:text-slate-200 mb-1"><Microscope size={14} className="text-purple-500"/> Laboratório</div><p className="bg-slate-50 dark:bg-gray-700 p-2 rounded border border-slate-100 dark:border-gray-600 text-slate-600 dark:text-slate-300">{conduct.achados_exames.laboratorio}</p></div>}
-                      {conduct.achados_exames?.imagem && <div><div className="flex items-center gap-2 font-bold text-slate-700 dark:text-slate-200 mb-1"><ImageIcon size={14} className="text-slate-500"/> Imagem</div><p className="bg-slate-50 dark:bg-gray-700 p-2 rounded border border-slate-100 dark:border-gray-600 text-slate-600 dark:text-slate-300">{conduct.achados_exames.imagem}</p></div>}
+                      {conduct.achados_exames?.ecg && <div><div className="flex items-center gap-2 font-bold text-slate-700 mb-1"><HeartPulse size={14} className="text-rose-500"/> ECG</div><p className="bg-slate-50 p-2 rounded border border-slate-100 text-slate-600">{conduct.achados_exames.ecg}</p></div>}
+                      {conduct.achados_exames?.laboratorio && <div><div className="flex items-center gap-2 font-bold text-slate-700 mb-1"><Microscope size={14} className="text-purple-500"/> Laboratório</div><p className="bg-slate-50 p-2 rounded border border-slate-100 text-slate-600">{conduct.achados_exames.laboratorio}</p></div>}
+                      {conduct.achados_exames?.imagem && <div><div className="flex items-center gap-2 font-bold text-slate-700 mb-1"><ImageIcon size={14} className="text-slate-500"/> Imagem</div><p className="bg-slate-50 p-2 rounded border border-slate-100 text-slate-600">{conduct.achados_exames.imagem}</p></div>}
                    </div>
                 </div>
 
-                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden transition-colors">
-                   <div className="bg-indigo-50 dark:bg-indigo-900/20 px-5 py-3 border-b border-indigo-100 dark:border-indigo-800 flex items-center gap-2"><FileText size={18} className="text-indigo-600 dark:text-indigo-400"/><h3 className="font-bold text-indigo-900 dark:text-indigo-200 text-sm uppercase">Critérios de Desfecho</h3></div>
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                   <div className="bg-indigo-50 px-5 py-3 border-b border-indigo-100 flex items-center gap-2"><FileText size={18} className="text-indigo-600"/><h3 className="font-bold text-indigo-900 text-sm uppercase">Critérios de Desfecho</h3></div>
                    <div className="p-5 space-y-4 text-sm">
-                      <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg border border-amber-100 dark:border-amber-800"><span className="text-xs font-bold text-amber-800 dark:text-amber-300 uppercase block mb-1">Internação / UTI</span><ul className="space-y-1">{conduct.criterios_internacao?.map((c,i)=><li key={i} className="text-amber-900 dark:text-amber-200 flex gap-2"><div className="mt-1.5 w-1 h-1 bg-amber-500 rounded-full shrink-0"/>{c}</li>)}</ul></div>
-                      <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border border-green-100 dark:border-green-800"><span className="text-xs font-bold text-green-800 dark:text-green-300 uppercase block mb-1">Critérios de Alta</span><ul className="space-y-1">{conduct.criterios_alta?.map((c,i)=><li key={i} className="text-green-900 dark:text-green-200 flex gap-2"><div className="mt-1.5 w-1 h-1 bg-green-500 rounded-full shrink-0"/>{c}</li>)}</ul></div>
+                      <div className="bg-amber-50 p-3 rounded-lg border border-amber-100"><span className="text-xs font-bold text-amber-800 uppercase block mb-1">Internação / UTI</span><ul className="space-y-1">{conduct.criterios_internacao?.map((c,i)=><li key={i} className="text-amber-900 flex gap-2"><div className="mt-1.5 w-1 h-1 bg-amber-500 rounded-full shrink-0"/>{c}</li>)}</ul></div>
+                      <div className="bg-green-50 p-3 rounded-lg border border-green-100"><span className="text-xs font-bold text-green-800 uppercase block mb-1">Critérios de Alta</span><ul className="space-y-1">{conduct.criterios_alta?.map((c,i)=><li key={i} className="text-green-900 flex gap-2"><div className="mt-1.5 w-1 h-1 bg-green-500 rounded-full shrink-0"/>{c}</li>)}</ul></div>
                    </div>
                 </div>
               </div>
 
               <div className="lg:col-span-8 space-y-6">
                 <div className="space-y-4">
-                   <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 mb-2 px-2"><div className="bg-emerald-100 dark:bg-emerald-900/40 p-1.5 rounded"><Pill size={18}/></div><h3 className="font-bold text-lg">Prescrição e Conduta</h3></div>
+                   <div className="flex items-center gap-2 text-emerald-800 mb-2 px-2"><div className="bg-emerald-100 p-1.5 rounded"><Pill size={18}/></div><h3 className="font-bold text-lg">Prescrição e Conduta</h3></div>
                    
                    {/* RENDERIZAÇÃO CONDICIONAL POR CATEGORIA (SALA VERMELHA) OU LISTA SIMPLES (VERDE) */}
                    {activeRoom === 'verde' ? (
@@ -1002,7 +934,7 @@ export default function EmergencyGuideApp() {
 
                             return (
                                <div key={catName} className="relative">
-                                  <h4 className="flex items-center gap-2 font-bold text-rose-800 dark:text-rose-300 uppercase text-xs mb-3 pl-1 border-b border-rose-100 dark:border-rose-800 pb-1">
+                                  <h4 className="flex items-center gap-2 font-bold text-rose-800 uppercase text-xs mb-3 pl-1 border-b border-rose-100 pb-1">
                                     {catName === 'Dieta' && <Utensils size={14}/>}
                                     {catName === 'Hidratação' && <Droplets size={14}/>}
                                     {catName === 'Drogas Vasoativas' && <Zap size={14}/>}
@@ -1018,14 +950,14 @@ export default function EmergencyGuideApp() {
                    )}
                 </div>
 
-                <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 shadow-sm transition-colors">
-                   <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-5 flex items-center gap-2"><ArrowRight className="text-purple-600 dark:text-purple-400"/> Fluxo de Escalonamento</h3>
+                <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+                   <h3 className="font-bold text-slate-800 mb-5 flex items-center gap-2"><ArrowRight className="text-purple-600"/> Fluxo de Escalonamento</h3>
                    <div className="space-y-6 relative">
-                      <div className="absolute left-3.5 top-2 bottom-2 w-0.5 bg-slate-100 dark:bg-gray-700"></div>
+                      <div className="absolute left-3.5 top-2 bottom-2 w-0.5 bg-slate-100"></div>
                       {conduct.escalonamento_terapeutico?.map((step, i) => (
                         <div key={i} className="relative flex gap-4">
-                           <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 z-10 ring-4 ring-white dark:ring-gray-800 ${i===0 ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300' : i===1 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300'}`}>{i+1}</div>
-                           <div className="pt-1"><h4 className="text-xs font-bold uppercase text-slate-400 dark:text-slate-500 mb-1">{step.passo}</h4><p className="text-slate-700 dark:text-slate-300 leading-relaxed">{step.descricao}</p></div>
+                           <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 z-10 ring-4 ring-white ${i===0 ? 'bg-purple-100 text-purple-700' : i===1 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>{i+1}</div>
+                           <div className="pt-1"><h4 className="text-xs font-bold uppercase text-slate-400 mb-1">{step.passo}</h4><p className="text-slate-700 leading-relaxed">{step.descricao}</p></div>
                         </div>
                       ))}
                    </div>
@@ -1036,28 +968,27 @@ export default function EmergencyGuideApp() {
         )}
       </main>
 
-      <footer className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 mt-auto transition-colors">
+      <footer className="bg-white border-t border-gray-200 mt-auto">
         <div className="max-w-4xl mx-auto px-4 py-8 text-center">
-          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-xl p-4 mb-6 flex flex-col md:flex-row gap-4 items-center text-left">
-             <ShieldAlert className="text-amber-600 dark:text-amber-400 shrink-0 w-8 h-8" />
-             <div><h4 className="font-bold text-amber-900 dark:text-amber-300 uppercase text-sm mb-1">Aviso Legal Importante</h4><p className="text-xs text-amber-800/90 dark:text-amber-400 leading-relaxed text-justify">Esta é uma ferramenta de <strong>guia de plantão</strong> baseada em inteligência artificial. <strong>NÃO DEVE SER UTILIZADA POR LEIGOS</strong>. O conteúdo pode conter imprecisões. Médicos devem tomar condutas baseados <strong>exclusivamente em sua própria expertise</strong>. O autor isenta-se de responsabilidade.</p></div>
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 flex flex-col md:flex-row gap-4 items-center text-left">
+             <ShieldAlert className="text-amber-600 shrink-0 w-8 h-8" />
+             <div><h4 className="font-bold text-amber-900 uppercase text-sm mb-1">Aviso Legal Importante</h4><p className="text-xs text-amber-800/90 leading-relaxed text-justify">Esta é uma ferramenta de <strong>guia de plantão</strong> baseada em inteligência artificial. <strong>NÃO DEVE SER UTILIZADA POR LEIGOS</strong>. O conteúdo pode conter imprecisões. Médicos devem tomar condutas baseados <strong>exclusivamente em sua própria expertise</strong>. O autor isenta-se de responsabilidade.</p></div>
           </div>
-          <p className="text-xs text-slate-400 dark:text-slate-600">&copy; {new Date().getFullYear()} EmergencyCorp. Todos os direitos reservados.</p>
+          <p className="text-xs text-slate-400">&copy; {new Date().getFullYear()} EmergencyCorp. Todos os direitos reservados.</p>
         </div>
       </footer>
 
       {/* MODAL DE RECEITUÁRIO */}
       {showPrescriptionModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 print:p-0 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-gray-900 w-full max-w-3xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] print:max-h-none print:h-full print:rounded-none print:shadow-none print:bg-white">
-            <div className="bg-slate-100 dark:bg-gray-800 p-4 border-b border-slate-200 dark:border-gray-700 flex justify-between items-center print:hidden">
-              <h3 className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2"><FilePlus size={20} /> Gerador de Receituário</h3>
-              <div className="flex gap-2"><button onClick={() => window.print()} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors"><Printer size={16}/> Imprimir</button><button onClick={() => setShowPrescriptionModal(false)} className="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 p-2 rounded-lg transition-colors"><X size={20}/></button></div>
+          <div className="bg-white w-full max-w-3xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] print:max-h-none print:h-full print:rounded-none print:shadow-none">
+            <div className="bg-slate-100 p-4 border-b border-slate-200 flex justify-between items-center print:hidden">
+              <h3 className="font-bold text-slate-800 flex items-center gap-2"><FilePlus size={20} /> Gerador de Receituário</h3>
+              <div className="flex gap-2"><button onClick={() => window.print()} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors"><Printer size={16}/> Imprimir</button><button onClick={() => setShowPrescriptionModal(false)} className="bg-gray-200 hover:bg-gray-300 text-gray-600 p-2 rounded-lg transition-colors"><X size={20}/></button></div>
             </div>
-            {/* Área do papel - Em tela pode ser escura, na impressão força branco */}
-            <div className="p-12 overflow-y-auto print:overflow-visible font-serif text-slate-900 dark:text-slate-200 bg-white dark:bg-gray-900 print:bg-white print:text-black flex-1 flex flex-col h-full relative transition-colors">
+            <div className="p-12 overflow-y-auto print:overflow-visible font-serif text-slate-900 bg-white flex-1 flex flex-col h-full relative">
               <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none"><Activity size={400} /></div>
-              <header className="flex flex-col items-center border-b-4 border-double border-slate-800 dark:border-slate-200 print:border-black pb-6 mb-8"><h1 className="text-3xl font-bold tracking-widest uppercase text-slate-900 dark:text-slate-100 print:text-black">{currentUser?.name || "NOME DO MÉDICO"}</h1><div className="flex items-center gap-2 mt-2 text-sm font-bold text-slate-600 dark:text-slate-400 print:text-gray-600 uppercase tracking-wide"><span>CRM: {currentUser?.crm || "00000/UF"}</span><span>•</span><span>CLÍNICA MÉDICA</span></div></header>
+              <header className="flex flex-col items-center border-b-4 border-double border-slate-800 pb-6 mb-8"><h1 className="text-3xl font-bold tracking-widest uppercase text-slate-900">{currentUser?.name || "NOME DO MÉDICO"}</h1><div className="flex items-center gap-2 mt-2 text-sm font-bold text-slate-600 uppercase tracking-wide"><span>CRM: {currentUser?.crm || "00000/UF"}</span><span>•</span><span>CLÍNICA MÉDICA</span></div></header>
               <div className="flex-1 space-y-8">
                 {['USO ORAL', 'USO TÓPICO', 'USO RETAL', 'USO INALATÓRIO', 'USO OFTÁLMICO', 'USO OTOLÓGICO'].map((usoType) => {
                   const items = selectedPrescriptionItems.filter(item => item.receita?.uso?.toUpperCase().includes(usoType.replace('USO ', '')) || (usoType === 'USO ORAL' && !item.receita?.uso));
@@ -1065,12 +996,12 @@ export default function EmergencyGuideApp() {
                   return (
                     <div key={usoType}>
                       <div className="flex items-center gap-4 mb-4"><h3 className="font-bold text-lg underline decoration-2 underline-offset-4">{usoType}</h3></div>
-                      <ul className="space-y-6 list-none">{items.map((item, index) => (<li key={index} className="relative pl-6"><span className="absolute left-0 top-0 font-bold text-lg">{index + 1}.</span><div className="flex items-end mb-1 w-full"><span className="font-bold text-xl">{item.receita.nome_comercial || item.farmaco}</span><div className="flex-1 mx-2 border-b-2 border-dotted border-slate-400 dark:border-slate-600 print:border-gray-400 mb-1.5"></div><span className="font-bold text-lg whitespace-nowrap">{item.receita.quantidade}</span></div><p className="text-base leading-relaxed text-slate-800 dark:text-slate-300 print:text-black mt-1 pl-2 border-l-4 border-slate-200 dark:border-slate-700 print:border-gray-200">{item.receita.instrucoes} {item.dias_tratamento ? `(Uso por ${item.dias_tratamento} dias)` : ''}</p></li>))}</ul>
+                      <ul className="space-y-6 list-none">{items.map((item, index) => (<li key={index} className="relative pl-6"><span className="absolute left-0 top-0 font-bold text-lg">{index + 1}.</span><div className="flex items-end mb-1 w-full"><span className="font-bold text-xl">{item.receita.nome_comercial || item.farmaco}</span><div className="flex-1 mx-2 border-b-2 border-dotted border-slate-400 mb-1.5"></div><span className="font-bold text-lg whitespace-nowrap">{item.receita.quantidade}</span></div><p className="text-base leading-relaxed text-slate-800 mt-1 pl-2 border-l-4 border-slate-200">{item.receita.instrucoes} {item.dias_tratamento ? `(Uso por ${item.dias_tratamento} dias)` : ''}</p></li>))}</ul>
                     </div>
                   )
                 })}
               </div>
-              <footer className="mt-auto pt-12"><div className="flex justify-between items-end"><div className="text-sm"><p className="font-bold">Data:</p><div className="w-40 border-b border-slate-800 dark:border-slate-200 print:border-black mt-4 text-center relative top-1">{new Date().toLocaleDateString('pt-BR')}</div></div><div className="text-center"><div className="w-64 border-b border-slate-800 dark:border-slate-200 print:border-black mb-2"></div><p className="font-bold uppercase text-sm">{currentUser?.name}</p><p className="text-xs text-slate-500 dark:text-slate-400 print:text-gray-500">Assinatura e Carimbo</p></div></div><div className="text-center mt-8 pt-4 border-t border-slate-200 dark:border-slate-700 print:border-gray-200 text-[10px] text-slate-400 dark:text-slate-500 print:text-gray-400 uppercase">Rua da Medicina, 123 • Centro • Cidade/UF • Tel: (00) 1234-5678</div></footer>
+              <footer className="mt-auto pt-12"><div className="flex justify-between items-end"><div className="text-sm"><p className="font-bold">Data:</p><div className="w-40 border-b border-slate-800 mt-4 text-center relative top-1">{new Date().toLocaleDateString('pt-BR')}</div></div><div className="text-center"><div className="w-64 border-b border-slate-800 mb-2"></div><p className="font-bold uppercase text-sm">{currentUser?.name}</p><p className="text-xs text-slate-500">Assinatura e Carimbo</p></div></div><div className="text-center mt-8 pt-4 border-t border-slate-200 text-[10px] text-slate-400 uppercase">Rua da Medicina, 123 • Centro • Cidade/UF • Tel: (00) 1234-5678</div></footer>
             </div>
           </div>
         </div>
@@ -1079,27 +1010,27 @@ export default function EmergencyGuideApp() {
       {/* MODAL DE CALCULADORA DE INFUSÃO */}
       {showCalculatorModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden transition-colors">
-            <div className="bg-rose-50 dark:bg-rose-900/20 p-4 border-b border-rose-100 dark:border-rose-800 flex justify-between items-center">
-              <h3 className="font-bold text-rose-800 dark:text-rose-200 flex items-center gap-2"><Calculator size={20} /> Calculadora de Infusão</h3>
-              <button onClick={() => setShowCalculatorModal(false)} className="p-2 hover:bg-rose-100 dark:hover:bg-rose-900/40 rounded-full text-rose-700 dark:text-rose-300 transition-colors"><X size={20}/></button>
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
+            <div className="bg-rose-50 p-4 border-b border-rose-100 flex justify-between items-center">
+              <h3 className="font-bold text-rose-800 flex items-center gap-2"><Calculator size={20} /> Calculadora de Infusão</h3>
+              <button onClick={() => setShowCalculatorModal(false)} className="p-2 hover:bg-rose-100 rounded-full text-rose-700 transition-colors"><X size={20}/></button>
             </div>
             <div className="p-6 space-y-4">
               {/* Peso */}
               <div>
-                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase ml-1 mb-1 block">Peso do Paciente</label>
+                <label className="text-xs font-bold text-slate-500 uppercase ml-1 mb-1 block">Peso do Paciente</label>
                 <div className="relative">
-                   <input type="number" id="peso" value={calcInputs.peso} onChange={(e) => handleCalcChange('peso', e.target.value)} placeholder="0.0" className="w-full pl-4 pr-12 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-rose-500 font-bold text-slate-800 dark:text-white transition-colors" />
+                   <input type="number" id="peso" value={calcInputs.peso} onChange={(e) => handleCalcChange('peso', e.target.value)} placeholder="0.0" className="w-full pl-4 pr-12 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-rose-500 font-bold text-slate-800" />
                    <span className="absolute right-4 top-3.5 text-xs font-bold text-gray-400">kg</span>
                 </div>
               </div>
 
               {/* Dose */}
               <div>
-                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase ml-1 mb-1 block">Dose Desejada</label>
+                <label className="text-xs font-bold text-slate-500 uppercase ml-1 mb-1 block">Dose Desejada</label>
                 <div className="flex gap-2">
-                   <input type="number" id="dose" value={calcInputs.dose} onChange={(e) => handleCalcChange('dose', e.target.value)} placeholder="0.0" className="w-1/2 pl-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-rose-500 font-bold text-slate-800 dark:text-white transition-colors" />
-                   <select id="tp_dose" value={calcInputs.tp_dose} onChange={(e) => handleCalcChange('tp_dose', e.target.value)} className="w-1/2 px-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-rose-500 outline-none transition-colors">
+                   <input type="number" id="dose" value={calcInputs.dose} onChange={(e) => handleCalcChange('dose', e.target.value)} placeholder="0.0" className="w-1/2 pl-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-rose-500 font-bold text-slate-800" />
+                   <select id="tp_dose" value={calcInputs.tp_dose} onChange={(e) => handleCalcChange('tp_dose', e.target.value)} className="w-1/2 px-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-slate-600 focus:ring-2 focus:ring-rose-500 outline-none">
                       <option value="mcgmin">mcg/kg/min</option>
                       <option value="mgmin">mg/kg/min</option>
                       <option value="mcgh">mcg/kg/h</option>
@@ -1110,10 +1041,10 @@ export default function EmergencyGuideApp() {
 
               {/* Concentração */}
               <div>
-                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase ml-1 mb-1 block">Concentração da Solução</label>
+                <label className="text-xs font-bold text-slate-500 uppercase ml-1 mb-1 block">Concentração da Solução</label>
                 <div className="flex gap-2">
-                   <input type="number" id="conc" value={calcInputs.conc} onChange={(e) => handleCalcChange('conc', e.target.value)} placeholder="0.0" className="w-1/2 pl-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-rose-500 font-bold text-slate-800 dark:text-white transition-colors" />
-                   <select id="tp_conc" value={calcInputs.tp_conc} onChange={(e) => handleCalcChange('tp_conc', e.target.value)} className="w-1/2 px-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-rose-500 outline-none transition-colors">
+                   <input type="number" id="conc" value={calcInputs.conc} onChange={(e) => handleCalcChange('conc', e.target.value)} placeholder="0.0" className="w-1/2 pl-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-rose-500 font-bold text-slate-800" />
+                   <select id="tp_conc" value={calcInputs.tp_conc} onChange={(e) => handleCalcChange('tp_conc', e.target.value)} className="w-1/2 px-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-slate-600 focus:ring-2 focus:ring-rose-500 outline-none">
                       <option value="mgml">mg/ml</option>
                       <option value="mcgml">mcg/ml</option>
                    </select>
@@ -1121,9 +1052,9 @@ export default function EmergencyGuideApp() {
               </div>
 
               {/* Resultado */}
-              <div className="bg-rose-100 dark:bg-rose-900/40 rounded-xl p-6 text-center mt-6 transition-colors">
-                <span className="text-xs font-bold text-rose-600 dark:text-rose-300 uppercase mb-1 block">Velocidade de Infusão</span>
-                <div id="resultado" className="text-3xl font-extrabold text-rose-900 dark:text-rose-100">{calcResult}</div>
+              <div className="bg-rose-100 rounded-xl p-6 text-center mt-6">
+                <span className="text-xs font-bold text-rose-600 uppercase mb-1 block">Velocidade de Infusão</span>
+                <div id="resultado" className="text-3xl font-extrabold text-rose-900">{calcResult}</div>
               </div>
             </div>
           </div>
@@ -1133,7 +1064,7 @@ export default function EmergencyGuideApp() {
       {/* MODAL DE IA VISION (ANÁLISE DE IMAGEM) */}
       {showImageModal && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-gray-800 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] transition-colors">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
             <div className="bg-blue-600 p-4 border-b border-blue-700 flex justify-between items-center">
               <h3 className="font-bold text-white flex items-center gap-2"><Camera size={24} /> IA Vision - Análise de Exames</h3>
               <button onClick={closeImageModal} className="p-2 hover:bg-blue-700 rounded-full text-white transition-colors"><X size={20}/></button>
@@ -1143,7 +1074,7 @@ export default function EmergencyGuideApp() {
               {!imageAnalysisResult ? (
                 <div className="space-y-6">
                   {/* Área de Upload */}
-                  <div className="relative border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-8 text-center hover:border-blue-500 dark:hover:border-blue-400 transition-colors bg-gray-50 dark:bg-gray-900/50 group">
+                  <div className="relative border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-blue-500 transition-colors bg-gray-50 group">
                     <input 
                       type="file" 
                       accept="image/*" 
@@ -1157,25 +1088,25 @@ export default function EmergencyGuideApp() {
                       </div>
                     ) : (
                       <div className="space-y-2 pointer-events-none">
-                        <div className="bg-blue-100 dark:bg-blue-900/30 w-16 h-16 rounded-full flex items-center justify-center mx-auto text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform">
+                        <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto text-blue-600 group-hover:scale-110 transition-transform">
                           <Upload size={32} />
                         </div>
-                        <h4 className="font-bold text-slate-700 dark:text-slate-300">Arraste ou clique para enviar</h4>
-                        <p className="text-sm text-slate-500 dark:text-slate-400">Suporta: ECG, Raio-X, Tomografia, Fotos de Lesões...</p>
+                        <h4 className="font-bold text-slate-700">Arraste ou clique para enviar</h4>
+                        <p className="text-sm text-slate-500">Suporta: ECG, Raio-X, Tomografia, Fotos de Lesões...</p>
                       </div>
                     )}
                   </div>
 
                   {/* Input de Pergunta */}
                   <div>
-                    <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase ml-1 mb-1 block">O que você deseja saber?</label>
+                    <label className="text-xs font-bold text-slate-500 uppercase ml-1 mb-1 block">O que você deseja saber?</label>
                     <div className="relative">
                       <input 
                         type="text" 
                         value={imageQuery} 
                         onChange={(e) => setImageQuery(e.target.value)} 
                         placeholder="Ex: Onde está a fratura? / Qual o ritmo deste ECG?" 
-                        className="w-full pl-4 pr-12 py-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 font-medium text-slate-800 dark:text-white transition-colors" 
+                        className="w-full pl-4 pr-12 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 font-medium text-slate-800" 
                       />
                       <Eye className="absolute right-4 top-3 text-gray-400" size={20} />
                     </div>
@@ -1184,42 +1115,42 @@ export default function EmergencyGuideApp() {
                   <button 
                     onClick={handleAnalyzeImage} 
                     disabled={isAnalyzingImage || !selectedImage}
-                    className={`w-full py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition-all shadow-lg ${isAnalyzingImage || !selectedImage ? 'bg-slate-300 dark:bg-gray-600 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+                    className={`w-full py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition-all shadow-lg ${isAnalyzingImage || !selectedImage ? 'bg-slate-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
                   >
                     {isAnalyzingImage ? <Loader2 className="animate-spin" /> : <><Camera size={20}/> Analisar Imagem</>}
                   </button>
                   
-                  <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-100 dark:border-yellow-800/50 p-3 rounded-lg flex gap-3 items-start transition-colors">
-                    <AlertTriangle className="text-yellow-600 dark:text-yellow-400 shrink-0 w-5 h-5 mt-0.5" />
-                    <p className="text-xs text-yellow-800 dark:text-yellow-300 text-justify">
+                  <div className="bg-yellow-50 border border-yellow-100 p-3 rounded-lg flex gap-3 items-start">
+                    <AlertTriangle className="text-yellow-600 shrink-0 w-5 h-5 mt-0.5" />
+                    <p className="text-xs text-yellow-800 text-justify">
                       <strong>Atenção:</strong> As imagens são processadas em tempo real e <strong>deletadas imediatamente</strong> após fechar esta janela. Não substitui a avaliação do radiologista ou especialista.
                     </p>
                   </div>
                 </div>
               ) : (
                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-                  <div className="flex gap-4 items-start bg-slate-50 dark:bg-gray-900/50 p-4 rounded-xl border border-slate-200 dark:border-gray-700 transition-colors">
-                    <div className="w-24 h-24 shrink-0 rounded-lg overflow-hidden bg-black border border-slate-300 dark:border-gray-600">
+                  <div className="flex gap-4 items-start bg-slate-50 p-4 rounded-xl border border-slate-200">
+                    <div className="w-24 h-24 shrink-0 rounded-lg overflow-hidden bg-black border border-slate-300">
                       <img src={selectedImage} alt="Miniatura" className="w-full h-full object-cover" />
                     </div>
                     <div>
-                      <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase">Sua Pergunta:</span>
-                      <p className="font-medium text-slate-800 dark:text-slate-200">"{imageQuery}"</p>
+                      <span className="text-xs font-bold text-slate-400 uppercase">Sua Pergunta:</span>
+                      <p className="font-medium text-slate-800">"{imageQuery}"</p>
                     </div>
                   </div>
 
-                  <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-blue-100 dark:border-gray-700 shadow-sm transition-colors">
-                    <h4 className="font-bold text-blue-900 dark:text-blue-300 flex items-center gap-2 mb-4 border-b border-blue-50 dark:border-gray-700 pb-2">
+                  <div className="bg-white p-6 rounded-xl border border-blue-100 shadow-sm">
+                    <h4 className="font-bold text-blue-900 flex items-center gap-2 mb-4 border-b border-blue-50 pb-2">
                       <Microscope size={20}/> Laudo Preliminar IA
                     </h4>
-                    <div className="prose prose-sm max-w-none text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
+                    <div className="prose prose-sm max-w-none text-slate-700 leading-relaxed whitespace-pre-wrap">
                       {imageAnalysisResult}
                     </div>
                   </div>
 
                   <button 
                     onClick={() => setImageAnalysisResult(null)} 
-                    className="w-full py-3 border-2 border-gray-200 dark:border-gray-600 rounded-xl font-bold text-slate-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                    className="w-full py-3 border-2 border-gray-200 rounded-xl font-bold text-slate-600 hover:bg-gray-50 transition-colors"
                   >
                     Nova Análise
                   </button>
@@ -1233,13 +1164,13 @@ export default function EmergencyGuideApp() {
       {/* MODAL DE FAVORITOS */}
       {showFavoritesModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-gray-800 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden transition-colors">
-            <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 border-b border-yellow-100 dark:border-yellow-800 flex justify-between items-center">
-              <div className="flex items-center gap-2 text-yellow-800 dark:text-yellow-400 font-bold"><Star size={20} fill="currentColor" /> Meus Favoritos</div>
-              <button onClick={() => setShowFavoritesModal(false)} className="p-2 hover:bg-yellow-100 dark:hover:bg-yellow-900/40 rounded-full text-yellow-700 dark:text-yellow-400 transition-colors"><X size={20} /></button>
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
+            <div className="bg-yellow-50 p-4 border-b border-yellow-100 flex justify-between items-center">
+              <div className="flex items-center gap-2 text-yellow-800 font-bold"><Star size={20} fill="currentColor" /> Meus Favoritos</div>
+              <button onClick={() => setShowFavoritesModal(false)} className="p-2 hover:bg-yellow-100 rounded-full text-yellow-700 transition-colors"><X size={20} /></button>
             </div>
-            <div className="p-2 max-h-[60vh] overflow-y-auto bg-slate-50 dark:bg-gray-900 transition-colors">
-              {favorites.length === 0 ? (<div className="text-center p-8 text-slate-400 text-sm">Você ainda não tem favoritos.</div>) : (<div className="space-y-2">{favorites.map((fav) => (<div key={fav.id} className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm flex items-center justify-between group hover:border-blue-300 dark:hover:border-blue-600 transition-colors"><button onClick={() => loadFavoriteConduct(fav)} className="flex-1 text-left"><div className="flex items-center gap-2"><div className={`w-2 h-2 rounded-full shrink-0 ${fav.room === 'verde' ? 'bg-emerald-500' : 'bg-rose-500'}`} /><span className="font-bold text-slate-700 dark:text-slate-200 text-sm">{fav.query}</span></div><span className="text-[10px] text-slate-400 dark:text-slate-500 ml-4">{new Date(fav.lastAccessed).toLocaleDateString()}</span></button><button onClick={(e) => { e.stopPropagation(); removeFavoriteFromList(fav.id); }} className="p-2 text-slate-300 dark:text-slate-600 hover:text-red-500 dark:hover:text-red-400 transition-colors" title="Remover"><Trash2 size={16} /></button></div>))}</div>)}
+            <div className="p-2 max-h-[60vh] overflow-y-auto bg-slate-50">
+              {favorites.length === 0 ? (<div className="text-center p-8 text-slate-400 text-sm">Você ainda não tem favoritos.</div>) : (<div className="space-y-2">{favorites.map((fav) => (<div key={fav.id} className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm flex items-center justify-between group hover:border-blue-300 transition-colors"><button onClick={() => loadFavoriteConduct(fav)} className="flex-1 text-left"><div className="flex items-center gap-2"><div className={`w-2 h-2 rounded-full shrink-0 ${fav.room === 'verde' ? 'bg-emerald-500' : 'bg-rose-500'}`} /><span className="font-bold text-slate-700 text-sm">{fav.query}</span></div><span className="text-[10px] text-slate-400 ml-4">{new Date(fav.lastAccessed).toLocaleDateString()}</span></button><button onClick={(e) => { e.stopPropagation(); removeFavoriteFromList(fav.id); }} className="p-2 text-slate-300 hover:text-red-500 transition-colors" title="Remover"><Trash2 size={16} /></button></div>))}</div>)}
             </div>
           </div>
         </div>
@@ -1248,25 +1179,13 @@ export default function EmergencyGuideApp() {
       {/* MODAL DE BLOCO DE NOTAS */}
       {showNotepad && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200 print:hidden">
-          <div className="bg-white dark:bg-gray-800 w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col h-[80vh] overflow-hidden transition-colors">
-            <div className="bg-gray-50 dark:bg-gray-700 p-4 border-b border-gray-200 dark:border-gray-600 flex justify-between items-center">
-              <div className="flex items-center gap-3"><div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-lg text-blue-600 dark:text-blue-300"><Edit size={20} /></div><div><h3 className="font-bold text-slate-800 dark:text-white leading-none">Meu Caderno</h3><div className="flex items-center gap-2 mt-1"><span className="text-xs text-slate-500 dark:text-slate-400">Anotações de {currentUser?.name}</span><span className="text-gray-300 dark:text-gray-600">•</span>{isCloudConnected ? (<span className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400 font-medium"><Cloud size={10} /> Nuvem Ativa</span>) : (<span className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 font-medium"><CloudOff size={10} /> Offline</span>)}</div></div></div>
-              <button onClick={() => setShowNotepad(false)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full text-gray-500 dark:text-gray-400 transition-colors"><X size={20} /></button>
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col h-[80vh] overflow-hidden">
+            <div className="bg-gray-50 p-4 border-b border-gray-200 flex justify-between items-center">
+              <div className="flex items-center gap-3"><div className="bg-blue-100 p-2 rounded-lg text-blue-600"><Edit size={20} /></div><div><h3 className="font-bold text-slate-800 leading-none">Meu Caderno</h3><div className="flex items-center gap-2 mt-1"><span className="text-xs text-slate-500">Anotações de {currentUser?.name}</span><span className="text-gray-300">•</span>{isCloudConnected ? (<span className="flex items-center gap-1 text-[10px] text-green-600 font-medium"><Cloud size={10} /> Nuvem Ativa</span>) : (<span className="flex items-center gap-1 text-[10px] text-amber-600 font-medium"><CloudOff size={10} /> Offline</span>)}</div></div></div>
+              <button onClick={() => setShowNotepad(false)} className="p-2 hover:bg-gray-200 rounded-full text-gray-500 transition-colors"><X size={20} /></button>
             </div>
-            <div className="flex-1 bg-yellow-50 dark:bg-gray-900 relative transition-colors">
-              <textarea 
-                className="w-full h-full p-6 resize-none focus:outline-none text-slate-700 dark:text-slate-200 leading-relaxed bg-transparent text-lg font-medium font-serif transition-colors" 
-                placeholder="Escreva suas anotações..." 
-                value={userNotes} 
-                onChange={handleNoteChange} 
-                style={{ 
-                  backgroundImage: `linear-gradient(transparent, transparent 31px, ${darkMode ? '#374151' : '#e5e7eb'} 31px)`, 
-                  backgroundSize: '100% 32px', 
-                  lineHeight: '32px' 
-                }} 
-              />
-            </div>
-            <div className="p-3 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center text-xs text-gray-500 dark:text-gray-400 transition-colors"><div className="flex items-center gap-1.5">{isSaving ? (<><Loader2 size={14} className="text-blue-600 animate-spin" /><span className="text-blue-600">Salvando...</span></>) : (<><Save size={14} className="text-green-600" /><span>{isCloudConnected ? "Salvo na nuvem" : "Salvo localmente"}</span></>)}</div><span>{userNotes.length} caracteres</span></div>
+            <div className="flex-1 bg-yellow-50 relative"><textarea className="w-full h-full p-6 resize-none focus:outline-none text-slate-700 leading-relaxed bg-transparent text-lg font-medium font-serif" placeholder="Escreva suas anotações..." value={userNotes} onChange={handleNoteChange} style={{ backgroundImage: 'linear-gradient(transparent, transparent 31px, #e5e7eb 31px)', backgroundSize: '100% 32px', lineHeight: '32px' }} /></div>
+            <div className="p-3 bg-white border-t border-gray-200 flex justify-between items-center text-xs text-gray-500"><div className="flex items-center gap-1.5">{isSaving ? (<><Loader2 size={14} className="text-blue-600 animate-spin" /><span className="text-blue-600">Salvando...</span></>) : (<><Save size={14} className="text-green-600" /><span>{isCloudConnected ? "Salvo na nuvem" : "Salvo localmente"}</span></>)}</div><span>{userNotes.length} caracteres</span></div>
           </div>
         </div>
       )}
