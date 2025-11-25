@@ -223,7 +223,34 @@ export default function EmergencyGuideApp() {
       }
 
       const data = await response.json();
-      setImageAnalysisResult(data.analysis);
+      
+      // CORREÇÃO: Tratamento para quando a IA retorna JSON ao invés de texto
+      let finalResult = data.analysis;
+      try {
+        if (typeof finalResult === 'string' && finalResult.trim().startsWith('{')) {
+          const parsed = JSON.parse(finalResult);
+          // Procura pelo objeto de análise dentro do JSON (ex: analise_ecg, analysis, ou o próprio objeto)
+          const content = parsed.analise_ecg || parsed.analysis || parsed;
+          
+          if (typeof content === 'object' && content !== null) {
+            // Converte o objeto JSON em uma lista de texto legível
+            finalResult = Object.entries(content)
+              .filter(([_, v]) => v !== null && v !== undefined)
+              .map(([k, v]) => {
+                // Formata a chave: complexo_qrs -> COMPLEXO QRS
+                const label = k.replace(/_/g, ' ').toUpperCase();
+                // Formata o valor: array vira string separada por vírgula
+                const value = Array.isArray(v) ? v.join(', ') : String(v);
+                return `• ${label}: ${value}`;
+              })
+              .join('\n\n');
+          }
+        }
+      } catch (e) {
+        console.log("Resposta da IA já é texto ou formato desconhecido, mantendo original.");
+      }
+
+      setImageAnalysisResult(finalResult);
 
     } catch (error) {
       console.error("Erro na análise:", error);
