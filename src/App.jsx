@@ -76,13 +76,13 @@ export default function EmergencyGuideApp() {
     return false;
   });
 
-  // Efeito para aplicar a classe dark e color-scheme no root
+  // Efeito para aplicar a classe dark e color-scheme
   useEffect(() => {
     try {
       const root = window.document.documentElement;
       if (darkMode) {
         root.classList.add('dark');
-        root.style.colorScheme = 'dark'; // Força scrollbars e inputs nativos escuros
+        root.style.colorScheme = 'dark'; 
         localStorage.setItem('theme', 'dark');
       } else {
         root.classList.remove('dark');
@@ -692,7 +692,7 @@ export default function EmergencyGuideApp() {
     if (t.includes('comp') || t.includes('cap')) return <Tablets size={14} className="text-emerald-500" />;
     if (t.includes('tópi') || t.includes('pomada') || t.includes('creme')) return <Pipette size={14} className="text-amber-500" />;
     if (t.includes('inal') || t.includes('spray')) return <SprayCan size={14} className="text-purple-500" />;
-    return <Pill size={14} className="text-slate-500" />;
+    return <Pill size={14} className="text-slate-500 dark:text-slate-400" />;
   };
 
   const getMedTypeColor = (type) => {
@@ -786,7 +786,23 @@ export default function EmergencyGuideApp() {
   if (!currentUser) {
     return (
       <div className={`min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4 font-sans text-slate-800 dark:text-slate-200 ${darkMode ? 'dark' : ''}`}>
-        <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 max-w-md w-full overflow-hidden">
+        <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 max-w-md w-full overflow-hidden relative">
+          
+          {/* BOTÃO DE MODO ESCURO NO LOGIN */}
+          <div className="absolute top-4 right-4 z-10">
+             <div 
+               onClick={() => setDarkMode(!darkMode)}
+               className={`w-14 h-8 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300 ${darkMode ? 'bg-slate-700' : 'bg-gray-300/50'}`}
+               title={darkMode ? "Modo Claro" : "Modo Escuro"}
+             >
+               <div 
+                 className={`bg-white w-6 h-6 rounded-full shadow-md transform transition-transform duration-300 flex items-center justify-center ${darkMode ? 'translate-x-6' : 'translate-x-0'}`}
+               >
+                 {darkMode ? <Moon size={14} className="text-slate-800"/> : <Sun size={14} className="text-orange-500"/>}
+               </div>
+             </div>
+          </div>
+
           <div className="bg-gradient-to-br from-blue-900 to-slate-800 p-8 text-center text-white relative">
             <Shield size={40} className="mx-auto mb-3 text-blue-300" />
             <h1 className="text-2xl font-bold mb-1">Guia de Plantão</h1>
@@ -976,7 +992,7 @@ export default function EmergencyGuideApp() {
                                   <div className="grid gap-4">
                                     {catItems.map((med, idx) => renderMedicationCard(med, idx))}
                                   </div>
-                                </div>
+                               </div>
                             );
                          })}
                       </div>
