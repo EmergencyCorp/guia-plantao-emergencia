@@ -66,31 +66,28 @@ const appId = (typeof __app_id !== 'undefined') ? __app_id : 'emergency-guide-ap
 const initialToken = (typeof __initial_auth_token !== 'undefined') ? __initial_auth_token : null;
 
 export default function EmergencyGuideApp() {
-  // --- ESTADO DO MODO ESCURO (COM PROTEÇÃO CONTRA ERROS) ---
+  // --- ESTADO DO MODO ESCURO ---
   const [darkMode, setDarkMode] = useState(() => {
     try {
       if (typeof window !== 'undefined') {
         return localStorage.getItem('theme') === 'dark';
       }
-    } catch (e) {
-      console.warn("Acesso ao localStorage bloqueado:", e);
-    }
+    } catch (e) {}
     return false;
   });
 
-  // Efeito para aplicar a classe 'dark' no elemento raiz HTML
+  // Efeito para aplicar a classe dark
   useEffect(() => {
     try {
+      const root = window.document.documentElement;
       if (darkMode) {
-        document.documentElement.classList.add('dark');
+        root.classList.add('dark');
         localStorage.setItem('theme', 'dark');
       } else {
-        document.documentElement.classList.remove('dark');
+        root.classList.remove('dark');
         localStorage.setItem('theme', 'light');
       }
-    } catch (e) {
-      // Falha silenciosa se localStorage estiver indisponível
-    }
+    } catch (e) {}
   }, [darkMode]);
 
   const [currentUser, setCurrentUser] = useState(null);
@@ -125,14 +122,14 @@ export default function EmergencyGuideApp() {
     dose: '',
     peso: '',
     conc: '',
-    tp_dose: 'mcgmin', // Default: mcg/kg/min
-    tp_conc: 'mgml'    // Default: mg/ml
+    tp_dose: 'mcgmin', 
+    tp_conc: 'mgml'
   });
   const [calcResult, setCalcResult] = useState('---');
 
   // --- ESTADOS DA ANÁLISE DE IMAGEM (IA VISION) ---
   const [showImageModal, setShowImageModal] = useState(false);
-  const [selectedImage, setSelectedImage] = useState(null); // Base64 string
+  const [selectedImage, setSelectedImage] = useState(null);
   const [imageQuery, setImageQuery] = useState('');
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
   const [imageAnalysisResult, setImageAnalysisResult] = useState(null);
@@ -213,14 +210,13 @@ export default function EmergencyGuideApp() {
     }
   }, [conduct, favorites]);
 
-  // --- LÓGICA DE UPLOAD E ANÁLISE DE IMAGEM ---
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
         setSelectedImage(reader.result);
-        setImageAnalysisResult(null); // Limpa resultado anterior ao trocar imagem
+        setImageAnalysisResult(null); 
       };
       reader.readAsDataURL(file);
     }
@@ -236,7 +232,6 @@ export default function EmergencyGuideApp() {
     setImageAnalysisResult(null);
 
     try {
-      // Envia base64 direto para API (sem salvar no banco)
       const response = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -253,7 +248,6 @@ export default function EmergencyGuideApp() {
 
       const data = await response.json();
       
-      // Tratamento para quando a IA retorna JSON ao invés de texto
       let finalResult = data.analysis;
       try {
         if (typeof finalResult === 'string' && finalResult.trim().startsWith('{')) {
@@ -271,9 +265,7 @@ export default function EmergencyGuideApp() {
               .join('\n\n');
           }
         }
-      } catch (e) {
-        console.log("Resposta da IA já é texto ou formato desconhecido, mantendo original.");
-      }
+      } catch (e) {}
 
       setImageAnalysisResult(finalResult);
 
@@ -294,7 +286,6 @@ export default function EmergencyGuideApp() {
     }, 300);
   };
 
-  // --- LÓGICA DA CALCULADORA ---
   const calcularMl = () => {
     const dose = parseFloat(calcInputs.dose);
     const peso = parseFloat(calcInputs.peso);
@@ -792,7 +783,7 @@ export default function EmergencyGuideApp() {
 
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4 font-sans text-slate-800 dark:text-slate-200">
+      <div className={`min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4 font-sans text-slate-800 dark:text-slate-200 ${darkMode ? 'dark' : ''}`}>
         <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 max-w-md w-full overflow-hidden">
           <div className="bg-gradient-to-br from-blue-900 to-slate-800 p-8 text-center text-white relative">
             <Shield size={40} className="mx-auto mb-3 text-blue-300" />
@@ -817,17 +808,25 @@ export default function EmergencyGuideApp() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-gray-900 flex flex-col font-sans text-slate-800 dark:text-slate-200 selection:bg-blue-100 dark:selection:bg-blue-900">
+    <div className={`min-h-screen flex flex-col font-sans selection:bg-blue-100 dark:selection:bg-blue-900 ${darkMode ? 'dark bg-gray-900 text-slate-200' : 'bg-slate-50 text-slate-800'}`}>
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3"><div className="bg-blue-900 p-2 rounded-lg text-white"><ClipboardCheck size={20} /></div><div><h1 className="text-lg font-bold text-slate-800 dark:text-white leading-none">Guia de Plantão</h1><span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold">Suporte Médico</span></div></div>
           <div className="flex items-center gap-3">
              <div className="hidden sm:flex flex-col items-end mr-2"><span className="text-xs font-bold text-slate-700 dark:text-slate-200">{currentUser.name}</span><span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase">{currentUser.role}</span></div>
              
-             {/* BOTÃO DE MODO ESCURO */}
-             <button onClick={() => setDarkMode(!darkMode)} className="p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700 rounded-full transition-colors" title={darkMode ? "Modo Claro" : "Modo Escuro"}>
-                {darkMode ? <Sun size={20} /> : <Moon size={20} />}
-             </button>
+             {/* SLIDER SWITCH MODO ESCURO */}
+             <div 
+               onClick={() => setDarkMode(!darkMode)}
+               className={`w-14 h-8 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300 ${darkMode ? 'bg-slate-700' : 'bg-gray-300'}`}
+               title={darkMode ? "Modo Claro" : "Modo Escuro"}
+             >
+               <div 
+                 className={`bg-white w-6 h-6 rounded-full shadow-md transform transition-transform duration-300 flex items-center justify-center ${darkMode ? 'translate-x-6' : 'translate-x-0'}`}
+               >
+                 {darkMode ? <Moon size={14} className="text-slate-800"/> : <Sun size={14} className="text-orange-500"/>}
+               </div>
+             </div>
 
              {/* BOTÃO DE IA VISION (NOVO) */}
              <button onClick={() => setShowImageModal(true)} className="p-2 text-blue-600 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-full transition-colors flex items-center gap-2" title="Análise de Imagem IA">
