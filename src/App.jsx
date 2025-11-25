@@ -5,7 +5,7 @@ import {
   CheckCircle2, Thermometer, Syringe, Siren, FlaskConical, Tag, Package,
   ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save, Cloud, CloudOff, Settings, Info,
   HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine, Wind, Droplet, Timer, Skull, Printer, FilePlus, Calculator,
-  Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2, SprayCan, CalendarDays
+  Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2, SprayCan, CalendarDays, Utensils, Zap
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -63,9 +63,6 @@ if (firebaseConfig && firebaseConfig.apiKey) {
 
 const appId = (typeof __app_id !== 'undefined') ? __app_id : 'emergency-guide-app';
 const initialToken = (typeof __initial_auth_token !== 'undefined') ? __initial_auth_token : null;
-
-// NOTA: USUÁRIOS HARDCODED FORAM REMOVIDOS POR SEGURANÇA.
-// O acesso agora é exclusivo via Firebase Firestore.
 
 export default function EmergencyGuideApp() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -133,8 +130,6 @@ export default function EmergencyGuideApp() {
     if (savedUser) {
       try {
         const parsedUser = JSON.parse(savedUser);
-        
-        // Verifica validade ao recarregar
         if (parsedUser.expiresAt) {
           const expires = new Date(parsedUser.expiresAt);
           if (new Date() > expires) {
@@ -142,7 +137,6 @@ export default function EmergencyGuideApp() {
              return;
           }
         }
-
         setCurrentUser(parsedUser);
         loadHistory(parsedUser.username);
       } catch (e) {}
@@ -212,7 +206,7 @@ export default function EmergencyGuideApp() {
       if (!currentUser) return;
       const newEntry = { query: term, room, timestamp: new Date().toISOString() };
       const hist = recentSearches.filter(s => s.query.toLowerCase() !== term.toLowerCase());
-      const updated = [newEntry, ...hist].slice(0, 10);
+      const updated = [newEntry, ...hist].slice(10);
       setRecentSearches(updated);
       localStorage.setItem(`history_${currentUser.username}`, JSON.stringify(updated));
   
@@ -268,7 +262,6 @@ export default function EmergencyGuideApp() {
 
   const handleNoteChange = (e) => setUserNotes(e.target.value);
 
-  // --- LÓGICA DE LOGIN SEGURA (SEM BACKDOOR) ---
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoginError('');
@@ -280,10 +273,6 @@ export default function EmergencyGuideApp() {
 
     try {
       const userId = usernameInput.toLowerCase().trim();
-      // CAMINHO EXATO ONDE O APP PROCURA:
-      const path = `artifacts/${appId}/public/data/registered_users/${userId}`;
-      console.log("🔍 Tentando buscar usuário em:", path);
-
       const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'registered_users', userId);
       const userSnap = await getDoc(userDocRef);
 
@@ -291,7 +280,6 @@ export default function EmergencyGuideApp() {
         const userData = userSnap.data();
         
         if (userData.password === passwordInput) {
-          // Verifica Validade
           if (userData.expiresAt) {
              const expirationDate = new Date(userData.expiresAt);
              const now = new Date();
@@ -301,7 +289,6 @@ export default function EmergencyGuideApp() {
              }
           }
           
-          // Login Sucesso
           const userSession = { ...userData, username: userId };
           setCurrentUser(userSession);
           localStorage.setItem('emergency_app_user', JSON.stringify(userSession));
@@ -311,8 +298,7 @@ export default function EmergencyGuideApp() {
           setLoginError("Senha incorreta.");
         }
       } else {
-        console.warn("Documento não encontrado no Firestore.");
-        setLoginError(`Usuário não encontrado. (Debug: Verifique se criou a coleção em 'artifacts -> emergency-guide-app -> public -> data -> registered_users')`);
+        setLoginError(`Usuário não encontrado.`);
       }
     } catch (err) {
       console.error("Erro crítico no login:", err);
@@ -329,8 +315,6 @@ export default function EmergencyGuideApp() {
     setFavorites([]);
     localStorage.removeItem('emergency_app_user');
   };
-
-  // --- PRESCRIPTION LOGIC ---
 
   const togglePrescriptionItem = (med) => {
     if (activeRoom !== 'verde' || !med.receita) return;
@@ -364,8 +348,6 @@ export default function EmergencyGuideApp() {
       setSelectedPrescriptionItems(newItems);
     }
   };
-
-  // --- CACHE & FAVORITES ---
 
   const getConductDocId = (query, room) => {
     return `${query.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}_${room}`;
@@ -454,8 +436,6 @@ export default function EmergencyGuideApp() {
     } catch (error) { console.error("Erro ao limpar cache:", error); }
   };
 
-  // --- GENERATE ---
-
   const generateConduct = async () => {
     if (!searchQuery.trim()) {
       showError('Digite uma condição clínica.');
@@ -469,7 +449,6 @@ export default function EmergencyGuideApp() {
 
     const docId = getConductDocId(searchQuery, activeRoom);
 
-    // Verifica Cache
     if (isCloudConnected && currentUser) {
       try {
         const docRef = doc(db, 'artifacts', appId, 'users', currentUser.username, 'conducts', docId);
@@ -489,7 +468,6 @@ export default function EmergencyGuideApp() {
       } catch (error) { console.error("Erro cache:", error); }
     }
 
-    // Chama API
     try {
       const response = await fetch('/api/generate', {
         method: 'POST',
@@ -572,10 +550,90 @@ export default function EmergencyGuideApp() {
     return "Medicamento";
   };
 
+  const renderMedicationCard = (med, idx) => {
+     const itemId = med.farmaco + (med.receita?.nome_comercial || "");
+     const isSelected = selectedPrescriptionItems.some(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
+     const canSelect = activeRoom === 'verde' && med.receita;
+     const medType = inferMedType(med); 
+     const isInjectable = medType.toLowerCase().includes('injet');
+     
+     let doseFinal = null;
+     let volumeFinal = null;
+     
+     if (activeRoom === 'vermelha' && med.usa_peso && patientWeight && med.dose_padrao_kg) {
+       const doseNum = parseFloat(med.dose_padrao_kg) * parseFloat(patientWeight);
+       doseFinal = doseNum.toFixed(1) + " " + med.unidade_base.split('/')[0];
+       if (med.concentracao_mg_ml) {
+         const vol = doseNum / parseFloat(med.concentracao_mg_ml);
+         volumeFinal = vol.toFixed(1) + " ml";
+       }
+     }
+
+     const selectedItemState = selectedPrescriptionItems.find(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
+     const currentDays = selectedItemState ? selectedItemState.dias_tratamento : (med.receita?.dias_sugeridos || 5);
+
+     return (
+       <div 
+         key={idx} 
+         onClick={() => canSelect && togglePrescriptionItem(med)}
+         className={`bg-white rounded-xl border p-5 shadow-sm transition-all relative overflow-hidden group mb-4 ${canSelect ? 'cursor-pointer hover:border-blue-300 hover:shadow-md' : ''} ${isSelected ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50/30' : 'border-gray-200'}`}
+       >
+          <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${isSelected ? 'bg-blue-500' : 'bg-emerald-500'}`}></div>
+          {canSelect && (<div className={`absolute top-4 right-4 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-300 text-transparent'}`}><CheckCircle2 size={14} /></div>)}
+          
+          <div className="absolute top-4 right-12">
+             <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${getMedTypeColor(medType)}`}>{getMedTypeIcon(medType)} {medType}</span>
+          </div>
+
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 mb-3 pl-3 pr-20">
+             <div>
+                <div className="flex items-center gap-2"><h4 className="text-xl font-bold text-slate-800">{med.farmaco}</h4></div>
+                <span className="text-sm text-slate-500 italic">{med.indicacao}</span>
+             </div>
+             {med.via && <span className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-100">{med.via}</span>}
+          </div>
+          
+          <div className="bg-slate-50 rounded-lg p-3 ml-3 mb-3 font-mono text-sm text-slate-700 border border-slate-100"><strong className="text-slate-500 block text-xs uppercase mb-1">Sugestão de Uso / Dose:</strong>{med.sugestao_uso || med.dose}</div>
+          
+          {canSelect && isSelected && (
+            <div className="ml-3 mb-3 animate-in slide-in-from-top-1" onClick={(e) => e.stopPropagation()}>
+               <label className="text-xs font-bold text-blue-700 flex items-center gap-1 mb-1"><CalendarDays size={12} /> Duração (Dias):</label>
+               <input type="number" min="1" className="w-20 px-2 py-1 text-sm border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-blue-900 font-bold" value={currentDays} onChange={(e) => updateItemDays(itemId, parseInt(e.target.value))} />
+            </div>
+          )}
+
+          {activeRoom === 'vermelha' && med.usa_peso && (
+            <div className="bg-rose-50 rounded-lg p-3 ml-3 mb-3 border border-rose-100">
+               <div className="flex justify-between items-center mb-1"><span className="text-xs font-bold text-rose-800 uppercase">Dose Calculada ({patientWeight || '?'}kg):</span><span className="text-[10px] text-rose-600">Ref: {med.dose_padrao_kg} {med.unidade_base}</span></div>
+               <div className="flex gap-4">{doseFinal ? <span className="text-lg font-bold text-rose-900">{doseFinal}</span> : <span className="italic text-sm text-rose-400">Insira o peso</span>}{volumeFinal && <span className="text-lg font-bold text-rose-700 border-l pl-4 border-rose-200">Volume: {volumeFinal}</span>}</div>
+               {med.diluicao_contexto && <div className="text-[10px] text-rose-500 mt-1 bg-white/50 p-1 rounded">{med.diluicao_contexto}</div>}
+            </div>
+          )}
+
+          <div className="grid sm:grid-cols-2 gap-4 ml-3 text-sm">
+             {isInjectable && med.diluicao && (<div className="flex gap-2 text-blue-700"><FlaskConical size={16} className="shrink-0 mt-0.5"/><span><strong>Diluição:</strong> {med.diluicao}</span></div>)}
+             {isInjectable && med.modo_admin && (<div className="flex gap-2 text-purple-700"><Timer size={16} className="shrink-0 mt-0.5"/><span><strong>Infusão:</strong> {med.modo_admin} {med.tempo_infusao ? `(${med.tempo_infusao})` : ''}</span></div>)}
+             {med.cuidados && <div className="flex gap-2 text-amber-700 col-span-2"><AlertTriangle size={16} className="shrink-0 mt-0.5"/><span><strong>Atenção:</strong> {med.cuidados}</span></div>}
+          </div>
+       </div>
+     );
+  };
+
   const roomConfig = {
     verde: { name: 'Sala Verde', color: 'emerald', accent: 'bg-emerald-500', border: 'border-emerald-500', text: 'text-emerald-800', light: 'bg-emerald-50', icon: <Stethoscope className="w-5 h-5" />, description: 'Ambulatorial / Baixa Complexidade' },
     vermelha: { name: 'Sala Vermelha', color: 'rose', accent: 'bg-rose-600', border: 'border-rose-600', text: 'text-rose-800', light: 'bg-rose-50', icon: <Siren className="w-5 h-5" />, description: 'Emergência / Risco de Vida' }
   };
+  
+  // Categorias para Sala Vermelha
+  const RED_ROOM_CATEGORIES = [
+    'Dieta', 
+    'Hidratação', 
+    'Drogas Vasoativas', 
+    'Antibiótico', 
+    'Sintomáticos', 
+    'Profilaxias', 
+    'Outros'
+  ];
 
   if (!currentUser) {
     return (
@@ -725,74 +783,37 @@ export default function EmergencyGuideApp() {
               <div className="lg:col-span-8 space-y-6">
                 <div className="space-y-4">
                    <div className="flex items-center gap-2 text-emerald-800 mb-2 px-2"><div className="bg-emerald-100 p-1.5 rounded"><Pill size={18}/></div><h3 className="font-bold text-lg">Prescrição e Conduta</h3></div>
-                   {conduct.tratamento_medicamentoso?.map((med, idx) => {
-                     const itemId = med.farmaco + (med.receita?.nome_comercial || "");
-                     const isSelected = selectedPrescriptionItems.some(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
-                     const canSelect = activeRoom === 'verde' && med.receita;
-                     const medType = inferMedType(med); 
-                     const isInjectable = medType.toLowerCase().includes('injet');
-                     
-                     let doseFinal = null;
-                     let volumeFinal = null;
-                     
-                     if (activeRoom === 'vermelha' && med.usa_peso && patientWeight && med.dose_padrao_kg) {
-                       const doseNum = parseFloat(med.dose_padrao_kg) * parseFloat(patientWeight);
-                       doseFinal = doseNum.toFixed(1) + " " + med.unidade_base.split('/')[0];
-                       if (med.concentracao_mg_ml) {
-                         const vol = doseNum / parseFloat(med.concentracao_mg_ml);
-                         volumeFinal = vol.toFixed(1) + " ml";
-                       }
-                     }
+                   
+                   {/* RENDERIZAÇÃO CONDICIONAL POR CATEGORIA (SALA VERMELHA) OU LISTA SIMPLES (VERDE) */}
+                   {activeRoom === 'verde' ? (
+                      conduct.tratamento_medicamentoso?.map((med, idx) => renderMedicationCard(med, idx))
+                   ) : (
+                      // LÓGICA DE AGRUPAMENTO SALA VERMELHA
+                      <div className="space-y-8">
+                         {RED_ROOM_CATEGORIES.map((catName) => {
+                            const catItems = conduct.tratamento_medicamentoso?.filter(m => {
+                               const mCat = m.categoria || "Outros";
+                               return mCat.toLowerCase() === catName.toLowerCase() || (catName === "Outros" && !RED_ROOM_CATEGORIES.slice(0,6).some(c => c.toLowerCase() === mCat.toLowerCase()));
+                            });
 
-                     const selectedItemState = selectedPrescriptionItems.find(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
-                     const currentDays = selectedItemState ? selectedItemState.dias_tratamento : (med.receita?.dias_sugeridos || 5);
+                            if (!catItems || catItems.length === 0) return null;
 
-                     return (
-                       <div 
-                         key={idx} 
-                         onClick={() => canSelect && togglePrescriptionItem(med)}
-                         className={`bg-white rounded-xl border p-5 shadow-sm transition-all relative overflow-hidden group ${canSelect ? 'cursor-pointer hover:border-blue-300 hover:shadow-md' : ''} ${isSelected ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50/30' : 'border-gray-200'}`}
-                       >
-                          <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${isSelected ? 'bg-blue-500' : 'bg-emerald-500'}`}></div>
-                          {canSelect && (<div className={`absolute top-4 right-4 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-300 text-transparent'}`}><CheckCircle2 size={14} /></div>)}
-                          
-                          <div className="absolute top-4 right-12">
-                             <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${getMedTypeColor(medType)}`}>{getMedTypeIcon(medType)} {medType}</span>
-                          </div>
-
-                          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 mb-3 pl-3 pr-20">
-                             <div>
-                                <div className="flex items-center gap-2"><h4 className="text-xl font-bold text-slate-800">{med.farmaco}</h4></div>
-                                <span className="text-sm text-slate-500 italic">{med.indicacao}</span>
-                             </div>
-                             {med.via && <span className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-100">{med.via}</span>}
-                          </div>
-                          
-                          <div className="bg-slate-50 rounded-lg p-3 ml-3 mb-3 font-mono text-sm text-slate-700 border border-slate-100"><strong className="text-slate-500 block text-xs uppercase mb-1">Sugestão de Uso / Dose:</strong>{med.sugestao_uso || med.dose}</div>
-                          
-                          {canSelect && isSelected && (
-                            <div className="ml-3 mb-3 animate-in slide-in-from-top-1" onClick={(e) => e.stopPropagation()}>
-                               <label className="text-xs font-bold text-blue-700 flex items-center gap-1 mb-1"><CalendarDays size={12} /> Duração (Dias):</label>
-                               <input type="number" min="1" className="w-20 px-2 py-1 text-sm border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-blue-900 font-bold" value={currentDays} onChange={(e) => updateItemDays(itemId, parseInt(e.target.value))} />
-                            </div>
-                          )}
-
-                          {activeRoom === 'vermelha' && med.usa_peso && (
-                            <div className="bg-rose-50 rounded-lg p-3 ml-3 mb-3 border border-rose-100">
-                               <div className="flex justify-between items-center mb-1"><span className="text-xs font-bold text-rose-800 uppercase">Dose Calculada ({patientWeight || '?'}kg):</span><span className="text-[10px] text-rose-600">Ref: {med.dose_padrao_kg} {med.unidade_base}</span></div>
-                               <div className="flex gap-4">{doseFinal ? <span className="text-lg font-bold text-rose-900">{doseFinal}</span> : <span className="italic text-sm text-rose-400">Insira o peso</span>}{volumeFinal && <span className="text-lg font-bold text-rose-700 border-l pl-4 border-rose-200">Volume: {volumeFinal}</span>}</div>
-                               {med.diluicao_contexto && <div className="text-[10px] text-rose-500 mt-1 bg-white/50 p-1 rounded">{med.diluicao_contexto}</div>}
-                            </div>
-                          )}
-
-                          <div className="grid sm:grid-cols-2 gap-4 ml-3 text-sm">
-                             {isInjectable && med.diluicao && (<div className="flex gap-2 text-blue-700"><FlaskConical size={16} className="shrink-0 mt-0.5"/><span><strong>Diluição:</strong> {med.diluicao}</span></div>)}
-                             {isInjectable && med.modo_admin && (<div className="flex gap-2 text-purple-700"><Timer size={16} className="shrink-0 mt-0.5"/><span><strong>Infusão:</strong> {med.modo_admin} {med.tempo_infusao ? `(${med.tempo_infusao})` : ''}</span></div>)}
-                             {med.cuidados && <div className="flex gap-2 text-amber-700 col-span-2"><AlertTriangle size={16} className="shrink-0 mt-0.5"/><span><strong>Atenção:</strong> {med.cuidados}</span></div>}
-                          </div>
-                       </div>
-                     );
-                   })}
+                            return (
+                               <div key={catName} className="relative">
+                                  <h4 className="flex items-center gap-2 font-bold text-rose-800 uppercase text-xs mb-3 pl-1 border-b border-rose-100 pb-1">
+                                    {catName === 'Dieta' && <Utensils size={14}/>}
+                                    {catName === 'Hidratação' && <Droplets size={14}/>}
+                                    {catName === 'Drogas Vasoativas' && <Zap size={14}/>}
+                                    {catName}
+                                  </h4>
+                                  <div className="grid gap-4">
+                                    {catItems.map((med, idx) => renderMedicationCard(med, idx))}
+                                  </div>
+                               </div>
+                            );
+                         })}
+                      </div>
+                   )}
                 </div>
 
                 <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
@@ -841,7 +862,7 @@ export default function EmergencyGuideApp() {
                   return (
                     <div key={usoType}>
                       <div className="flex items-center gap-4 mb-4"><h3 className="font-bold text-lg underline decoration-2 underline-offset-4">{usoType}</h3></div>
-                      <ul className="space-y-6 list-none">{items.map((item, index) => (<li key={index} className="relative pl-6"><span className="absolute left-0 top-0 font-bold text-lg">{index + 1}.</span><div className="flex items-end mb-1 w-full"><span className="font-bold text-xl">{item.receita.nome_comercial}</span><div className="flex-1 mx-2 border-b-2 border-dotted border-slate-400 mb-1.5"></div><span className="font-bold text-lg whitespace-nowrap">{item.receita.quantidade}</span></div><p className="text-base leading-relaxed text-slate-800 mt-1 pl-2 border-l-4 border-slate-200">{item.receita.instrucoes}</p></li>))}</ul>
+                      <ul className="space-y-6 list-none">{items.map((item, index) => (<li key={index} className="relative pl-6"><span className="absolute left-0 top-0 font-bold text-lg">{index + 1}.</span><div className="flex items-end mb-1 w-full"><span className="font-bold text-xl">{item.receita.nome_comercial || item.farmaco}</span><div className="flex-1 mx-2 border-b-2 border-dotted border-slate-400 mb-1.5"></div><span className="font-bold text-lg whitespace-nowrap">{item.receita.quantidade}</span></div><p className="text-base leading-relaxed text-slate-800 mt-1 pl-2 border-l-4 border-slate-200">{item.receita.instrucoes} {item.dias_tratamento ? `(Uso por ${item.dias_tratamento} dias)` : ''}</p></li>))}</ul>
                     </div>
                   )
                 })}
