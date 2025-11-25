@@ -76,15 +76,17 @@ export default function EmergencyGuideApp() {
     return false;
   });
 
-  // Efeito para aplicar a classe dark
+  // Efeito para aplicar a classe dark e color-scheme no root
   useEffect(() => {
     try {
       const root = window.document.documentElement;
       if (darkMode) {
         root.classList.add('dark');
+        root.style.colorScheme = 'dark'; // Força scrollbars e inputs nativos escuros
         localStorage.setItem('theme', 'dark');
       } else {
         root.classList.remove('dark');
+        root.style.colorScheme = 'light';
         localStorage.setItem('theme', 'light');
       }
     } catch (e) {}
@@ -974,7 +976,7 @@ export default function EmergencyGuideApp() {
                                   <div className="grid gap-4">
                                     {catItems.map((med, idx) => renderMedicationCard(med, idx))}
                                   </div>
-                               </div>
+                                </div>
                             );
                          })}
                       </div>
@@ -1012,14 +1014,15 @@ export default function EmergencyGuideApp() {
       {/* MODAL DE RECEITUÁRIO */}
       {showPrescriptionModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 print:p-0 animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-3xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] print:max-h-none print:h-full print:rounded-none print:shadow-none">
-            <div className="bg-slate-100 p-4 border-b border-slate-200 flex justify-between items-center print:hidden">
-              <h3 className="font-bold text-slate-800 flex items-center gap-2"><FilePlus size={20} /> Gerador de Receituário</h3>
-              <div className="flex gap-2"><button onClick={() => window.print()} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors"><Printer size={16}/> Imprimir</button><button onClick={() => setShowPrescriptionModal(false)} className="bg-gray-200 hover:bg-gray-300 text-gray-600 p-2 rounded-lg transition-colors"><X size={20}/></button></div>
+          <div className="bg-white dark:bg-gray-900 w-full max-w-3xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] print:max-h-none print:h-full print:rounded-none print:shadow-none print:bg-white">
+            <div className="bg-slate-100 dark:bg-gray-800 p-4 border-b border-slate-200 dark:border-gray-700 flex justify-between items-center print:hidden">
+              <h3 className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2"><FilePlus size={20} /> Gerador de Receituário</h3>
+              <div className="flex gap-2"><button onClick={() => window.print()} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors"><Printer size={16}/> Imprimir</button><button onClick={() => setShowPrescriptionModal(false)} className="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 p-2 rounded-lg transition-colors"><X size={20}/></button></div>
             </div>
-            <div className="p-12 overflow-y-auto print:overflow-visible font-serif text-slate-900 bg-white flex-1 flex flex-col h-full relative">
+            {/* Área do papel - Em tela pode ser escura, na impressão força branco */}
+            <div className="p-12 overflow-y-auto print:overflow-visible font-serif text-slate-900 dark:text-slate-200 bg-white dark:bg-gray-900 print:bg-white print:text-black flex-1 flex flex-col h-full relative">
               <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none"><Activity size={400} /></div>
-              <header className="flex flex-col items-center border-b-4 border-double border-slate-800 pb-6 mb-8"><h1 className="text-3xl font-bold tracking-widest uppercase text-slate-900">{currentUser?.name || "NOME DO MÉDICO"}</h1><div className="flex items-center gap-2 mt-2 text-sm font-bold text-slate-600 uppercase tracking-wide"><span>CRM: {currentUser?.crm || "00000/UF"}</span><span>•</span><span>CLÍNICA MÉDICA</span></div></header>
+              <header className="flex flex-col items-center border-b-4 border-double border-slate-800 dark:border-slate-200 print:border-black pb-6 mb-8"><h1 className="text-3xl font-bold tracking-widest uppercase text-slate-900 dark:text-slate-100 print:text-black">{currentUser?.name || "NOME DO MÉDICO"}</h1><div className="flex items-center gap-2 mt-2 text-sm font-bold text-slate-600 dark:text-slate-400 print:text-gray-600 uppercase tracking-wide"><span>CRM: {currentUser?.crm || "00000/UF"}</span><span>•</span><span>CLÍNICA MÉDICA</span></div></header>
               <div className="flex-1 space-y-8">
                 {['USO ORAL', 'USO TÓPICO', 'USO RETAL', 'USO INALATÓRIO', 'USO OFTÁLMICO', 'USO OTOLÓGICO'].map((usoType) => {
                   const items = selectedPrescriptionItems.filter(item => item.receita?.uso?.toUpperCase().includes(usoType.replace('USO ', '')) || (usoType === 'USO ORAL' && !item.receita?.uso));
@@ -1027,12 +1030,12 @@ export default function EmergencyGuideApp() {
                   return (
                     <div key={usoType}>
                       <div className="flex items-center gap-4 mb-4"><h3 className="font-bold text-lg underline decoration-2 underline-offset-4">{usoType}</h3></div>
-                      <ul className="space-y-6 list-none">{items.map((item, index) => (<li key={index} className="relative pl-6"><span className="absolute left-0 top-0 font-bold text-lg">{index + 1}.</span><div className="flex items-end mb-1 w-full"><span className="font-bold text-xl">{item.receita.nome_comercial || item.farmaco}</span><div className="flex-1 mx-2 border-b-2 border-dotted border-slate-400 mb-1.5"></div><span className="font-bold text-lg whitespace-nowrap">{item.receita.quantidade}</span></div><p className="text-base leading-relaxed text-slate-800 mt-1 pl-2 border-l-4 border-slate-200">{item.receita.instrucoes} {item.dias_tratamento ? `(Uso por ${item.dias_tratamento} dias)` : ''}</p></li>))}</ul>
+                      <ul className="space-y-6 list-none">{items.map((item, index) => (<li key={index} className="relative pl-6"><span className="absolute left-0 top-0 font-bold text-lg">{index + 1}.</span><div className="flex items-end mb-1 w-full"><span className="font-bold text-xl">{item.receita.nome_comercial || item.farmaco}</span><div className="flex-1 mx-2 border-b-2 border-dotted border-slate-400 dark:border-slate-600 print:border-gray-400 mb-1.5"></div><span className="font-bold text-lg whitespace-nowrap">{item.receita.quantidade}</span></div><p className="text-base leading-relaxed text-slate-800 dark:text-slate-300 print:text-black mt-1 pl-2 border-l-4 border-slate-200 dark:border-slate-700 print:border-gray-200">{item.receita.instrucoes} {item.dias_tratamento ? `(Uso por ${item.dias_tratamento} dias)` : ''}</p></li>))}</ul>
                     </div>
                   )
                 })}
               </div>
-              <footer className="mt-auto pt-12"><div className="flex justify-between items-end"><div className="text-sm"><p className="font-bold">Data:</p><div className="w-40 border-b border-slate-800 mt-4 text-center relative top-1">{new Date().toLocaleDateString('pt-BR')}</div></div><div className="text-center"><div className="w-64 border-b border-slate-800 mb-2"></div><p className="font-bold uppercase text-sm">{currentUser?.name}</p><p className="text-xs text-slate-500">Assinatura e Carimbo</p></div></div><div className="text-center mt-8 pt-4 border-t border-slate-200 text-[10px] text-slate-400 uppercase">Rua da Medicina, 123 • Centro • Cidade/UF • Tel: (00) 1234-5678</div></footer>
+              <footer className="mt-auto pt-12"><div className="flex justify-between items-end"><div className="text-sm"><p className="font-bold">Data:</p><div className="w-40 border-b border-slate-800 dark:border-slate-200 print:border-black mt-4 text-center relative top-1">{new Date().toLocaleDateString('pt-BR')}</div></div><div className="text-center"><div className="w-64 border-b border-slate-800 dark:border-slate-200 print:border-black mb-2"></div><p className="font-bold uppercase text-sm">{currentUser?.name}</p><p className="text-xs text-slate-500 dark:text-slate-400 print:text-gray-500">Assinatura e Carimbo</p></div></div><div className="text-center mt-8 pt-4 border-t border-slate-200 dark:border-slate-700 print:border-gray-200 text-[10px] text-slate-400 dark:text-slate-500 print:text-gray-400 uppercase">Rua da Medicina, 123 • Centro • Cidade/UF • Tel: (00) 1234-5678</div></footer>
             </div>
           </div>
         </div>
@@ -1215,7 +1218,19 @@ export default function EmergencyGuideApp() {
               <div className="flex items-center gap-3"><div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-lg text-blue-600 dark:text-blue-300"><Edit size={20} /></div><div><h3 className="font-bold text-slate-800 dark:text-white leading-none">Meu Caderno</h3><div className="flex items-center gap-2 mt-1"><span className="text-xs text-slate-500 dark:text-slate-400">Anotações de {currentUser?.name}</span><span className="text-gray-300 dark:text-gray-600">•</span>{isCloudConnected ? (<span className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400 font-medium"><Cloud size={10} /> Nuvem Ativa</span>) : (<span className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 font-medium"><CloudOff size={10} /> Offline</span>)}</div></div></div>
               <button onClick={() => setShowNotepad(false)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full text-gray-500 dark:text-gray-400 transition-colors"><X size={20} /></button>
             </div>
-            <div className="flex-1 bg-yellow-50 dark:bg-gray-900 relative"><textarea className="w-full h-full p-6 resize-none focus:outline-none text-slate-700 dark:text-slate-200 leading-relaxed bg-transparent text-lg font-medium font-serif" placeholder="Escreva suas anotações..." value={userNotes} onChange={handleNoteChange} style={{ backgroundImage: 'linear-gradient(transparent, transparent 31px, #e5e7eb 31px)', backgroundSize: '100% 32px', lineHeight: '32px' }} /></div>
+            <div className="flex-1 bg-yellow-50 dark:bg-gray-900 relative">
+              <textarea 
+                className="w-full h-full p-6 resize-none focus:outline-none text-slate-700 dark:text-slate-200 leading-relaxed bg-transparent text-lg font-medium font-serif" 
+                placeholder="Escreva suas anotações..." 
+                value={userNotes} 
+                onChange={handleNoteChange} 
+                style={{ 
+                  backgroundImage: `linear-gradient(transparent, transparent 31px, ${darkMode ? '#374151' : '#e5e7eb'} 31px)`, 
+                  backgroundSize: '100% 32px', 
+                  lineHeight: '32px' 
+                }} 
+              />
+            </div>
             <div className="p-3 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center text-xs text-gray-500 dark:text-gray-400"><div className="flex items-center gap-1.5">{isSaving ? (<><Loader2 size={14} className="text-blue-600 animate-spin" /><span className="text-blue-600">Salvando...</span></>) : (<><Save size={14} className="text-green-600" /><span>{isCloudConnected ? "Salvo na nuvem" : "Salvo localmente"}</span></>)}</div><span>{userNotes.length} caracteres</span></div>
           </div>
         </div>
