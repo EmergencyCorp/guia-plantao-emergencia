@@ -385,7 +385,7 @@ export default function EmergencyGuideApp() {
       if (!currentUser) return;
       const newEntry = { query: term, room, timestamp: new Date().toISOString() };
       const hist = recentSearches.filter(s => s.query.toLowerCase() !== term.toLowerCase());
-      const updated = [newEntry, ...hist].slice(0, 10);
+      const updated = [newEntry, ...hist].slice(0, 10); // CORRIGIDO: de slice(10) para slice(0, 10)
       setRecentSearches(updated);
       localStorage.setItem(`history_${currentUser.username}`, JSON.stringify(updated));
   
@@ -933,8 +933,6 @@ export default function EmergencyGuideApp() {
         <div className="space-y-6">
           <div className="grid md:grid-cols-2 gap-4">
             {Object.entries(roomConfig)
-              // Filtra a Sala Amarela para não aparecer como aba selecionável inicialmente, já que é um estado de "transferência"
-              .filter(([key]) => key !== 'amarela' || activeRoom === 'amarela') 
               .map(([key, config]) => {
               const isActive = activeRoom === key;
               return (
