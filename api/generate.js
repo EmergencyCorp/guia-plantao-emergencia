@@ -20,11 +20,66 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const { searchQuery, activeRoom, image, prompt } = req.body;
+  const { searchQuery, activeRoom, image, prompt, mode, anamnesis, exams } = req.body;
   const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
 
   if (!apiKey) {
     return res.status(500).json({ error: 'Configuração de servidor ausente (API Key).' });
+  }
+
+  // --- LÓGICA BEDSIDE (NOVA) ---
+  if (mode === 'bedside') {
+    const bedsidePrompt = `
+      Você é um Médico Preceptor Sênior discutindo um caso clínico detalhado à beira leito (BedSide).
+      
+      DADOS DO CASO:
+      **Anamnese/História:** ${anamnesis}
+      **Exames Complementares/Sinais:** ${exams || "Não informados"}
+
+      TAREFA:
+      Gere uma conduta clínica completa e personalizada para este paciente específico.
+      
+      FORMATO DE RESPOSTA (JSON OBRIGATÓRIO):
+      {
+        "hipoteses_diagnosticas": ["Hipótese Principal", "Diagnóstico Diferencial 1"],
+        "racional_clinico": "Breve explicação do raciocínio clínico ligando a história aos exames.",
+        "conduta_terapeutica": [
+           { "tipo": "Medicamento", "detalhe": "Nome + Dose + Via + Frequência (ex: Ceftriaxona 2g EV 24/24h)" },
+           { "tipo": "Suporte", "detalhe": "Ex: O2 suplementar, cabeceira elevada..." }
+        ],
+        "solicitacao_exames": ["Exame para confirmar hipótese", "Exame de controle"],
+        "encaminhamentos": ["Especialidade ou Setor (ex: UTI, Cardiologia)"],
+        "cuidados_gerais": ["Jejum", "Controle de Glicemia", "Balanço Hídrico"],
+        "orientacoes_paciente": ["Explicação para o paciente/família sobre o quadro e próximos passos"]
+      }
+    `;
+
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: bedsidePrompt }] }],
+          generationConfig: { responseMimeType: "application/json" }
+        })
+      });
+
+      if (!response.ok) throw new Error(`Erro API BedSide: ${response.status}`);
+      
+      const data = await response.json();
+      let textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      
+      // Limpeza básica de markdown json se houver
+      textResponse = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+      
+      res.status(200).json(JSON.parse(textResponse));
+      return;
+
+    } catch (error) {
+      console.error("Erro BedSide:", error);
+      res.status(500).json({ error: "Erro ao processar caso clínico.", details: error.message });
+      return;
+    }
   }
 
   // --- LÓGICA DE ANÁLISE DE IMAGEM (IA VISION) ---
