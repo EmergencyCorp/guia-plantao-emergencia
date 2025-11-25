@@ -40,10 +40,11 @@ export default async function handler(req, res) {
       1. Seja extremamente técnico e preciso.
       2. Se for um ECG: Descreva ritmo, frequência, eixo, ondas P, complexo QRS, segmento ST e ondas T. Conclua com o diagnóstico provável.
       3. Se for Raio-X/TC: Descreva a qualidade da imagem e os achados patológicos visíveis.
-      4. Formate a resposta em Markdown claro e legível (lista com bullets).
+      4. Responda DIRETAMENTE em texto corrido e tópicos (Markdown). NÃO use formato JSON.
     `;
 
     try {
+      // REMOVIDO: generationConfig com JSON para permitir resposta em texto livre (Markdown)
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -53,8 +54,7 @@ export default async function handler(req, res) {
               { text: visionPrompt },
               { inlineData: { mimeType: mimeType, data: base64Data } }
             ]
-          }],
-          generationConfig: { responseMimeType: "application/json" }
+          }]
         })
       });
 
@@ -66,12 +66,17 @@ export default async function handler(req, res) {
       const data = await response.json();
       const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
       
+      // A resposta agora será texto puro (Markdown). 
+      // O código abaixo lida com isso graciosamente (o JSON.parse falha e usa o texto original)
       let finalAnalysis = textResponse;
       try {
+         // Se por acaso a IA ainda mandar JSON, tentamos extrair
          const parsed = JSON.parse(textResponse);
          if(parsed.analysis) finalAnalysis = parsed.analysis;
          else if (parsed.analise_ecg) finalAnalysis = JSON.stringify(parsed.analise_ecg);
-      } catch(e) {}
+      } catch(e) {
+         // Erro esperado: A resposta não é JSON, é o texto do laudo. Perfeito.
+      }
 
       res.status(200).json({ analysis: finalAnalysis });
       return;
