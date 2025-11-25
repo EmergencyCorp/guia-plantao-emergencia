@@ -20,19 +20,88 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const { searchQuery, activeRoom } = req.body;
+  const { searchQuery, activeRoom, image, prompt } = req.body;
   const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
 
   if (!apiKey) {
     return res.status(500).json({ error: 'Configuração de servidor ausente (API Key).' });
   }
 
+  // --- LÓGICA DE ANÁLISE DE IMAGEM (NOVO) ---
+  if (image) {
+    // O usuário enviou uma imagem. Vamos usar o modo Vision.
+    // A imagem vem como string base64 completa (data:image/jpeg;base64,...)
+    // Precisamos extrair apenas os dados brutos base64 para o payload.
+    
+    const base64Data = image.split(',')[1]; // Remove o cabeçalho data:image/...
+    const mimeType = image.split(';')[0].split(':')[1]; // Pega o tipo correto (png, jpeg, etc)
+
+    const userPrompt = prompt || "Analise esta imagem médica e descreva os achados.";
+
+    const visionPrompt = `
+      Você é um médico especialista em radiologia e diagnóstico por imagem (Cardiologista para ECGs).
+      
+      Tarefa: Analisar a imagem fornecida e responder à pergunta do usuário: "${userPrompt}"
+      
+      Diretrizes:
+      1. Seja extremamente técnico e preciso.
+      2. Se for um ECG: Descreva ritmo, frequência, eixo, ondas P, complexo QRS, segmento ST e ondas T. Conclua com o diagnóstico provável.
+      3. Se for Raio-X/TC: Descreva a qualidade da imagem e os achados patológicos visíveis.
+      4. Se a imagem não for médica, avise o usuário educadamente.
+      5. Formate a resposta em Markdown claro e legível. Não use JSON aqui, apenas texto formatado.
+    `;
+
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: visionPrompt },
+              { inlineData: { mimeType: mimeType, data: base64Data } }
+            ]
+          }],
+          generationConfig: { responseMimeType: "application/json" } // Mantemos JSON wrapper para consistência, mas o conteúdo interno será texto na chave 'analysis'
+        })
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Erro na API Vision: ${response.status} - ${errText}`);
+      }
+
+      const data = await response.json();
+      const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      
+      // A API pode retornar o texto puro ou encapsulado em JSON dependendo do prompt.
+      // Vamos garantir que retornamos um JSON para o frontend.
+      let finalAnalysis = textResponse;
+      try {
+         // Tenta parsear se a IA retornou JSON por hábito do config
+         const parsed = JSON.parse(textResponse);
+         if(parsed.analysis) finalAnalysis = parsed.analysis;
+      } catch(e) {
+         // Se falhar, é texto puro mesmo
+      }
+
+      // Retorna no formato esperado pelo frontend
+      res.status(200).json({ analysis: finalAnalysis });
+      return;
+
+    } catch (error) {
+      console.error("Erro interno Vision:", error);
+      res.status(500).json({ error: "Erro ao analisar imagem.", details: error.message });
+      return;
+    }
+  }
+
+  // --- LÓGICA PADRÃO DE TEXTO (EXISTENTE) ---
+
   if (!searchQuery) {
     return res.status(400).json({ error: 'Busca vazia.' });
   }
 
-  // --- CONSTRUÇÃO DO PROMPT DE ALTA PRECISÃO ---
-  
   const roomContext = activeRoom === 'verde' ? 'SALA VERDE (AMBULATORIAL)' : 'SALA VERMELHA (EMERGÊNCIA/UTI)';
   const lowerQuery = searchQuery.toLowerCase();
   
