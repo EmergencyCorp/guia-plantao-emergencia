@@ -272,7 +272,8 @@ export default function EmergencyGuideApp() {
       if (!currentUser) return;
       const newEntry = { query: term, room, timestamp: new Date().toISOString() };
       const hist = recentSearches.filter(s => s.query.toLowerCase() !== term.toLowerCase());
-      const updated = [newEntry, ...hist].slice(10);
+      // CORREÇÃO AQUI: slice(0, 10) em vez de slice(10)
+      const updated = [newEntry, ...hist].slice(0, 10);
       setRecentSearches(updated);
       localStorage.setItem(`history_${currentUser.username}`, JSON.stringify(updated));
   
