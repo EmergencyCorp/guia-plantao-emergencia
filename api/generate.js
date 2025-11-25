@@ -120,8 +120,11 @@ export default async function handler(req, res) {
     promptExtra += `
     CONTEXTO SALA VERDE (AMBULATORIAL):
     - Foco em alívio sintomático e tratamento domiciliar.
-    - "receita": OBRIGATÓRIO preencher objeto para prescrição de alta.
-    - "instrucoes": Linguagem clara para o paciente (ex: "Tomar 1 cp após o almoço").
+    - **"sugestao_uso":** OBRIGATÓRIO ser detalhado tecnicamente. Ex: "500mg VO de 6/6h por 5 dias".
+    - **"receita":** OBRIGATÓRIO preencher objeto completo para prescrição de alta.
+    - **"receita.instrucoes":** Use linguagem clara para o paciente. Deve incluir quantidade por tomada, frequência e observações (ex: "Tomar 1 comprimido por via oral a cada 8 horas após as refeições. Se dor, manter uso.").
+    - **"receita.dias_sugeridos":** Inteiro (ex: 5).
+    - **"receita.quantidade":** Ex: "1 Caixa" ou "20 Comprimidos".
     `;
   }
 
@@ -138,10 +141,6 @@ export default async function handler(req, res) {
   1. Retorne APENAS JSON válido.
   2. Separe apresentações diferentes (Comprimido vs Injetável) em objetos diferentes no array "tratamento_medicamentoso".
   3. "tipo": OBRIGATÓRIO da lista: ['Comprimido', 'Cápsula', 'Xarope', 'Suspensão', 'Gotas', 'Solução Oral', 'Injetável', 'Tópico', 'Inalatório', 'Supositório'].
-  4. "sugestao_uso": 
-     - Sala Verde: "Tomar X comp de Y/Y horas..."
-     - Sala Vermelha: "Ataque: X mg EV Bolus. Manutenção: Y mg/h em BIC."
-  5. "avaliacao_inicial.sinais_vitais_alvos": Lista de strings com ALVOS CLÍNICOS (ex: "PAM ≥ 65mmHg", "SatO2 94-98%", "Diurese ≥ 0.5ml/kg/h").
   
   ESTRUTURA JSON ESPERADA:
   {
@@ -165,13 +164,18 @@ export default async function handler(req, res) {
       { 
         "farmaco": "Nome + Concentração", 
         "tipo": "Injetável",
-        "categoria": "Antibiótico", // OBRIGATÓRIO na sala vermelha para funcionar o filtro
-        "sugestao_uso": "Texto descritivo da administração...",
+        "categoria": "Antibiótico", // OBRIGATÓRIO na sala vermelha
+        "sugestao_uso": "Texto TÉCNICO detalhado (dose, via, intervalo)",
         "diluicao": "Ex: 1 amp em 100ml SF0.9%", 
         "modo_admin": "BIC / Bolus Lento", 
         "cuidados": "Monitorizar QT, Risco de hipotensão...", 
         "indicacao": "Indicação precisa",
-        "receita": null, 
+        "receita": {
+           "nome_comercial": "Nome comercial comum",
+           "quantidade": "Ex: 1 Caixa (30cps)",
+           "instrucoes": "Instrução detalhada para o PACIENTE (ex: Tomar 1cp VO 12/12h...)",
+           "dias_sugeridos": 7
+        }, 
         "usa_peso": true,
         "dose_padrao_kg": 0.0,
         "unidade_base": "mcg/kg/min",
