@@ -44,7 +44,6 @@ export default async function handler(req, res) {
     `;
 
     try {
-      // REMOVIDO: generationConfig com JSON para permitir resposta em texto livre (Markdown)
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -66,17 +65,12 @@ export default async function handler(req, res) {
       const data = await response.json();
       const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
       
-      // A resposta agora será texto puro (Markdown). 
-      // O código abaixo lida com isso graciosamente (o JSON.parse falha e usa o texto original)
       let finalAnalysis = textResponse;
       try {
-         // Se por acaso a IA ainda mandar JSON, tentamos extrair
          const parsed = JSON.parse(textResponse);
          if(parsed.analysis) finalAnalysis = parsed.analysis;
          else if (parsed.analise_ecg) finalAnalysis = JSON.stringify(parsed.analise_ecg);
-      } catch(e) {
-         // Erro esperado: A resposta não é JSON, é o texto do laudo. Perfeito.
-      }
+      } catch(e) {}
 
       res.status(200).json({ analysis: finalAnalysis });
       return;
@@ -94,77 +88,69 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Busca vazia.' });
   }
 
-  const roomContext = activeRoom === 'verde' ? 'SALA VERDE (AMBULATORIAL)' : 'SALA VERMELHA (EMERGÊNCIA/UTI)';
-  const lowerQuery = searchQuery.toLowerCase();
-  
-  let promptExtra = "";
-  let roleDefinition = "";
+  // Definição de contextos baseados na sala
+  let roomContext = '';
+  let roleDefinition = '';
+  let promptExtra = '';
 
   if (activeRoom === 'vermelha') {
+    roomContext = 'SALA VERMELHA (EMERGÊNCIA/UTI)';
     roleDefinition = "Você é um médico INTENSIVISTA e EMERGENCISTA SÊNIOR. Sua prioridade é salvar a vida do paciente com precisão absoluta e tolerância zero para erros.";
     promptExtra += `
     CRITICIDADE MÁXIMA (SALA VERMELHA):
-    1. **Alvos Terapêuticos (Obrigatório):** Defina metas numéricas precisas. Inclua PAM (Pressão Arterial Média), PAS/PAD, FC, FR, SatO2, Diurese (>0.5ml/kg/h), Lactato e Glicemia se pertinente.
-    2. **Exames (Obrigatório):** Seja específico. Não peça "Laboratório", peça "Gasometria Arterial c/ Lactato, Troponina US, Creatinina...". Em imagem, especifique o protocolo (ex: "Angio-TC de Tórax protocolo TEP").
-    3. **Cálculo de Doses:** - "usa_peso": true
-       - "dose_padrao_kg": número exato (ex: 0.05 a 2 mcg/kg/min para Nora, use o valor inicial padrão)
-       - "unidade_base": ex: "mcg/kg/min", "mg/kg"
-       - "concentracao_mg_ml": Concentração da solução padrão da sua instituição fictícia (ex: Nora 4mg/4ml em 250ml SG5% = 64mcg/ml -> Se for ampola pura, use a da ampola).
-       - "diluicao_contexto": Ex: "4mg em 250ml SG5% (Solução Padrão)"
-    4. **CATEGORIZAÇÃO RIGOROSA:** Você DEVE classificar CADA item de medicamento em uma das seguintes categorias:
-       - 'Dieta'
-       - 'Hidratação'
-       - 'Drogas Vasoativas'
-       - 'Antibiótico'
-       - 'Sintomáticos'
-       - 'Profilaxias'
-       - 'Outros'
+    1. **Alvos Terapêuticos (Obrigatório):** Defina metas numéricas precisas (PAM, SatO2, Diurese, etc).
+    2. **Exames (Obrigatório):** Seja específico (ex: "Angio-TC protocolo TEP").
+    3. **Cálculo de Doses:** - "usa_peso": true para drogas vasoativas/sedação.
+    4. **CATEGORIZAÇÃO RIGOROSA:** Classifique CADA item corretamente (Drogas Vasoativas, Antibiótico, etc).
     `;
-  } else {
+  } else if (activeRoom === 'amarela') {
+    roomContext = 'SALA DE OBSERVAÇÃO (SALA AMARELA - GRAVIDADE MODERADA)';
+    roleDefinition = "Você é um médico HOSPITALISTA e EMERGENCISTA experiente. O paciente não tem alta imediata, mas não requer suporte invasivo agora. O foco é estabilização, investigação diagnóstica rápida e observação clínica.";
+    promptExtra += `
+    CONTEXTO SALA AMARELA (OBSERVAÇÃO):
+    - O paciente apresenta sinais de alerta ou necessita de exames seriados/tratamento endovenoso que impede a alta.
+    - **Foco da Conduta:** Monitorização, hidratação venosa, controle álgico potente, antibióticos IV se necessário, exames de imagem e laboratoriais de urgência.
+    - **Decisão Clínica:** Defina critérios claros para piora (ir para Vermelha) ou melhora (ir para Verde/Alta).
+    - **Prescrição:** Deve ser completa para um paciente internado em observação (Dieta, Hidratação, Sintomáticos, Profilaxias TVP/TEP se indicado).
+    - **Baseado em Evidência:** Cite scores de risco (ex: HEART score, CURB-65, Glasgow) se aplicável para justificar a observação.
+    `;
+  } else { // Verde
+    roomContext = 'SALA VERDE (AMBULATORIAL)';
     roleDefinition = "Você é um médico generalista experiente em pronto atendimento.";
     promptExtra += `
     CONTEXTO SALA VERDE (AMBULATORIAL):
     - Foco em alívio sintomático e tratamento domiciliar.
     - **"sugestao_uso":** OBRIGATÓRIO ser detalhado tecnicamente. Ex: "500mg VO de 6/6h por 5 dias".
     - **"receita":** OBRIGATÓRIO preencher objeto completo para prescrição de alta.
-    - **"receita.instrucoes":** Use linguagem clara para o paciente. Deve incluir quantidade por tomada, frequência e observações (ex: "Tomar 1 comprimido por via oral a cada 8 horas após as refeições. Se dor, manter uso.").
-    - **"receita.dias_sugeridos":** Inteiro (ex: 5).
-    - **"receita.quantidade":** Ex: "1 Caixa" ou "20 Comprimidos".
+    - **"receita.instrucoes":** Use linguagem clara para o paciente.
     `;
   }
 
-  // 2. Lógica Clínica Específica (Protocolos Restaurados)
+  const lowerQuery = searchQuery.toLowerCase();
+
+  // 2. Lógica Clínica Específica (Protocolos)
   if (lowerQuery.includes('dengue')) {
     promptExtra += `
     PROTOCOLO DENGUE (MS BRASIL):
     - Classifique: Grupo A, B, C ou D.
-    - Grupo C/D (Sala Vermelha): Fase de Expansão Rápida (20ml/kg em 20 min). Reavaliação a cada etapa.
-    - Grupo A/B (Sala Verde): Hidratação oral escalonada.
+    - Grupo C/D (Vermelha/Amarela): Fase de Expansão Rápida.
+    - Grupo B (Amarela): Observação até resultado de exames, hidratação venosa se vômitos.
+    - Grupo A (Verde): Hidratação oral.
     `;
   }
 
   if (lowerQuery.includes('sepse') || lowerQuery.includes('septico')) {
     promptExtra += `
     PROTOCOLO SEPSE (Surviving Sepsis Campaign):
-    - Pacote de 1 hora: Lactato, Hemoculturas, Antibiótico amplo espectro, Cristaloide 30ml/kg (se hipotensão/lactato > 4), Vasopressor (se PAM < 65 pós volume).
+    - Pacote de 1 hora.
+    - Se Sala Amarela: Iniciar antibiótico na primeira hora e coletar culturas. Monitorar lactato e diurese rigorosamente. Se hipotensão refratária a volume -> Sala Vermelha.
     `;
   }
 
-  if (lowerQuery.includes('iam') || lowerQuery.includes('infarto') || lowerQuery.includes('scs')) {
-    promptExtra += `
-    PROTOCOLO IAM (SBC/AHA):
-    - Tempo porta-balão ou porta-agulha.
-    - Dupla antiagregação + Anticoagulação.
-    - Estatinas alta potência.
-    `;
-  }
-
-  if (lowerQuery.includes('trauma') || lowerQuery.includes('acid') || lowerQuery.includes('poli')) {
+  if (lowerQuery.includes('trauma')) {
     promptExtra += `
     PROTOCOLO TRAUMA (ATLS 10ª Ed):
-    - OBRIGATÓRIO preencher objeto "xabcde_trauma" com a estrutura exata: chaves X, A, B, C, D, E.
-    - X: Controle de hemorragia exsanguinante.
-    - A: Via aérea + Colar.
+    - OBRIGATÓRIO preencher "xabcde_trauma".
     `;
   }
 
@@ -174,7 +160,7 @@ export default async function handler(req, res) {
   
   REGRAS DE FORMATO (JSON):
   1. Retorne APENAS JSON válido.
-  2. Separe apresentações diferentes (Comprimido vs Injetável) em objetos diferentes no array "tratamento_medicamentoso".
+  2. Separe apresentações diferentes em objetos diferentes no array "tratamento_medicamentoso".
   3. "tipo": OBRIGATÓRIO da lista: ['Comprimido', 'Cápsula', 'Xarope', 'Suspensão', 'Gotas', 'Solução Oral', 'Injetável', 'Tópico', 'Inalatório', 'Supositório'].
   
   ESTRUTURA JSON ESPERADA:
@@ -182,57 +168,48 @@ export default async function handler(req, res) {
     "condicao": "Nome Técnico Completo",
     "estadiamento": "Classificação de Risco/Gravidade",
     "classificacao": "${roomContext}",
-    "resumo_clinico": "Texto técnico detalhado sobre fisiopatologia...",
+    "resumo_clinico": "Texto técnico detalhado sobre fisiopatologia e justificativa do nível de atenção...",
     "xabcde_trauma": {
-       "X": "Controle de Hemorragia...",
-       "A": "Via Aérea...",
-       "B": "Respiração...",
-       "C": "Circulação...",
-       "D": "Neurológico...",
-       "E": "Exposição..."
+       "X": "...", "A": "...", "B": "...", "C": "...", "D": "...", "E": "..."
     }, // Preencher APENAS se for trauma, senão null
     "avaliacao_inicial": { 
-      "sinais_vitais_alvos": ["PAM ≥ 65mmHg", "FC < 100bpm", "Lactato < 2mmol/L", "SatO2 > 94%"], 
-      "exames_prioridade1": ["Gasometria Arterial", "Lactato", "Hemoculturas x2"], 
+      "sinais_vitais_alvos": ["PAM ≥ 65mmHg", ...], 
+      "exames_prioridade1": ["..."], 
       "exames_complementares": ["..."] 
     },
     "achados_exames": { 
-      "ecg": "Descrição precisa das alterações (ex: Infra ST > 0.5mm em V5-V6)", 
-      "laboratorio": "Alterações esperadas e valores críticos", 
-      "imagem": "Padrão radiológico específico" 
+      "ecg": "...", 
+      "laboratorio": "...", 
+      "imagem": "..." 
     },
     "criterios_gravidade": ["Sinal 1", "Sinal 2"],
     "tratamento_medicamentoso": [ 
       { 
         "farmaco": "Nome + Concentração", 
         "tipo": "Injetável",
-        "categoria": "Antibiótico", // OBRIGATÓRIO na sala vermelha
-        "sugestao_uso": "Texto TÉCNICO detalhado (dose, via, intervalo)",
+        "categoria": "Antibiótico", 
+        "sugestao_uso": "Texto TÉCNICO detalhado",
         "diluicao": "Ex: 1 amp em 100ml SF0.9%", 
         "modo_admin": "BIC / Bolus Lento", 
-        "cuidados": "Monitorizar QT, Risco de hipotensão...", 
-        "indicacao": "Indicação precisa",
+        "cuidados": "...", 
+        "indicacao": "...",
         "receita": {
-           "nome_comercial": "Nome comercial comum",
-           "quantidade": "Ex: 1 Caixa (30cps)",
-           "instrucoes": "Instrução detalhada para o PACIENTE (ex: Tomar 1cp VO 12/12h...)",
+           "nome_comercial": "...",
+           "quantidade": "...",
+           "instrucoes": "...",
            "dias_sugeridos": 7
-        }, 
-        "usa_peso": true,
-        "dose_padrao_kg": 0.0,
-        "unidade_base": "mcg/kg/min",
-        "concentracao_mg_ml": 0.0,
-        "diluicao_contexto": "Ex: Solução Padrão (4mg/4ml em 246ml SF)"
+        }, // Receita obrigatória APENAS se sala VERDE. Se Amarela/Vermelha focar na prescrição hospitalar.
+        "usa_peso": false
       } 
     ],
     "escalonamento_terapeutico": [ 
-      { "passo": "1. Estabilização Inicial", "descricao": "..." },
-      { "passo": "2. Terapia Específica", "descricao": "..." }
+      { "passo": "1. Admissão/Estabilização", "descricao": "..." },
+      { "passo": "2. Tratamento Específico", "descricao": "..." }
     ],
-    "medidas_gerais": ["Cabeceira elevada", "Jejum", "Acesso venoso calibroso"],
-    "criterios_internacao": ["Critério UTI 1", "..."],
-    "criterios_alta": ["Critério Estabilidade 1", "..."],
-    "guideline_referencia": "Fonte (Ex: Surviving Sepsis Campaign 2021)"
+    "medidas_gerais": ["Dieta", "Cabeceira", "Monitorização"],
+    "criterios_internacao": ["Critério para manter em observação ou subir para UTI"],
+    "criterios_alta": ["Critério para alta domiciliar"],
+    "guideline_referencia": "Fonte (Ex: Uptodate, Guidelines Nacionais)"
   }
   Baseie-se em doses para adulto 70kg (padrão).`;
 
@@ -255,7 +232,6 @@ export default async function handler(req, res) {
     const data = await response.json();
     const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    // --- CORREÇÃO ROBUSTA DE JSON (Mantida) ---
     let cleanText = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
     const firstBrace = cleanText.indexOf('{');
     const lastBrace = cleanText.lastIndexOf('}');
@@ -268,7 +244,6 @@ export default async function handler(req, res) {
         res.status(200).json(JSON.parse(cleanText));
     } catch (parseError) {
         console.error("Erro Fatal Parse JSON:", parseError);
-        console.log("Texto recebido da IA:", textResponse); 
         throw new Error("A IA retornou um formato inválido (não é JSON).");
     }
 
