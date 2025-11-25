@@ -219,7 +219,8 @@ export default function EmergencyGuideApp() {
       });
 
       if (!response.ok) {
-        throw new Error('Erro ao analisar imagem.');
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.details || 'Erro ao analisar imagem.');
       }
 
       const data = await response.json();
@@ -229,17 +230,13 @@ export default function EmergencyGuideApp() {
       try {
         if (typeof finalResult === 'string' && finalResult.trim().startsWith('{')) {
           const parsed = JSON.parse(finalResult);
-          // Procura pelo objeto de análise dentro do JSON (ex: analise_ecg, analysis, ou o próprio objeto)
           const content = parsed.analise_ecg || parsed.analysis || parsed;
           
           if (typeof content === 'object' && content !== null) {
-            // Converte o objeto JSON em uma lista de texto legível
             finalResult = Object.entries(content)
               .filter(([_, v]) => v !== null && v !== undefined)
               .map(([k, v]) => {
-                // Formata a chave: complexo_qrs -> COMPLEXO QRS
                 const label = k.replace(/_/g, ' ').toUpperCase();
-                // Formata o valor: array vira string separada por vírgula
                 const value = Array.isArray(v) ? v.join(', ') : String(v);
                 return `• ${label}: ${value}`;
               })
@@ -254,7 +251,7 @@ export default function EmergencyGuideApp() {
 
     } catch (error) {
       console.error("Erro na análise:", error);
-      showError("Falha na análise da imagem. Tente novamente.");
+      showError(error.message || "Falha na análise da imagem. Tente novamente.");
     } finally {
       setIsAnalyzingImage(false);
     }
@@ -626,7 +623,8 @@ export default function EmergencyGuideApp() {
       });
 
       if (!response.ok) {
-          throw new Error('Erro ao se comunicar com a IA.');
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.details || errData.error || 'Erro ao se comunicar com a IA.');
       }
       
       const parsedConduct = await response.json();
@@ -649,7 +647,7 @@ export default function EmergencyGuideApp() {
 
     } catch (error) {
       console.error("Erro API:", error);
-      showError("Erro ao gerar conduta. Tente novamente.");
+      showError(error.message || "Erro ao gerar conduta. Tente novamente.");
     } finally {
       setLoading(false);
     }
