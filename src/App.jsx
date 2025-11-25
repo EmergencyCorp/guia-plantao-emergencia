@@ -6,7 +6,7 @@ import {
   ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save, Cloud, CloudOff, Settings, Info,
   HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine, Wind, Droplet, Timer, Skull, Printer, FilePlus, Calculator,
   Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2, SprayCan, CalendarDays, Utensils, Zap, Camera, Upload, Eye,
-  Sun, Moon, BedDouble // Ícone novo para Observação
+  Sun, Moon, BedDouble, ClipboardList, UserCheck
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -143,6 +143,13 @@ export default function EmergencyGuideApp() {
   const [imageQuery, setImageQuery] = useState('');
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
   const [imageAnalysisResult, setImageAnalysisResult] = useState(null);
+
+  // --- ESTADOS BEDSIDE ---
+  const [showBedsideModal, setShowBedsideModal] = useState(false);
+  const [bedsideAnamnesis, setBedsideAnamnesis] = useState('');
+  const [bedsideExams, setBedsideExams] = useState('');
+  const [bedsideResult, setBedsideResult] = useState(null);
+  const [isGeneratingBedside, setIsGeneratingBedside] = useState(false);
 
   const [isCurrentConductFavorite, setIsCurrentConductFavorite] = useState(false);
 
@@ -385,7 +392,7 @@ export default function EmergencyGuideApp() {
       if (!currentUser) return;
       const newEntry = { query: term, room, timestamp: new Date().toISOString() };
       const hist = recentSearches.filter(s => s.query.toLowerCase() !== term.toLowerCase());
-      const updated = [newEntry, ...hist].slice(0, 10); // CORRIGIDO: de slice(10) para slice(0, 10)
+      const updated = [newEntry, ...hist].slice(0, 10); 
       setRecentSearches(updated);
       localStorage.setItem(`history_${currentUser.username}`, JSON.stringify(updated));
   
@@ -693,6 +700,45 @@ export default function EmergencyGuideApp() {
     }
   };
 
+  const generateBedsideConduct = async () => {
+    if (!bedsideAnamnesis.trim()) {
+      showError('Por favor, preencha a anamnese do paciente.');
+      return;
+    }
+
+    setIsGeneratingBedside(true);
+    setBedsideResult(null);
+
+    try {
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          mode: 'bedside', 
+          anamnesis: bedsideAnamnesis,
+          exams: bedsideExams,
+          // Campos abaixo são ignorados no modo bedside mas evitam erro se a API validar
+          searchQuery: 'Bedside Case', 
+          activeRoom: 'bedside' 
+        })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.details || 'Erro ao gerar conduta bedside.');
+      }
+
+      const data = await response.json();
+      setBedsideResult(data);
+
+    } catch (error) {
+      console.error("Erro Bedside:", error);
+      showError("Erro ao processar o caso clínico. Tente novamente.");
+    } finally {
+      setIsGeneratingBedside(false);
+    }
+  };
+
   const showError = (msg) => { setErrorMsg(msg); setTimeout(() => setErrorMsg(''), 4000); };
 
   const getVitalIcon = (text) => {
@@ -915,6 +961,12 @@ export default function EmergencyGuideApp() {
              <button onClick={() => setShowImageModal(true)} className={`p-2 rounded-full transition-colors flex items-center gap-2 ${isDarkMode ? 'text-blue-300 bg-slate-800 hover:bg-slate-700' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'}`} title="Análise de Imagem IA">
                 <Camera size={20} />
                 <span className="text-xs font-bold hidden sm:inline">IA Vision</span>
+             </button>
+
+             {/* BOTÃO BEDSIDE (NOVO) */}
+             <button onClick={() => setShowBedsideModal(true)} className={`p-2 rounded-full transition-colors flex items-center gap-2 ${isDarkMode ? 'text-indigo-300 bg-slate-800 hover:bg-slate-700' : 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100'}`} title="BedSide - Clinical Guidance">
+                <ClipboardList size={20} />
+                <span className="text-xs font-bold hidden sm:inline">BedSide</span>
              </button>
 
              <button onClick={() => setShowFavoritesModal(true)} className={`p-2 rounded-full transition-colors ${isDarkMode ? 'text-yellow-400 hover:bg-slate-800' : 'text-yellow-500 hover:bg-yellow-50'}`} title="Meus Favoritos"><Star size={20} /></button>
@@ -1298,6 +1350,109 @@ export default function EmergencyGuideApp() {
         </div>
       )}
 
+      {/* MODAL BEDSIDE - CLINICAL GUIDANCE */}
+      {showBedsideModal && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className={`w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] ${isDarkMode ? 'bg-slate-900 text-slate-100' : 'bg-white'}`}>
+            <div className={`p-4 border-b flex justify-between items-center ${isDarkMode ? 'bg-indigo-900/30 border-slate-800' : 'bg-indigo-600 border-indigo-700'}`}>
+              <h3 className={`font-bold flex items-center gap-2 ${isDarkMode ? 'text-indigo-300' : 'text-white'}`}><ClipboardList size={24} /> BedSide - Clinical Guidance</h3>
+              <button onClick={() => setShowBedsideModal(false)} className={`p-2 rounded-full transition-colors ${isDarkMode ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-indigo-700 text-white'}`}><X size={20}/></button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1 grid md:grid-cols-2 gap-6">
+              {/* Coluna da Esquerda: Inputs */}
+              <div className="space-y-4">
+                <div>
+                  <label className={`text-xs font-bold uppercase mb-1 block ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Anamnese Completa</label>
+                  <textarea 
+                    className={`w-full h-40 p-3 rounded-xl border focus:ring-2 focus:ring-indigo-500 outline-none text-sm leading-relaxed resize-none ${isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-200 placeholder-slate-500' : 'bg-gray-50 border-gray-200 text-slate-800'}`}
+                    placeholder="Descreva a história clínica: ID, QP, HMA, antecedentes, alergias, medicações em uso..."
+                    value={bedsideAnamnesis}
+                    onChange={(e) => setBedsideAnamnesis(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className={`text-xs font-bold uppercase mb-1 block ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Exames Complementares / Sinais Vitais</label>
+                  <textarea 
+                    className={`w-full h-32 p-3 rounded-xl border focus:ring-2 focus:ring-indigo-500 outline-none text-sm leading-relaxed resize-none ${isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-200 placeholder-slate-500' : 'bg-gray-50 border-gray-200 text-slate-800'}`}
+                    placeholder="PA, FC, SatO2, Tax, resultados de laboratório, laudos de imagem..."
+                    value={bedsideExams}
+                    onChange={(e) => setBedsideExams(e.target.value)}
+                  />
+                </div>
+                <button 
+                  onClick={generateBedsideConduct} 
+                  disabled={isGeneratingBedside}
+                  className={`w-full py-3 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition-all shadow-lg ${isGeneratingBedside ? 'bg-slate-500 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+                >
+                  {isGeneratingBedside ? <Loader2 className="animate-spin" /> : <><UserCheck size={20}/> Gerar Conduta Personalizada</>}
+                </button>
+              </div>
+
+              {/* Coluna da Direita: Resultados */}
+              <div className={`rounded-xl border p-4 overflow-y-auto max-h-[600px] ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-indigo-50 border-indigo-100'}`}>
+                {!bedsideResult ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center opacity-50">
+                    <ClipboardList size={48} className="mb-4 text-indigo-400" />
+                    <p className="text-sm font-bold">Aguardando dados do caso...</p>
+                    <p className="text-xs mt-1 max-w-xs">Preencha a anamnese e exames ao lado para receber uma orientação clínica completa.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+                    <div>
+                      <h4 className={`text-xs font-bold uppercase border-b pb-1 mb-2 ${isDarkMode ? 'text-indigo-300 border-slate-600' : 'text-indigo-800 border-indigo-200'}`}>Hipóteses Diagnósticas</h4>
+                      <ul className="list-disc list-inside text-sm space-y-1">
+                        {bedsideResult.hipoteses_diagnosticas?.map((h, i) => (
+                          <li key={i} className="font-bold">{h}</li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className={`p-3 rounded-lg text-sm italic border ${isDarkMode ? 'bg-slate-900/50 border-slate-600 text-slate-300' : 'bg-white border-indigo-100 text-slate-600'}`}>
+                      {bedsideResult.racional_clinico}
+                    </div>
+
+                    <div>
+                      <h4 className={`text-xs font-bold uppercase border-b pb-1 mb-2 flex items-center gap-2 ${isDarkMode ? 'text-emerald-400 border-slate-600' : 'text-emerald-800 border-emerald-200'}`}><Pill size={14}/> Conduta Terapêutica</h4>
+                      <div className="space-y-2">
+                        {bedsideResult.conduta_terapeutica?.map((item, i) => (
+                          <div key={i} className={`p-2 rounded border text-sm flex flex-col ${isDarkMode ? 'bg-slate-900 border-slate-600' : 'bg-white border-gray-200'}`}>
+                            <span className="font-bold text-xs uppercase opacity-70">{item.tipo}</span>
+                            <span className="font-medium">{item.detalhe}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className={`text-xs font-bold uppercase border-b pb-1 mb-2 flex items-center gap-2 ${isDarkMode ? 'text-blue-400 border-slate-600' : 'text-blue-800 border-blue-200'}`}><Search size={14}/> Solicitação de Exames</h4>
+                      <ul className="list-disc list-inside text-sm space-y-1">
+                        {bedsideResult.solicitacao_exames?.map((e, i) => <li key={i}>{e}</li>)}
+                      </ul>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                       <div>
+                          <h4 className={`text-xs font-bold uppercase border-b pb-1 mb-2 ${isDarkMode ? 'text-slate-400 border-slate-600' : 'text-slate-600 border-gray-200'}`}>Cuidados Gerais</h4>
+                          <ul className="text-xs space-y-1 list-disc list-inside">
+                             {bedsideResult.cuidados_gerais?.map((c, i) => <li key={i}>{c}</li>)}
+                          </ul>
+                       </div>
+                       <div>
+                          <h4 className={`text-xs font-bold uppercase border-b pb-1 mb-2 ${isDarkMode ? 'text-slate-400 border-slate-600' : 'text-slate-600 border-gray-200'}`}>Orientações</h4>
+                          <ul className="text-xs space-y-1 list-disc list-inside">
+                             {bedsideResult.orientacoes_paciente?.map((o, i) => <li key={i}>{o}</li>)}
+                          </ul>
+                       </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL DE FAVORITOS */}
       {showFavoritesModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
@@ -1307,7 +1462,7 @@ export default function EmergencyGuideApp() {
               <button onClick={() => setShowFavoritesModal(false)} className={`p-2 rounded-full transition-colors ${isDarkMode ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-yellow-100 text-yellow-700'}`}><X size={20} /></button>
             </div>
             <div className={`p-2 max-h-[60vh] overflow-y-auto ${isDarkMode ? 'bg-slate-950' : 'bg-slate-50'}`}>
-              {favorites.length === 0 ? (<div className="text-center p-8 text-slate-400 text-sm">Você ainda não tem favoritos.</div>) : (<div className="space-y-2">{favorites.map((fav) => (<div key={fav.id} className={`p-3 rounded-lg border shadow-sm flex items-center justify-between group transition-colors ${isDarkMode ? 'bg-slate-900 border-slate-800 hover:border-blue-500' : 'bg-white border-gray-200 hover:border-blue-300'}`}><button onClick={() => loadFavoriteConduct(fav)} className="flex-1 text-left"><div className="flex items-center gap-2"><div className={`w-2 h-2 rounded-full shrink-0 ${fav.room === 'verde' ? 'bg-emerald-500' : 'bg-rose-500'}`} /><span className={`font-bold text-sm ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>{fav.query}</span></div><span className="text-[10px] text-slate-400 ml-4">{new Date(fav.lastAccessed).toLocaleDateString()}</span></button><button onClick={(e) => { e.stopPropagation(); removeFavoriteFromList(fav.id); }} className="p-2 text-slate-300 hover:text-red-500 transition-colors" title="Remover"><Trash2 size={16} /></button></div>))}</div>)}
+              {favorites.length === 0 ? (<div className="text-center p-8 text-slate-400 text-sm">Você ainda não tem favoritos.</div>) : (<div className="space-y-2">{favorites.map((fav) => (<div key={fav.id} className={`p-3 rounded-lg border shadow-sm flex items-center justify-between group transition-colors ${isDarkMode ? 'bg-slate-900 border-slate-800 hover:border-blue-500' : 'bg-white border-gray-200 hover:border-blue-300'}`}><button onClick={() => loadFavoriteConduct(fav)} className="flex-1 text-left"><div className="flex items-center gap-2"><div className={`w-2 h-2 rounded-full shrink-0 ${fav.room === 'verde' ? 'bg-emerald-500' : search.room === 'amarela' ? 'bg-amber-500' : 'bg-rose-500'}`} /><span className={`font-bold text-sm ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>{fav.query}</span></div><span className="text-[10px] text-slate-400 ml-4">{new Date(fav.lastAccessed).toLocaleDateString()}</span></button><button onClick={(e) => { e.stopPropagation(); removeFavoriteFromList(fav.id); }} className="p-2 text-slate-300 hover:text-red-500 transition-colors" title="Remover"><Trash2 size={16} /></button></div>))}</div>)}
             </div>
           </div>
         </div>
