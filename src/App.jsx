@@ -65,6 +65,29 @@ if (firebaseConfig && firebaseConfig.apiKey) {
 const appId = (typeof __app_id !== 'undefined') ? __app_id : 'emergency-guide-app';
 const initialToken = (typeof __initial_auth_token !== 'undefined') ? __initial_auth_token : null;
 
+// --- COMPONENTE DE SWITCH (SOL/LUA) ---
+const ThemeToggle = ({ darkMode, setDarkMode }) => (
+  <button
+    onClick={() => setDarkMode(!darkMode)}
+    className={`relative w-16 h-8 rounded-full p-1 transition-colors duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+      darkMode ? 'bg-slate-700 ring-slate-600' : 'bg-blue-100 ring-blue-200'
+    }`}
+    title="Alternar Tema"
+  >
+    <div
+      className={`absolute top-1 left-1 w-6 h-6 rounded-full shadow-md transform transition-transform duration-300 ease-in-out flex items-center justify-center ${
+        darkMode ? 'translate-x-8 bg-slate-800' : 'translate-x-0 bg-white'
+      }`}
+    >
+      {darkMode ? (
+        <Moon size={14} className="text-blue-300" />
+      ) : (
+        <Sun size={14} className="text-orange-500" />
+      )}
+    </div>
+  </button>
+);
+
 export default function EmergencyGuideApp() {
   // --- ESTADO DO MODO ESCURO ---
   const [darkMode, setDarkMode] = useState(() => {
@@ -785,22 +808,12 @@ export default function EmergencyGuideApp() {
 
   if (!currentUser) {
     return (
-      <div className={`min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4 font-sans text-slate-800 dark:text-slate-200 ${darkMode ? 'dark' : ''}`}>
+      <div className={`min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4 font-sans text-slate-800 dark:text-slate-200 transition-colors duration-300 ease-in-out ${darkMode ? 'dark' : ''}`}>
         <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 max-w-md w-full overflow-hidden relative">
           
           {/* BOTÃO DE MODO ESCURO NO LOGIN */}
           <div className="absolute top-4 right-4 z-10">
-             <div 
-               onClick={() => setDarkMode(!darkMode)}
-               className={`w-14 h-8 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300 ${darkMode ? 'bg-slate-700' : 'bg-gray-300/50'}`}
-               title={darkMode ? "Modo Claro" : "Modo Escuro"}
-             >
-               <div 
-                 className={`bg-white w-6 h-6 rounded-full shadow-md transform transition-transform duration-300 flex items-center justify-center ${darkMode ? 'translate-x-6' : 'translate-x-0'}`}
-               >
-                 {darkMode ? <Moon size={14} className="text-slate-800"/> : <Sun size={14} className="text-orange-500"/>}
-               </div>
-             </div>
+             <ThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
           </div>
 
           <div className="bg-gradient-to-br from-blue-900 to-slate-800 p-8 text-center text-white relative">
@@ -811,8 +824,8 @@ export default function EmergencyGuideApp() {
           <div className="p-8 space-y-6">
             {loginError && <div className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-300 p-3 rounded-lg text-xs flex items-center gap-2 border border-red-100 dark:border-red-800 font-mono">{loginError}</div>}
             <form onSubmit={handleLogin} className="space-y-4">
-              <div><label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase ml-1">Usuário</label><div className="relative"><User className="absolute left-3 top-3 text-gray-400 w-5 h-5" /><input type="text" value={usernameInput} onChange={(e)=>setUsernameInput(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-900 dark:text-white" placeholder="Ex: admin" /></div></div>
-              <div><label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase ml-1">Senha</label><div className="relative"><KeyRound className="absolute left-3 top-3 text-gray-400 w-5 h-5" /><input type="password" value={passwordInput} onChange={(e)=>setPasswordInput(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-900 dark:text-white" placeholder="••••••" /></div></div>
+              <div><label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase ml-1">Usuário</label><div className="relative"><User className="absolute left-3 top-3 text-gray-400 w-5 h-5" /><input type="text" value={usernameInput} onChange={(e)=>setUsernameInput(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-900 dark:text-white transition-colors" placeholder="Ex: admin" /></div></div>
+              <div><label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase ml-1">Senha</label><div className="relative"><KeyRound className="absolute left-3 top-3 text-gray-400 w-5 h-5" /><input type="password" value={passwordInput} onChange={(e)=>setPasswordInput(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-900 dark:text-white transition-colors" placeholder="••••••" /></div></div>
               <button type="submit" className="w-full flex items-center justify-center gap-3 bg-blue-900 text-white font-bold p-3.5 rounded-xl hover:bg-blue-800 transition-all shadow-lg mt-2"><LogIn className="w-5 h-5" /> Acessar Sistema</button>
             </form>
             <div className="text-center flex flex-col items-center gap-3 pt-2 border-t border-gray-100 dark:border-gray-700">
@@ -826,25 +839,14 @@ export default function EmergencyGuideApp() {
   }
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans selection:bg-blue-100 dark:selection:bg-blue-900 ${darkMode ? 'dark bg-gray-900 text-slate-200' : 'bg-slate-50 text-slate-800'}`}>
-      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40 shadow-sm">
+    <div className={`min-h-screen flex flex-col font-sans selection:bg-blue-100 dark:selection:bg-blue-900 transition-colors duration-300 ease-in-out ${darkMode ? 'dark bg-gray-900 text-slate-200' : 'bg-slate-50 text-slate-800'}`}>
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40 shadow-sm transition-colors duration-300">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3"><div className="bg-blue-900 p-2 rounded-lg text-white"><ClipboardCheck size={20} /></div><div><h1 className="text-lg font-bold text-slate-800 dark:text-white leading-none">Guia de Plantão</h1><span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold">Suporte Médico</span></div></div>
           <div className="flex items-center gap-3">
              <div className="hidden sm:flex flex-col items-end mr-2"><span className="text-xs font-bold text-slate-700 dark:text-slate-200">{currentUser.name}</span><span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase">{currentUser.role}</span></div>
              
-             {/* SLIDER SWITCH MODO ESCURO */}
-             <div 
-               onClick={() => setDarkMode(!darkMode)}
-               className={`w-14 h-8 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300 ${darkMode ? 'bg-slate-700' : 'bg-gray-300'}`}
-               title={darkMode ? "Modo Claro" : "Modo Escuro"}
-             >
-               <div 
-                 className={`bg-white w-6 h-6 rounded-full shadow-md transform transition-transform duration-300 flex items-center justify-center ${darkMode ? 'translate-x-6' : 'translate-x-0'}`}
-               >
-                 {darkMode ? <Moon size={14} className="text-slate-800"/> : <Sun size={14} className="text-orange-500"/>}
-               </div>
-             </div>
+             <ThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
 
              {/* BOTÃO DE IA VISION (NOVO) */}
              <button onClick={() => setShowImageModal(true)} className="p-2 text-blue-600 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-full transition-colors flex items-center gap-2" title="Análise de Imagem IA">
@@ -888,7 +890,7 @@ export default function EmergencyGuideApp() {
              </div>
           )}
 
-          <div className="bg-white dark:bg-gray-800 p-2 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700 flex items-center gap-2">
+          <div className="bg-white dark:bg-gray-800 p-2 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700 flex items-center gap-2 transition-colors">
             <Search className="ml-3 text-gray-400" size={20} />
             <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && generateConduct()} placeholder="Digite o quadro clínico (ex: Cetoacidose, IAM...)" className="flex-1 py-3 bg-transparent outline-none text-slate-800 dark:text-slate-100 font-medium placeholder-slate-400 dark:placeholder-slate-500" />
             <button onClick={generateConduct} disabled={loading} className={`px-6 py-3 rounded-xl font-bold text-white flex items-center gap-2 transition-all ${loading ? 'bg-slate-300 dark:bg-slate-700' : 'bg-blue-900 hover:bg-blue-800'}`}>{loading ? <Loader2 className="animate-spin" /> : <>Gerar <ArrowRight size={18} /></>}</button>
@@ -912,20 +914,20 @@ export default function EmergencyGuideApp() {
                </div>
             </div>
 
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 flex gap-4">
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 flex gap-4 transition-colors">
                <div className="bg-blue-50 dark:bg-blue-900/20 p-2 rounded-full h-fit text-blue-600 dark:text-blue-400"><User size={24} /></div>
                <div><h3 className="font-bold text-slate-900 dark:text-slate-100 mb-1">Resumo Clínico e Fisiopatologia</h3><p className="text-slate-700 dark:text-slate-300 leading-relaxed text-sm">{conduct.resumo_clinico}</p></div>
             </div>
 
             {conduct.xabcde_trauma && (
-              <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 p-5 rounded-2xl">
+              <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 p-5 rounded-2xl transition-colors">
                 <h3 className="text-orange-900 dark:text-orange-300 font-bold flex items-center gap-2 mb-3 uppercase tracking-wide"><Skull size={20}/> Protocolo de Trauma (ATLS - xABCDE)</h3>
                 <div className="space-y-3">{Object.entries(conduct.xabcde_trauma).map(([key, value]) => (<div key={key} className="flex gap-3 items-start bg-white/60 dark:bg-black/20 p-2 rounded border border-orange-100 dark:border-orange-800/50"><div className="bg-orange-600 text-white w-6 h-6 rounded flex items-center justify-center font-bold uppercase text-xs shrink-0">{key}</div><p className="text-sm text-orange-950 dark:text-orange-200">{value}</p></div>))}</div>
               </div>
             )}
 
             {conduct.criterios_gravidade?.length > 0 && (
-              <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-800 p-5 rounded-2xl">
+              <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-800 p-5 rounded-2xl transition-colors">
                 <h3 className="text-rose-800 dark:text-rose-300 font-bold flex items-center gap-2 mb-3 text-sm uppercase"><AlertTriangle size={18}/> Sinais de Alarme</h3>
                 <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-3">{conduct.criterios_gravidade.map((crit, i) => (<div key={i} className="bg-white/80 dark:bg-black/20 p-2.5 rounded-lg border border-rose-100/50 dark:border-rose-800/50 text-sm text-rose-900 dark:text-rose-200 font-medium flex gap-2"><div className="mt-1 w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"/>{crit}</div>))}</div>
               </div>
@@ -934,7 +936,7 @@ export default function EmergencyGuideApp() {
             <div className="grid lg:grid-cols-12 gap-6 items-start">
               <div className="lg:col-span-4 space-y-6">
                 {/* AVALIAÇÃO E ALVOS */}
-                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden transition-colors">
                    <div className="bg-slate-50 dark:bg-gray-700 px-5 py-3 border-b border-slate-100 dark:border-gray-600 flex items-center gap-2"><Activity size={18} className="text-slate-500 dark:text-slate-400"/><h3 className="font-bold text-slate-700 dark:text-slate-200 text-sm uppercase">Avaliação Inicial</h3></div>
                    <div className="p-5 space-y-5 text-sm">
                       {conduct.avaliacao_inicial?.sinais_vitais_alvos && (<div><span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase block mb-2">Alvos Terapêuticos</span><div className="grid grid-cols-1 gap-2">{conduct.avaliacao_inicial.sinais_vitais_alvos.map((s,i)=>(<div key={i} className="bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-lg border border-indigo-100 dark:border-indigo-800 flex items-center gap-3 text-indigo-900 dark:text-indigo-200">{getVitalIcon(s)} <span className="font-bold">{s}</span></div>))}</div></div>)}
@@ -945,7 +947,7 @@ export default function EmergencyGuideApp() {
                    </div>
                 </div>
                 
-                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden transition-colors">
                    <div className="bg-blue-50 dark:bg-blue-900/20 px-5 py-3 border-b border-blue-100 dark:border-blue-800 flex items-center gap-2"><Search size={18} className="text-blue-600 dark:text-blue-400"/><h3 className="font-bold text-blue-900 dark:text-blue-200 text-sm uppercase">Investigação Diagnóstica</h3></div>
                    <div className="p-5 space-y-4 text-sm">
                       {conduct.achados_exames?.ecg && <div><div className="flex items-center gap-2 font-bold text-slate-700 dark:text-slate-200 mb-1"><HeartPulse size={14} className="text-rose-500"/> ECG</div><p className="bg-slate-50 dark:bg-gray-700 p-2 rounded border border-slate-100 dark:border-gray-600 text-slate-600 dark:text-slate-300">{conduct.achados_exames.ecg}</p></div>}
@@ -954,7 +956,7 @@ export default function EmergencyGuideApp() {
                    </div>
                 </div>
 
-                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden transition-colors">
                    <div className="bg-indigo-50 dark:bg-indigo-900/20 px-5 py-3 border-b border-indigo-100 dark:border-indigo-800 flex items-center gap-2"><FileText size={18} className="text-indigo-600 dark:text-indigo-400"/><h3 className="font-bold text-indigo-900 dark:text-indigo-200 text-sm uppercase">Critérios de Desfecho</h3></div>
                    <div className="p-5 space-y-4 text-sm">
                       <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg border border-amber-100 dark:border-amber-800"><span className="text-xs font-bold text-amber-800 dark:text-amber-300 uppercase block mb-1">Internação / UTI</span><ul className="space-y-1">{conduct.criterios_internacao?.map((c,i)=><li key={i} className="text-amber-900 dark:text-amber-200 flex gap-2"><div className="mt-1.5 w-1 h-1 bg-amber-500 rounded-full shrink-0"/>{c}</li>)}</ul></div>
@@ -999,7 +1001,7 @@ export default function EmergencyGuideApp() {
                    )}
                 </div>
 
-                <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 shadow-sm">
+                <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 shadow-sm transition-colors">
                    <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-5 flex items-center gap-2"><ArrowRight className="text-purple-600 dark:text-purple-400"/> Fluxo de Escalonamento</h3>
                    <div className="space-y-6 relative">
                       <div className="absolute left-3.5 top-2 bottom-2 w-0.5 bg-slate-100 dark:bg-gray-700"></div>
@@ -1017,7 +1019,7 @@ export default function EmergencyGuideApp() {
         )}
       </main>
 
-      <footer className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 mt-auto">
+      <footer className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 mt-auto transition-colors">
         <div className="max-w-4xl mx-auto px-4 py-8 text-center">
           <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-xl p-4 mb-6 flex flex-col md:flex-row gap-4 items-center text-left">
              <ShieldAlert className="text-amber-600 dark:text-amber-400 shrink-0 w-8 h-8" />
@@ -1036,7 +1038,7 @@ export default function EmergencyGuideApp() {
               <div className="flex gap-2"><button onClick={() => window.print()} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors"><Printer size={16}/> Imprimir</button><button onClick={() => setShowPrescriptionModal(false)} className="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 p-2 rounded-lg transition-colors"><X size={20}/></button></div>
             </div>
             {/* Área do papel - Em tela pode ser escura, na impressão força branco */}
-            <div className="p-12 overflow-y-auto print:overflow-visible font-serif text-slate-900 dark:text-slate-200 bg-white dark:bg-gray-900 print:bg-white print:text-black flex-1 flex flex-col h-full relative">
+            <div className="p-12 overflow-y-auto print:overflow-visible font-serif text-slate-900 dark:text-slate-200 bg-white dark:bg-gray-900 print:bg-white print:text-black flex-1 flex flex-col h-full relative transition-colors">
               <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none"><Activity size={400} /></div>
               <header className="flex flex-col items-center border-b-4 border-double border-slate-800 dark:border-slate-200 print:border-black pb-6 mb-8"><h1 className="text-3xl font-bold tracking-widest uppercase text-slate-900 dark:text-slate-100 print:text-black">{currentUser?.name || "NOME DO MÉDICO"}</h1><div className="flex items-center gap-2 mt-2 text-sm font-bold text-slate-600 dark:text-slate-400 print:text-gray-600 uppercase tracking-wide"><span>CRM: {currentUser?.crm || "00000/UF"}</span><span>•</span><span>CLÍNICA MÉDICA</span></div></header>
               <div className="flex-1 space-y-8">
@@ -1060,7 +1062,7 @@ export default function EmergencyGuideApp() {
       {/* MODAL DE CALCULADORA DE INFUSÃO */}
       {showCalculatorModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
+          <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden transition-colors">
             <div className="bg-rose-50 dark:bg-rose-900/20 p-4 border-b border-rose-100 dark:border-rose-800 flex justify-between items-center">
               <h3 className="font-bold text-rose-800 dark:text-rose-200 flex items-center gap-2"><Calculator size={20} /> Calculadora de Infusão</h3>
               <button onClick={() => setShowCalculatorModal(false)} className="p-2 hover:bg-rose-100 dark:hover:bg-rose-900/40 rounded-full text-rose-700 dark:text-rose-300 transition-colors"><X size={20}/></button>
@@ -1070,7 +1072,7 @@ export default function EmergencyGuideApp() {
               <div>
                 <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase ml-1 mb-1 block">Peso do Paciente</label>
                 <div className="relative">
-                   <input type="number" id="peso" value={calcInputs.peso} onChange={(e) => handleCalcChange('peso', e.target.value)} placeholder="0.0" className="w-full pl-4 pr-12 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-rose-500 font-bold text-slate-800 dark:text-white" />
+                   <input type="number" id="peso" value={calcInputs.peso} onChange={(e) => handleCalcChange('peso', e.target.value)} placeholder="0.0" className="w-full pl-4 pr-12 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-rose-500 font-bold text-slate-800 dark:text-white transition-colors" />
                    <span className="absolute right-4 top-3.5 text-xs font-bold text-gray-400">kg</span>
                 </div>
               </div>
@@ -1079,8 +1081,8 @@ export default function EmergencyGuideApp() {
               <div>
                 <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase ml-1 mb-1 block">Dose Desejada</label>
                 <div className="flex gap-2">
-                   <input type="number" id="dose" value={calcInputs.dose} onChange={(e) => handleCalcChange('dose', e.target.value)} placeholder="0.0" className="w-1/2 pl-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-rose-500 font-bold text-slate-800 dark:text-white" />
-                   <select id="tp_dose" value={calcInputs.tp_dose} onChange={(e) => handleCalcChange('tp_dose', e.target.value)} className="w-1/2 px-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-rose-500 outline-none">
+                   <input type="number" id="dose" value={calcInputs.dose} onChange={(e) => handleCalcChange('dose', e.target.value)} placeholder="0.0" className="w-1/2 pl-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-rose-500 font-bold text-slate-800 dark:text-white transition-colors" />
+                   <select id="tp_dose" value={calcInputs.tp_dose} onChange={(e) => handleCalcChange('tp_dose', e.target.value)} className="w-1/2 px-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-rose-500 outline-none transition-colors">
                       <option value="mcgmin">mcg/kg/min</option>
                       <option value="mgmin">mg/kg/min</option>
                       <option value="mcgh">mcg/kg/h</option>
@@ -1093,8 +1095,8 @@ export default function EmergencyGuideApp() {
               <div>
                 <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase ml-1 mb-1 block">Concentração da Solução</label>
                 <div className="flex gap-2">
-                   <input type="number" id="conc" value={calcInputs.conc} onChange={(e) => handleCalcChange('conc', e.target.value)} placeholder="0.0" className="w-1/2 pl-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-rose-500 font-bold text-slate-800 dark:text-white" />
-                   <select id="tp_conc" value={calcInputs.tp_conc} onChange={(e) => handleCalcChange('tp_conc', e.target.value)} className="w-1/2 px-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-rose-500 outline-none">
+                   <input type="number" id="conc" value={calcInputs.conc} onChange={(e) => handleCalcChange('conc', e.target.value)} placeholder="0.0" className="w-1/2 pl-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-rose-500 font-bold text-slate-800 dark:text-white transition-colors" />
+                   <select id="tp_conc" value={calcInputs.tp_conc} onChange={(e) => handleCalcChange('tp_conc', e.target.value)} className="w-1/2 px-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-rose-500 outline-none transition-colors">
                       <option value="mgml">mg/ml</option>
                       <option value="mcgml">mcg/ml</option>
                    </select>
@@ -1102,7 +1104,7 @@ export default function EmergencyGuideApp() {
               </div>
 
               {/* Resultado */}
-              <div className="bg-rose-100 dark:bg-rose-900/40 rounded-xl p-6 text-center mt-6">
+              <div className="bg-rose-100 dark:bg-rose-900/40 rounded-xl p-6 text-center mt-6 transition-colors">
                 <span className="text-xs font-bold text-rose-600 dark:text-rose-300 uppercase mb-1 block">Velocidade de Infusão</span>
                 <div id="resultado" className="text-3xl font-extrabold text-rose-900 dark:text-rose-100">{calcResult}</div>
               </div>
@@ -1114,7 +1116,7 @@ export default function EmergencyGuideApp() {
       {/* MODAL DE IA VISION (ANÁLISE DE IMAGEM) */}
       {showImageModal && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-gray-800 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+          <div className="bg-white dark:bg-gray-800 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] transition-colors">
             <div className="bg-blue-600 p-4 border-b border-blue-700 flex justify-between items-center">
               <h3 className="font-bold text-white flex items-center gap-2"><Camera size={24} /> IA Vision - Análise de Exames</h3>
               <button onClick={closeImageModal} className="p-2 hover:bg-blue-700 rounded-full text-white transition-colors"><X size={20}/></button>
@@ -1156,7 +1158,7 @@ export default function EmergencyGuideApp() {
                         value={imageQuery} 
                         onChange={(e) => setImageQuery(e.target.value)} 
                         placeholder="Ex: Onde está a fratura? / Qual o ritmo deste ECG?" 
-                        className="w-full pl-4 pr-12 py-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 font-medium text-slate-800 dark:text-white" 
+                        className="w-full pl-4 pr-12 py-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 font-medium text-slate-800 dark:text-white transition-colors" 
                       />
                       <Eye className="absolute right-4 top-3 text-gray-400" size={20} />
                     </div>
@@ -1170,7 +1172,7 @@ export default function EmergencyGuideApp() {
                     {isAnalyzingImage ? <Loader2 className="animate-spin" /> : <><Camera size={20}/> Analisar Imagem</>}
                   </button>
                   
-                  <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-100 dark:border-yellow-800/50 p-3 rounded-lg flex gap-3 items-start">
+                  <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-100 dark:border-yellow-800/50 p-3 rounded-lg flex gap-3 items-start transition-colors">
                     <AlertTriangle className="text-yellow-600 dark:text-yellow-400 shrink-0 w-5 h-5 mt-0.5" />
                     <p className="text-xs text-yellow-800 dark:text-yellow-300 text-justify">
                       <strong>Atenção:</strong> As imagens são processadas em tempo real e <strong>deletadas imediatamente</strong> após fechar esta janela. Não substitui a avaliação do radiologista ou especialista.
@@ -1179,7 +1181,7 @@ export default function EmergencyGuideApp() {
                 </div>
               ) : (
                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-                  <div className="flex gap-4 items-start bg-slate-50 dark:bg-gray-900/50 p-4 rounded-xl border border-slate-200 dark:border-gray-700">
+                  <div className="flex gap-4 items-start bg-slate-50 dark:bg-gray-900/50 p-4 rounded-xl border border-slate-200 dark:border-gray-700 transition-colors">
                     <div className="w-24 h-24 shrink-0 rounded-lg overflow-hidden bg-black border border-slate-300 dark:border-gray-600">
                       <img src={selectedImage} alt="Miniatura" className="w-full h-full object-cover" />
                     </div>
@@ -1189,7 +1191,7 @@ export default function EmergencyGuideApp() {
                     </div>
                   </div>
 
-                  <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-blue-100 dark:border-gray-700 shadow-sm">
+                  <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-blue-100 dark:border-gray-700 shadow-sm transition-colors">
                     <h4 className="font-bold text-blue-900 dark:text-blue-300 flex items-center gap-2 mb-4 border-b border-blue-50 dark:border-gray-700 pb-2">
                       <Microscope size={20}/> Laudo Preliminar IA
                     </h4>
@@ -1214,12 +1216,12 @@ export default function EmergencyGuideApp() {
       {/* MODAL DE FAVORITOS */}
       {showFavoritesModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-gray-800 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
+          <div className="bg-white dark:bg-gray-800 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden transition-colors">
             <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 border-b border-yellow-100 dark:border-yellow-800 flex justify-between items-center">
               <div className="flex items-center gap-2 text-yellow-800 dark:text-yellow-400 font-bold"><Star size={20} fill="currentColor" /> Meus Favoritos</div>
               <button onClick={() => setShowFavoritesModal(false)} className="p-2 hover:bg-yellow-100 dark:hover:bg-yellow-900/40 rounded-full text-yellow-700 dark:text-yellow-400 transition-colors"><X size={20} /></button>
             </div>
-            <div className="p-2 max-h-[60vh] overflow-y-auto bg-slate-50 dark:bg-gray-900">
+            <div className="p-2 max-h-[60vh] overflow-y-auto bg-slate-50 dark:bg-gray-900 transition-colors">
               {favorites.length === 0 ? (<div className="text-center p-8 text-slate-400 text-sm">Você ainda não tem favoritos.</div>) : (<div className="space-y-2">{favorites.map((fav) => (<div key={fav.id} className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm flex items-center justify-between group hover:border-blue-300 dark:hover:border-blue-600 transition-colors"><button onClick={() => loadFavoriteConduct(fav)} className="flex-1 text-left"><div className="flex items-center gap-2"><div className={`w-2 h-2 rounded-full shrink-0 ${fav.room === 'verde' ? 'bg-emerald-500' : 'bg-rose-500'}`} /><span className="font-bold text-slate-700 dark:text-slate-200 text-sm">{fav.query}</span></div><span className="text-[10px] text-slate-400 dark:text-slate-500 ml-4">{new Date(fav.lastAccessed).toLocaleDateString()}</span></button><button onClick={(e) => { e.stopPropagation(); removeFavoriteFromList(fav.id); }} className="p-2 text-slate-300 dark:text-slate-600 hover:text-red-500 dark:hover:text-red-400 transition-colors" title="Remover"><Trash2 size={16} /></button></div>))}</div>)}
             </div>
           </div>
@@ -1229,14 +1231,14 @@ export default function EmergencyGuideApp() {
       {/* MODAL DE BLOCO DE NOTAS */}
       {showNotepad && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200 print:hidden">
-          <div className="bg-white dark:bg-gray-800 w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col h-[80vh] overflow-hidden">
+          <div className="bg-white dark:bg-gray-800 w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col h-[80vh] overflow-hidden transition-colors">
             <div className="bg-gray-50 dark:bg-gray-700 p-4 border-b border-gray-200 dark:border-gray-600 flex justify-between items-center">
               <div className="flex items-center gap-3"><div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-lg text-blue-600 dark:text-blue-300"><Edit size={20} /></div><div><h3 className="font-bold text-slate-800 dark:text-white leading-none">Meu Caderno</h3><div className="flex items-center gap-2 mt-1"><span className="text-xs text-slate-500 dark:text-slate-400">Anotações de {currentUser?.name}</span><span className="text-gray-300 dark:text-gray-600">•</span>{isCloudConnected ? (<span className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400 font-medium"><Cloud size={10} /> Nuvem Ativa</span>) : (<span className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 font-medium"><CloudOff size={10} /> Offline</span>)}</div></div></div>
               <button onClick={() => setShowNotepad(false)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full text-gray-500 dark:text-gray-400 transition-colors"><X size={20} /></button>
             </div>
-            <div className="flex-1 bg-yellow-50 dark:bg-gray-900 relative">
+            <div className="flex-1 bg-yellow-50 dark:bg-gray-900 relative transition-colors">
               <textarea 
-                className="w-full h-full p-6 resize-none focus:outline-none text-slate-700 dark:text-slate-200 leading-relaxed bg-transparent text-lg font-medium font-serif" 
+                className="w-full h-full p-6 resize-none focus:outline-none text-slate-700 dark:text-slate-200 leading-relaxed bg-transparent text-lg font-medium font-serif transition-colors" 
                 placeholder="Escreva suas anotações..." 
                 value={userNotes} 
                 onChange={handleNoteChange} 
@@ -1247,7 +1249,7 @@ export default function EmergencyGuideApp() {
                 }} 
               />
             </div>
-            <div className="p-3 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center text-xs text-gray-500 dark:text-gray-400"><div className="flex items-center gap-1.5">{isSaving ? (<><Loader2 size={14} className="text-blue-600 animate-spin" /><span className="text-blue-600">Salvando...</span></>) : (<><Save size={14} className="text-green-600" /><span>{isCloudConnected ? "Salvo na nuvem" : "Salvo localmente"}</span></>)}</div><span>{userNotes.length} caracteres</span></div>
+            <div className="p-3 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center text-xs text-gray-500 dark:text-gray-400 transition-colors"><div className="flex items-center gap-1.5">{isSaving ? (<><Loader2 size={14} className="text-blue-600 animate-spin" /><span className="text-blue-600">Salvando...</span></>) : (<><Save size={14} className="text-green-600" /><span>{isCloudConnected ? "Salvo na nuvem" : "Salvo localmente"}</span></>)}</div><span>{userNotes.length} caracteres</span></div>
           </div>
         </div>
       )}
