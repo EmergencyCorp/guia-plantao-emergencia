@@ -96,7 +96,6 @@ export default async function handler(req, res) {
   let promptExtra = "";
   let roleDefinition = "";
 
-  // Lógica de Sala e Protocolos (Mantida igual)
   if (activeRoom === 'vermelha') {
     roleDefinition = "Você é um médico INTENSIVISTA e EMERGENCISTA SÊNIOR. Sua prioridade é salvar a vida do paciente com precisão absoluta e tolerância zero para erros.";
     promptExtra += `
@@ -115,7 +114,7 @@ export default async function handler(req, res) {
     `;
   }
 
-  // Protocolos específicos (Dengue, Sepse, IAM, Trauma) mantidos...
+  // Protocolos específicos
   if (lowerQuery.includes('dengue')) promptExtra += ` PROTOCOLO DENGUE (MS BRASIL)... `;
   if (lowerQuery.includes('sepse') || lowerQuery.includes('septico')) promptExtra += ` PROTOCOLO SEPSE... `;
   if (lowerQuery.includes('iam') || lowerQuery.includes('infarto')) promptExtra += ` PROTOCOLO IAM... `;
@@ -165,11 +164,26 @@ export default async function handler(req, res) {
     const data = await response.json();
     const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    // --- CORREÇÃO DO BUG 500 ---
-    // Remove crases de markdown (```json e ```) que a IA pode enviar acidentalmente
-    const cleanText = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+    // --- CORREÇÃO ROBUSTA DE JSON ---
+    // 1. Remove blocos Markdown
+    let cleanText = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
 
-    res.status(200).json(JSON.parse(cleanText));
+    // 2. Extrai APENAS o objeto JSON (do primeiro '{' ao último '}')
+    // Isso evita erros se a IA responder: "Aqui está o JSON: { ... }"
+    const firstBrace = cleanText.indexOf('{');
+    const lastBrace = cleanText.lastIndexOf('}');
+
+    if (firstBrace !== -1 && lastBrace !== -1) {
+      cleanText = cleanText.substring(firstBrace, lastBrace + 1);
+    }
+
+    try {
+        res.status(200).json(JSON.parse(cleanText));
+    } catch (parseError) {
+        console.error("Erro Fatal Parse JSON:", parseError);
+        console.log("Texto recebido da IA:", textResponse); // Log para debug
+        throw new Error("A IA retornou um formato inválido (não é JSON).");
+    }
 
   } catch (error) {
     console.error("Erro interno na API:", error);
