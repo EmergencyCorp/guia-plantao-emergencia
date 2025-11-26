@@ -6,7 +6,7 @@ import {
   ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save, Cloud, CloudOff, Settings, Info,
   HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine, Wind, Droplet, Timer, Skull, Printer, FilePlus, Calculator,
   Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2, SprayCan, CalendarDays, Utensils, Zap, Camera, Upload, Eye,
-  Sun, Moon, BedDouble, ClipboardList, UserCheck, Calculator as CalcIcon
+  Sun, Moon, BedDouble, ClipboardList, UserCheck, Calculator as CalcIcon, HelpCircle
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -319,6 +319,9 @@ export default function EmergencyGuideApp() {
   const [bedsideExams, setBedsideExams] = useState('');
   const [bedsideResult, setBedsideResult] = useState(null);
   const [isGeneratingBedside, setIsGeneratingBedside] = useState(false);
+
+  // --- ESTADOS DE AJUDA ---
+  const [showHelpModal, setShowHelpModal] = useState(false);
 
   const [isCurrentConductFavorite, setIsCurrentConductFavorite] = useState(false);
 
@@ -1134,7 +1137,7 @@ export default function EmergencyGuideApp() {
              <img 
                src={isDarkMode ? "https://i.ibb.co/d0W4s2yH/logobranco.png" : "https://i.ibb.co/vCp5pXZP/logopreto.png"} 
                alt="Logo" 
-               className="h-12 w-auto object-contain" 
+               className="h-10 w-auto object-contain" 
              />
              <div><h1 className={`text-lg font-bold leading-none ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>Guia de Plantão</h1><span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Suporte Médico</span></div>
           </div>
@@ -1170,9 +1173,18 @@ export default function EmergencyGuideApp() {
       </header>
 
       <main className="flex-grow max-w-6xl mx-auto px-4 py-8 space-y-8 w-full relative">
-        {/* BOTÃO FLUTUANTE DE RECEITA (SÓ SALA VERDE) */}
+        {/* BOTÃO FLUTUANTE DE AJUDA */}
+        <button 
+          onClick={() => setShowHelpModal(true)} 
+          className={`fixed bottom-6 right-6 z-40 p-4 rounded-full shadow-xl transition-transform hover:scale-110 ${isDarkMode ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-blue-700 hover:bg-blue-800 text-white'}`}
+          title="Ajuda e Funcionalidades"
+        >
+          <HelpCircle size={24} />
+        </button>
+
+        {/* BOTÃO FLUTUANTE DE RECEITA (SÓ SALA VERDE) - Ajustado para não sobrepor ajuda */}
         {activeRoom === 'verde' && selectedPrescriptionItems.length > 0 && (
-          <button onClick={() => setShowPrescriptionModal(true)} className="fixed bottom-8 right-8 z-50 bg-blue-600 hover:bg-blue-700 text-white px-6 py-4 rounded-full shadow-xl flex items-center gap-3 font-bold transition-all animate-in slide-in-from-bottom-4"><Printer size={24} /> Gerar Receita ({selectedPrescriptionItems.length})</button>
+          <button onClick={() => setShowPrescriptionModal(true)} className="fixed bottom-24 right-6 z-50 bg-blue-600 hover:bg-blue-700 text-white px-6 py-4 rounded-full shadow-xl flex items-center gap-3 font-bold transition-all animate-in slide-in-from-bottom-4"><Printer size={24} /> Gerar Receita ({selectedPrescriptionItems.length})</button>
         )}
 
         <div className="space-y-6">
@@ -1726,6 +1738,74 @@ export default function EmergencyGuideApp() {
                         </div>
                      );
                   })()}
+               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE AJUDA */}
+      {showHelpModal && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className={`w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden max-h-[80vh] flex flex-col ${isDarkMode ? 'bg-slate-900 text-slate-100' : 'bg-white'}`}>
+            <div className={`p-6 border-b ${isDarkMode ? 'border-slate-800 bg-slate-900' : 'border-gray-100 bg-slate-50'}`}>
+              <div className="flex justify-between items-center mb-2">
+                <div className="flex items-center gap-3">
+                   <div className={`p-3 rounded-full ${isDarkMode ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-100 text-blue-600'}`}>
+                      <Info size={24} />
+                   </div>
+                   <div>
+                      <h2 className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Ajuda & Funcionalidades</h2>
+                      <p className={`text-sm ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Guia rápido da plataforma</p>
+                   </div>
+                </div>
+                <button onClick={() => setShowHelpModal(false)} className={`p-2 rounded-full transition-colors ${isDarkMode ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-gray-200 text-gray-500'}`}><X size={24}/></button>
+              </div>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-6">
+               <div className="grid md:grid-cols-2 gap-6">
+                  <div className={`p-4 rounded-xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
+                     <h3 className={`font-bold mb-2 flex items-center gap-2 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-700'}`}><Search size={18}/> Busca de Condutas</h3>
+                     <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
+                        Digite qualquer condição clínica (ex: "Sepse", "IAM", "Cetoacidose") na barra principal para receber uma conduta completa baseada em protocolos atualizados, ajustada para a sala selecionada.
+                     </p>
+                  </div>
+
+                  <div className={`p-4 rounded-xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
+                     <h3 className={`font-bold mb-2 flex items-center gap-2 ${isDarkMode ? 'text-blue-400' : 'text-blue-700'}`}><Camera size={18}/> IA Vision</h3>
+                     <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
+                        Envie fotos de exames (ECG, Raio-X, Tomografia, Lesões de Pele) para receber uma análise instantânea e sugestão diagnóstica pela Inteligência Artificial.
+                     </p>
+                  </div>
+
+                  <div className={`p-4 rounded-xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
+                     <h3 className={`font-bold mb-2 flex items-center gap-2 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-700'}`}><ClipboardList size={18}/> BedSide Clinical Guidance</h3>
+                     <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
+                        Ferramenta avançada para casos complexos. Insira a anamnese completa e exames para receber uma discussão de caso detalhada, hipóteses e plano terapêutico personalizado.
+                     </p>
+                  </div>
+
+                  <div className={`p-4 rounded-xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
+                     <h3 className={`font-bold mb-2 flex items-center gap-2 ${isDarkMode ? 'text-rose-400' : 'text-rose-700'}`}><Calculator size={18}/> Calculadoras & Infusão</h3>
+                     <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
+                        Acesse calculadoras de risco (Scores) como Grace, Wells e Glasgow, além de uma calculadora dedicada para diluição e vazão de drogas vasoativas/sedação.
+                     </p>
+                  </div>
+
+                  <div className={`p-4 rounded-xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
+                     <h3 className={`font-bold mb-2 flex items-center gap-2 ${isDarkMode ? 'text-amber-400' : 'text-amber-700'}`}><BedDouble size={18}/> Salas de Atendimento</h3>
+                     <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
+                        Alterne entre <strong>Verde</strong> (Ambulatorial), <strong>Amarela</strong> (Observação) e <strong>Vermelha</strong> (Emergência) para ajustar a agressividade e o foco da conduta gerada.
+                     </p>
+                  </div>
+
+                  <div className={`p-4 rounded-xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
+                     <h3 className={`font-bold mb-2 flex items-center gap-2 ${isDarkMode ? 'text-purple-400' : 'text-purple-700'}`}><Edit size={18}/> Caderno & Favoritos</h3>
+                     <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
+                        Salve condutas frequentes nos Favoritos para acesso rápido e use o Caderno para suas anotações de plantão, tudo salvo automaticamente na nuvem.
+                     </p>
+                  </div>
                </div>
             </div>
           </div>
