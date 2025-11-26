@@ -1194,7 +1194,7 @@ export default function EmergencyGuideApp() {
              <img 
                src={isDarkMode ? "https://i.ibb.co/d0W4s2yH/logobranco.png" : "https://i.ibb.co/vCp5pXZP/logopreto.png"} 
                alt="Logo" 
-               className="h-10 w-auto object-contain" 
+               className="h-12 w-auto object-contain" 
              />
              <div><h1 className={`text-lg font-bold leading-none ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>Lister Guidance</h1><span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Suporte Médico</span></div>
           </div>
@@ -1843,11 +1843,20 @@ export default function EmergencyGuideApp() {
                      </p>
                   </div>
 
+                  {/* Scores Médicos */}
                   <div className={`p-4 rounded-xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
-                     <h3 className={`font-bold mb-2 flex items-center gap-2 ${isDarkMode ? 'text-rose-400' : 'text-rose-700'}`}><Calculator size={18}/> Calculadoras & Infusão</h3>
-                     <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
-                        Acesse calculadoras de risco (Scores) como Grace, Wells e Glasgow, além de uma calculadora dedicada para diluição e vazão de drogas vasoativas/sedação.
-                     </p>
+                      <h3 className={`font-bold mb-2 flex items-center gap-2 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-700'}`}><FileDigit size={18}/> Scores Médicos</h3>
+                      <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
+                      Calculadoras interativas de medicina baseada em evidência: CHADS-VASc, Wells, Glasgow, Child-Pugh, entre outros.
+                      </p>
+                  </div>
+
+                  {/* Calculadora de Infusão */}
+                  <div className={`p-4 rounded-xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
+                      <h3 className={`font-bold mb-2 flex items-center gap-2 ${isDarkMode ? 'text-rose-400' : 'text-rose-700'}`}><Calculator size={18}/> Calculadora de Infusão</h3>
+                      <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
+                      Ferramenta rápida para cálculo de vazão (ml/h) de drogas vasoativas e sedativos com base no peso e concentração.
+                      </p>
                   </div>
 
                   <div className={`p-4 rounded-xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
