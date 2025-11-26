@@ -1153,7 +1153,7 @@ export default function EmergencyGuideApp() {
                alt="Emergency Guide Logo" 
                className="mx-auto mb-4 h-24 w-auto object-contain"
             />
-            <h1 className="text-2xl font-bold mb-1">Guia de Plantão</h1>
+            <h1 className="text-2xl font-bold mb-1">Lister Guidance</h1>
             <p className="text-blue-200 text-sm font-medium">Acesso Exclusivo Médico</p>
           </div>
           <div className="p-8 space-y-6">
@@ -1196,7 +1196,7 @@ export default function EmergencyGuideApp() {
                alt="Logo" 
                className="h-10 w-auto object-contain" 
              />
-             <div><h1 className={`text-lg font-bold leading-none ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>Guia de Plantão</h1><span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Suporte Médico</span></div>
+             <div><h1 className={`text-lg font-bold leading-none ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>Lister Guidance</h1><span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Suporte Médico</span></div>
           </div>
           <div className="flex items-center gap-3">
              <div className="hidden sm:flex flex-col items-end mr-2"><span className={`text-xs font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{currentUser.name}</span><span className="text-[10px] text-slate-400 uppercase">{currentUser.role}</span></div>
