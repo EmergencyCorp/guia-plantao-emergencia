@@ -6,7 +6,7 @@ import {
   ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save, Cloud, CloudOff, Settings, Info,
   HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine, Wind, Droplet, Timer, Skull, Printer, FilePlus, Calculator,
   Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2, SprayCan, CalendarDays, Utensils, Zap, Camera, Upload, Eye,
-  Sun, Moon, BedDouble, ClipboardList, UserCheck, Calculator as CalcIcon, HelpCircle
+  Sun, Moon, BedDouble, ClipboardList, UserCheck, Calculator as CalcIcon, HelpCircle, LayoutGrid, ChevronDown
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -354,6 +354,10 @@ export default function EmergencyGuideApp() {
 
   // --- ESTADOS DE AJUDA ---
   const [showHelpModal, setShowHelpModal] = useState(false);
+  
+  // --- ESTADOS DO MENU UNIFICADO ---
+  const [showToolsMenu, setShowToolsMenu] = useState(false);
+  const menuRef = useRef(null);
 
   const [isCurrentConductFavorite, setIsCurrentConductFavorite] = useState(false);
 
@@ -1204,32 +1208,51 @@ export default function EmergencyGuideApp() {
              {/* TOGGLE DARK MODE */}
              <ThemeToggle isDarkMode={isDarkMode} toggleTheme={toggleTheme} />
 
-             {/* BOTÃO DE IA VISION (NOVO) */}
-             <button onClick={() => setShowImageModal(true)} className={`p-2 rounded-full transition-colors flex items-center gap-2 ${isDarkMode ? 'text-blue-300 bg-slate-800 hover:bg-slate-700' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'}`} title="Análise de Imagem IA">
-                <Camera size={20} />
-                <span className="text-xs font-bold hidden sm:inline">IA Vision</span>
-             </button>
+             {/* BOTÃO UNIFICADO DE FERRAMENTAS */}
+             <div className="relative" ref={menuRef}>
+                <button 
+                  onClick={() => setShowToolsMenu(!showToolsMenu)} 
+                  className={`px-3 py-2 rounded-lg flex items-center gap-2 transition-colors font-bold text-sm ${isDarkMode ? 'bg-blue-900/30 text-blue-300 hover:bg-blue-900/50' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}
+                >
+                  <LayoutGrid size={18} />
+                  <span className="hidden sm:inline">Ferramentas</span>
+                  <ChevronDown size={14} className={`transition-transform ${showToolsMenu ? 'rotate-180' : ''}`} />
+                </button>
 
-             {/* BOTÃO BEDSIDE (NOVO) */}
-             <button onClick={() => setShowBedsideModal(true)} className={`p-2 rounded-full transition-colors flex items-center gap-2 ${isDarkMode ? 'text-indigo-300 bg-slate-800 hover:bg-slate-700' : 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100'}`} title="BedSide - Clinical Guidance">
-                <ClipboardList size={20} />
-                <span className="text-xs font-bold hidden sm:inline">BedSide</span>
-             </button>
+                {/* DROPDOWN MENU */}
+                {showToolsMenu && (
+                  <div className={`absolute right-0 top-full mt-2 w-56 rounded-xl shadow-xl border overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
+                    <div className="p-1 space-y-1">
+                      <button onClick={() => { setShowImageModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-blue-300 hover:bg-slate-800' : 'text-blue-700 hover:bg-blue-50'}`}>
+                        <Camera size={16} /> IA Vision
+                      </button>
+                      <button onClick={() => { setShowBedsideModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-indigo-300 hover:bg-slate-800' : 'text-indigo-700 hover:bg-indigo-50'}`}>
+                        <ClipboardList size={16} /> BedSide Guidance
+                      </button>
+                      <button onClick={() => { setShowMedicalCalcModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-emerald-300 hover:bg-slate-800' : 'text-emerald-700 hover:bg-emerald-50'}`}>
+                        <FileDigit size={16} /> Scores Médicos
+                      </button>
+                       <button onClick={() => { setShowCalculatorModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-rose-300 hover:bg-slate-800' : 'text-rose-700 hover:bg-rose-50'}`}>
+                        <Calculator size={16} /> Calc. Infusão
+                      </button>
+                      <div className={`h-px my-1 ${isDarkMode ? 'bg-slate-800' : 'bg-gray-100'}`}></div>
+                      <button onClick={() => { setShowFavoritesModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-yellow-400 hover:bg-slate-800' : 'text-yellow-600 hover:bg-yellow-50'}`}>
+                        <Star size={16} /> Favoritos
+                      </button>
+                      <button onClick={() => { setShowNotepad(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-gray-50'}`}>
+                        <Edit size={16} /> Meu Caderno
+                      </button>
+                    </div>
+                  </div>
+                )}
+             </div>
 
-             {/* BOTÃO CALCULADORA (NOVO) */}
-             <button onClick={() => setShowMedicalCalcModal(true)} className={`p-2 rounded-full transition-colors flex items-center gap-2 ${isDarkMode ? 'text-emerald-300 bg-slate-800 hover:bg-slate-700' : 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100'}`} title="Calculadoras Médicas">
-                <FileDigit size={20} />
-                <span className="text-xs font-bold hidden sm:inline">Scores</span>
-             </button>
-
-             <button onClick={() => setShowFavoritesModal(true)} className={`p-2 rounded-full transition-colors ${isDarkMode ? 'text-yellow-400 hover:bg-slate-800' : 'text-yellow-500 hover:bg-yellow-50'}`} title="Meus Favoritos"><Star size={20} /></button>
-             <button onClick={() => setShowNotepad(true)} className={`p-2 rounded-full ${isDarkMode ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-100'}`}><Edit size={20} /></button>
              <button onClick={handleLogout} className={`p-2 rounded-full ${isDarkMode ? 'text-red-400 hover:bg-red-900/30' : 'text-red-400 hover:bg-red-50'}`}><LogOut size={20} /></button>
           </div>
         </div>
       </header>
 
-      <main className="flex-grow max-w-6xl mx-auto px-4 py-8 space-y-8 w-full relative">
+      <main className="flex-grow max-w-6xl mx-auto px-4 py-8 space-y-8 w-full relative" onClick={() => setShowToolsMenu(false)}>
         {/* BOTÃO FLUTUANTE DE AJUDA */}
         <button 
           onClick={() => setShowHelpModal(true)} 
@@ -1259,7 +1282,7 @@ export default function EmergencyGuideApp() {
             })}
           </div>
 
-          {/* BOTÃO PARA ABRIR CALCULADORA (SALAS GRAVES) */}
+          {/* BOTÃO PARA ABRIR CALCULADORA (SALAS GRAVES) - MANTIDO APENAS NA ÁREA DE TRABALHO PRINCIPAL SE DESEJADO, MAS AGORA EXISTE NO MENU */}
           {(activeRoom === 'vermelha' || activeRoom === 'amarela') && (
              <div className="flex justify-center">
                 <button onClick={() => setShowCalculatorModal(true)} className={`px-6 py-2 rounded-full font-bold text-sm flex items-center gap-2 transition-colors border ${isDarkMode ? 'bg-rose-900/30 text-rose-300 border-rose-800 hover:bg-rose-900/50' : 'bg-rose-100 hover:bg-rose-200 text-rose-800 border-rose-300'}`}>
@@ -1394,7 +1417,7 @@ export default function EmergencyGuideApp() {
                                   <div className="grid gap-4">
                                     {catItems.map((med, idx) => renderMedicationCard(med, idx))}
                                   </div>
-                               </div>
+                                </div>
                             );
                          })}
                       </div>
@@ -1830,33 +1853,24 @@ export default function EmergencyGuideApp() {
                   </div>
 
                   <div className={`p-4 rounded-xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
-                     <h3 className={`font-bold mb-2 flex items-center gap-2 ${isDarkMode ? 'text-blue-400' : 'text-blue-700'}`}><Camera size={18}/> IA Vision</h3>
+                     <h3 className={`font-bold mb-2 flex items-center gap-2 ${isDarkMode ? 'text-blue-400' : 'text-blue-700'}`}><Camera size={18}/> Ferramentas &gt; IA Vision</h3>
                      <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
                         Envie fotos de exames (ECG, Raio-X, Tomografia, Lesões de Pele) para receber uma análise instantânea e sugestão diagnóstica pela Inteligência Artificial.
                      </p>
                   </div>
 
                   <div className={`p-4 rounded-xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
-                     <h3 className={`font-bold mb-2 flex items-center gap-2 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-700'}`}><ClipboardList size={18}/> BedSide Clinical Guidance</h3>
+                     <h3 className={`font-bold mb-2 flex items-center gap-2 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-700'}`}><ClipboardList size={18}/> Ferramentas &gt; BedSide</h3>
                      <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
                         Ferramenta avançada para casos complexos. Insira a anamnese completa e exames para receber uma discussão de caso detalhada, hipóteses e plano terapêutico personalizado.
                      </p>
                   </div>
 
-                  {/* Scores Médicos */}
                   <div className={`p-4 rounded-xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
-                      <h3 className={`font-bold mb-2 flex items-center gap-2 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-700'}`}><FileDigit size={18}/> Scores Médicos</h3>
-                      <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
-                      Calculadoras interativas de medicina baseada em evidência: CHADS-VASc, Wells, Glasgow, Child-Pugh, entre outros.
-                      </p>
-                  </div>
-
-                  {/* Calculadora de Infusão */}
-                  <div className={`p-4 rounded-xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
-                      <h3 className={`font-bold mb-2 flex items-center gap-2 ${isDarkMode ? 'text-rose-400' : 'text-rose-700'}`}><Calculator size={18}/> Calculadora de Infusão</h3>
-                      <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
-                      Ferramenta rápida para cálculo de vazão (ml/h) de drogas vasoativas e sedativos com base no peso e concentração.
-                      </p>
+                     <h3 className={`font-bold mb-2 flex items-center gap-2 ${isDarkMode ? 'text-rose-400' : 'text-rose-700'}`}><Calculator size={18}/> Ferramentas &gt; Scores & Infusão</h3>
+                     <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
+                        Acesse calculadoras de risco (Scores) como Grace, Wells e Glasgow, além de uma calculadora dedicada para diluição e vazão de drogas vasoativas/sedação.
+                     </p>
                   </div>
 
                   <div className={`p-4 rounded-xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
@@ -1867,7 +1881,7 @@ export default function EmergencyGuideApp() {
                   </div>
 
                   <div className={`p-4 rounded-xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
-                     <h3 className={`font-bold mb-2 flex items-center gap-2 ${isDarkMode ? 'text-purple-400' : 'text-purple-700'}`}><Edit size={18}/> Caderno & Favoritos</h3>
+                     <h3 className={`font-bold mb-2 flex items-center gap-2 ${isDarkMode ? 'text-purple-400' : 'text-purple-700'}`}><Edit size={18}/> Ferramentas &gt; Caderno & Favoritos</h3>
                      <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
                         Salve condutas frequentes nos Favoritos para acesso rápido e use o Caderno para suas anotações de plantão, tudo salvo automaticamente na nuvem.
                      </p>
