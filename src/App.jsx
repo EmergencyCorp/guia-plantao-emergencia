@@ -1151,10 +1151,10 @@ export default function EmergencyGuideApp() {
             <div className="absolute top-4 right-4">
                <ThemeToggle isDarkMode={isDarkMode} toggleTheme={toggleTheme} />
             </div>
-            {/* LOGO NO LOGIN */}
+            {/* LOGO NO LOGIN - SEMPRE BRANCO */}
             <img 
-               src={isDarkMode ? "https://i.ibb.co/d0W4s2yH/logobranco.png" : "https://i.ibb.co/vCp5pXZP/logopreto.png"} 
-               alt="Emergency Guide Logo" 
+               src="https://i.ibb.co/d0W4s2yH/logobranco.png"
+               alt="Lister Guidance Logo" 
                className="mx-auto mb-4 h-24 w-auto object-contain"
             />
             <h1 className="text-2xl font-bold mb-1">Lister Guidance</h1>
@@ -1194,10 +1194,10 @@ export default function EmergencyGuideApp() {
       <header className={`border-b sticky top-0 z-40 shadow-sm ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-             {/* LOGO NO HEADER */}
+             {/* LOGO NO HEADER - DINÂMICO */}
              <img 
                src={isDarkMode ? "https://i.ibb.co/d0W4s2yH/logobranco.png" : "https://i.ibb.co/vCp5pXZP/logopreto.png"} 
-               alt="Logo" 
+               alt="Lister Guidance Logo" 
                className="h-12 w-auto object-contain" 
              />
              <div><h1 className={`text-lg font-bold leading-none ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>Lister Guidance</h1><span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Suporte Médico</span></div>
@@ -1417,7 +1417,7 @@ export default function EmergencyGuideApp() {
                                   <div className="grid gap-4">
                                     {catItems.map((med, idx) => renderMedicationCard(med, idx))}
                                   </div>
-                                </div>
+                               </div>
                             );
                          })}
                       </div>
