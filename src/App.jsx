@@ -226,6 +226,38 @@ const MEDICAL_SCORES = {
       let sev = points === 0 ? "Normal" : points <= 4 ? "AVC Leve" : points <= 15 ? "AVC Moderado" : points <= 20 ? "AVC Moderado-Grave" : "AVC Grave";
       return { points, risk: sev, conduta: points > 25 ? "Contraindicação relativa para trombólise (risco alto de sangramento)." : "Avaliar elegibilidade para Trombólise/Trombectomia." };
     }
+  },
+  heart: {
+    name: "HEART Score",
+    desc: "Risco de eventos cardíacos maiores (MACE) em 6 semanas",
+    items: [
+      { id: 'h', label: 'História', type: 'select', options: [{val:0, text:'Levemente suspeita'}, {val:1, text:'Moderadamente suspeita'}, {val:2, text:'Altamente suspeita'}] },
+      { id: 'e', label: 'ECG', type: 'select', options: [{val:0, text:'Normal'}, {val:1, text:'Repolarização inespecífica'}, {val:2, text:'Infra de ST significativo'}] },
+      { id: 'a', label: 'Idade', type: 'select', options: [{val:0, text:'< 45 anos'}, {val:1, text:'45-65 anos'}, {val:2, text:'> 65 anos'}] },
+      { id: 'r', label: 'Fatores de Risco', type: 'select', options: [{val:0, text:'Nenhum'}, {val:1, text:'1-2 Fatores'}, {val:2, text:'≥3 Fatores ou Doença Aterosclerótica'}] },
+      { id: 't', label: 'Troponina', type: 'select', options: [{val:0, text:'≤ Limite Normal'}, {val:1, text:'1-3x Limite Normal'}, {val:2, text:'>3x Limite Normal'}] },
+    ],
+    getResult: (points) => {
+      let risk = points <= 3 ? "Baixo (0.9-1.7% MACE)" : points <= 6 ? "Moderado (12-16% MACE)" : "Alto (50-65% MACE)";
+      let conduta = points <= 3 ? "Considerar alta precoce." : points <= 6 ? "Observação e troponina seriada." : "Internação e estratégia invasiva precoce.";
+      return { points, risk, conduta };
+    }
+  },
+  sofa: {
+    name: "SOFA Score",
+    desc: "Avaliação de Falência de Órgãos (Sepse)",
+    items: [
+      { id: 'resp', label: 'Respiração (PaO2/FiO2)', type: 'select', options: [{val:0, text:'> 400'}, {val:1, text:'< 400'}, {val:2, text:'< 300'}, {val:3, text:'< 200 (com suporte)'}, {val:4, text:'< 100 (com suporte)'}] },
+      { id: 'coag', label: 'Coagulação (Plaquetas)', type: 'select', options: [{val:0, text:'> 150.000'}, {val:1, text:'< 150.000'}, {val:2, text:'< 100.000'}, {val:3, text:'< 50.000'}, {val:4, text:'< 20.000'}] },
+      { id: 'liver', label: 'Fígado (Bilirrubina)', type: 'select', options: [{val:0, text:'< 1.2'}, {val:1, text:'1.2 - 1.9'}, {val:2, text:'2.0 - 5.9'}, {val:3, text:'6.0 - 11.9'}, {val:4, text:'> 12.0'}] },
+      { id: 'cardio', label: 'Cardiovascular (Hipotensão)', type: 'select', options: [{val:0, text:'Sem hipotensão'}, {val:1, text:'PAM < 70 mmHg'}, {val:2, text:'Dopamina ≤ 5'}, {val:3, text:'Dopa > 5 ou Norepi ≤ 0.1'}, {val:4, text:'Dopa > 15 ou Norepi > 0.1'}] },
+      { id: 'cns', label: 'SNC (Glasgow)', type: 'select', options: [{val:0, text:'15'}, {val:1, text:'13 - 14'}, {val:2, text:'10 - 12'}, {val:3, text:'6 - 9'}, {val:4, text:'< 6'}] },
+      { id: 'renal', label: 'Renal (Creatinina)', type: 'select', options: [{val:0, text:'< 1.2'}, {val:1, text:'1.2 - 1.9'}, {val:2, text:'2.0 - 3.4'}, {val:3, text:'3.5 - 4.9'}, {val:4, text:'> 5.0'}] },
+    ],
+    getResult: (points) => {
+      let risk = `Mortalidade estimada: ${points < 9 ? "< 33%" : points < 12 ? "50%" : "> 95%"}`;
+      return { points, risk, conduta: points >= 2 ? "Disfunção orgânica significativa (Sepse se infecção)." : "Monitorar evolução." };
+    }
   }
 };
 
