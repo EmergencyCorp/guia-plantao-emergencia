@@ -374,6 +374,30 @@ export default function EmergencyGuideApp() {
     }
   }, []);
 
+  // --- INICIALIZAÇÃO DOS SCORES (CORREÇÃO DO BUG) ---
+  const initializeScoreValues = (key) => {
+    const score = MEDICAL_SCORES[key];
+    const initial = {};
+    score.items.forEach(i => {
+       // Define valor padrão: 0 para bool, ou o valor da 1ª opção para selects
+       if(i.type === 'select') initial[i.id] = i.options[0].val;
+       else initial[i.id] = 0;
+    });
+    setScoreValues(initial);
+  };
+
+  useEffect(() => {
+    if (showMedicalCalcModal) {
+       // Ao abrir o modal, reinicia com os valores padrão do score selecionado
+       initializeScoreValues(selectedScore);
+    }
+  }, [showMedicalCalcModal]);
+
+  const handleSelectScore = (key) => {
+      setSelectedScore(key);
+      initializeScoreValues(key);
+  };
+
   useEffect(() => {
     if (currentUser && isCloudConnected) {
       fetchNotesFromCloud(currentUser.username);
@@ -540,11 +564,12 @@ export default function EmergencyGuideApp() {
     const scoreDef = MEDICAL_SCORES[selectedScore];
     let total = 0;
     scoreDef.items.forEach(item => {
-      if (item.type === 'bool') {
-        total += scoreValues[item.id] || 0;
-      } else if (item.type === 'select') {
-        total += scoreValues[item.id] || 0;
+      // Se o valor não estiver no state (undefined), usa o valor padrão (0 para bool, 1ª opção para select)
+      let val = scoreValues[item.id];
+      if (val === undefined) {
+         val = item.type === 'select' ? item.options[0].val : 0;
       }
+      total += val;
     });
     return scoreDef.getResult(total);
   };
@@ -1673,7 +1698,7 @@ export default function EmergencyGuideApp() {
                   {Object.entries(MEDICAL_SCORES).map(([key, score]) => (
                      <button
                         key={key}
-                        onClick={() => { setSelectedScore(key); setScoreValues({}); }}
+                        onClick={() => handleSelectScore(key)}
                         className={`w-full text-left p-3 rounded-lg text-sm font-medium transition-all ${selectedScore === key ? (isDarkMode ? 'bg-emerald-900/30 text-emerald-300 border border-emerald-800' : 'bg-emerald-100 text-emerald-800 border border-emerald-200') : (isDarkMode ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-600 hover:bg-gray-200')}`}
                      >
                         {score.name}
@@ -1708,7 +1733,7 @@ export default function EmergencyGuideApp() {
                               <select 
                                 className={`p-2 rounded-lg text-sm outline-none border ${isDarkMode ? 'bg-slate-900 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 text-slate-800'}`}
                                 onChange={(e) => handleScoreChange(item.id, e.target.value, 'select', 0)}
-                                value={scoreValues[item.id] || 0}
+                                value={scoreValues[item.id]}
                               >
                                  {item.options.map((opt, i) => <option key={i} value={opt.val}>{opt.text}</option>)}
                               </select>
