@@ -2,7 +2,7 @@ import React from 'react';
 import { CheckCircle2, FlaskConical, Timer, AlertTriangle, CalendarDays, Pill, Syringe as SyringeIcon, Droplets, Tablets, Pipette, SprayCan } from 'lucide-react';
 
 export default function MedicationCard({ med, activeRoom, selectedPrescriptionItems, togglePrescriptionItem, updateItemDays, isDarkMode }) {
-  
+  // Funções auxiliares internas para evitar dependência externa
   const getMedTypeIcon = (type) => {
     if (!type) return <Pill size={14} />;
     const t = type.toLowerCase();

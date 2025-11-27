@@ -5,17 +5,16 @@ import {
   AlertTriangle, ArrowRight, X, User, CheckCircle2, Siren, ShieldAlert, 
   LogOut, History, Cloud, CloudOff, HeartPulse, Microscope, Image as ImageIcon, 
   Wind, Droplet, Skull, Printer, Calculator, Star, Utensils, Zap, Camera, 
-  BedDouble, ClipboardList, Edit, LayoutGrid, ChevronDown, FileText, Droplets, FilePlus
+  BedDouble, ClipboardList, Edit, LayoutGrid, ChevronDown, FileText, Droplets
 } from 'lucide-react';
 
 // --- CONFIG & COMPONENTS ---
-// Certifique-se de que estes arquivos existem nas pastas corretas
 import { auth, db, firebaseConfig } from './firebaseClient'; 
 import ThemeToggle from './components/ThemeToggle';
 import LoginScreen from './components/LoginScreen';
 import MedicationCard from './components/MedicationCard';
 
-// --- MODALS (FERRAMENTAS) ---
+// --- MODALS (Verifique se a pasta src/components/modals existe!) ---
 import InfusionCalculator from './components/modals/InfusionCalculator';
 import ImageAnalysisModal from './components/modals/ImageAnalysisModal';
 import BedsideModal from './components/modals/BedsideModal';
@@ -435,7 +434,7 @@ export default function EmergencyGuideApp() {
              <div><h1 className={`text-lg font-bold leading-none ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>Lister Guidance</h1><span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Suporte Médico</span></div>
           </div>
           <div className="flex items-center gap-3">
-             <div className="hidden sm:flex flex-col items-end mr-2"><span className={`text-xs font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{currentUser.name}</span><span className="text-[10px] text-slate-400 uppercase">{currentUser.role}</span></div>
+             <div className="hidden sm:flex flex-col items-end mr-2"><span className={`text-xs font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{currentUser?.name}</span><span className="text-[10px] text-slate-400 uppercase">{currentUser?.role}</span></div>
              <ThemeToggle isDarkMode={isDarkMode} toggleTheme={toggleTheme} />
              
              {/* FERRAMENTAS */}
