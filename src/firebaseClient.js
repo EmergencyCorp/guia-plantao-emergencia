@@ -1,6 +1,6 @@
 // Arquivo: src/firebaseClient.js
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
 const getFirebaseConfig = () => {
@@ -25,16 +25,17 @@ const getFirebaseConfig = () => {
 };
 
 const firebaseConfig = getFirebaseConfig();
-let app, auth, db;
+let app, auth, db, googleProvider;
 
 if (firebaseConfig && firebaseConfig.apiKey) {
   try {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
+    googleProvider = new GoogleAuthProvider();
   } catch (e) {
     console.error("Erro init firebase:", e);
   }
 }
 
-export { auth, db, app, firebaseConfig };
+export { auth, db, app, googleProvider, firebaseConfig };

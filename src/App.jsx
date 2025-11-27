@@ -5,16 +5,15 @@ import {
   AlertTriangle, ArrowRight, X, User, CheckCircle2, Siren, ShieldAlert, 
   LogOut, History, Cloud, CloudOff, HeartPulse, Microscope, Image as ImageIcon, 
   Wind, Droplet, Skull, Printer, Calculator, Star, Utensils, Zap, Camera, 
-  BedDouble, ClipboardList, 
-  Edit, // <--- CORREÇÃO: O ícone Edit foi adicionado aqui
-  LayoutGrid, ChevronDown, FileText, Droplets,
-  Pill, HelpCircle, UserCheck
+  BedDouble, ClipboardList, Edit, LayoutGrid, ChevronDown, FileText, Droplets,
+  Pill, HelpCircle, UserCheck, Lock
 } from 'lucide-react';
 
 // --- CONFIG & COMPONENTS ---
-import { auth, db, firebaseConfig } from './firebaseClient'; 
+import { auth, db, firebaseConfig, googleProvider } from './firebaseClient'; 
 import ThemeToggle from './components/ThemeToggle';
 import LoginScreen from './components/LoginScreen';
+import DisclaimerScreen from './components/DisclaimerScreen';
 import MedicationCard from './components/MedicationCard';
 
 // --- MODALS ---
@@ -30,58 +29,34 @@ import QuickPrescriptionsModal from './components/modals/QuickPrescriptionsModal
 import PhysicalExamModal from './components/modals/PhysicalExamModal';
 
 // --- FIREBASE IMPORTS ---
-import { signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
 import { doc, setDoc, getDoc, collection, query as firestoreQuery, where, orderBy, getDocs, deleteDoc, onSnapshot } from 'firebase/firestore';
 
 const appId = (typeof __app_id !== 'undefined') ? __app_id : 'emergency-guide-app';
-const initialToken = (typeof __initial_auth_token !== 'undefined') ? __initial_auth_token : null;
 
 // --- ERROR BOUNDARY ---
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null, errorInfo: null };
+    this.state = { hasError: false, error: null };
   }
-
-  static getDerivedStateFromError(error) {
-    return { hasError: true };
-  }
-
-  componentDidCatch(error, errorInfo) {
-    this.setState({ error, errorInfo });
-    console.error("Erro capturado:", error, errorInfo);
-  }
-
+  static getDerivedStateFromError(error) { return { hasError: true, error }; }
   render() {
-    if (this.state.hasError) {
-      return (
-        <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-red-50 text-red-900 font-mono">
-          <div className="bg-white p-6 rounded-xl shadow-xl border border-red-200 max-w-2xl w-full">
-            <h1 className="text-2xl font-bold mb-4 flex items-center gap-2"><AlertTriangle className="text-red-600"/> Ops! O aplicativo encontrou um erro.</h1>
-            <div className="bg-slate-900 text-red-300 p-4 rounded-lg overflow-auto text-xs mb-4">
-              <strong>{this.state.error && this.state.error.toString()}</strong>
-            </div>
-            <button onClick={() => window.location.reload()} className="bg-red-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-red-700 transition-colors">Recarregar Página</button>
-          </div>
-        </div>
-      );
-    }
+    if (this.state.hasError) return <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center text-red-600 bg-red-50"><h1 className="text-2xl font-bold">Ops! Erro crítico.</h1><p className="mt-2 text-sm">{this.state.error?.toString()}</p><button onClick={()=>window.location.reload()} className="mt-6 bg-red-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-red-700">Recarregar Aplicação</button></div>;
     return this.props.children; 
   }
 }
 
 function EmergencyGuideAppContent() {
-  // --- STATE MANAGEMENT ---
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
-  const [usernameInput, setUsernameInput] = useState('');
-  const [passwordInput, setPasswordInput] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
-  const [firebaseUser, setFirebaseUser] = useState(null); 
   const [isCloudConnected, setIsCloudConnected] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [configStatus, setConfigStatus] = useState('verificando');
+  const [approvalStatus, setApprovalStatus] = useState(null); // 'pending', 'approved', 'rejected', null
 
+  // App States
   const [activeRoom, setActiveRoom] = useState('verde');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
@@ -91,7 +66,7 @@ function EmergencyGuideAppContent() {
   const [errorMsg, setErrorMsg] = useState('');
   const resultsRef = useRef(null);
 
-  // Toggle States
+  // Modals
   const [showToolsMenu, setShowToolsMenu] = useState(false);
   const [showNotepad, setShowNotepad] = useState(false);
   const [showFavoritesModal, setShowFavoritesModal] = useState(false);
@@ -104,7 +79,6 @@ function EmergencyGuideAppContent() {
   const [showQuickPrescriptions, setShowQuickPrescriptions] = useState(false);
   const [showPhysicalExam, setShowPhysicalExam] = useState(false);
 
-  // Specific Data States
   const [userNotes, setUserNotes] = useState('');
   const [selectedPrescriptionItems, setSelectedPrescriptionItems] = useState([]);
   const [selectedImage, setSelectedImage] = useState(null); 
@@ -116,11 +90,99 @@ function EmergencyGuideAppContent() {
   const [bedsideResult, setBedsideResult] = useState(null);
   const [isGeneratingBedside, setIsGeneratingBedside] = useState(false);
   const [isCurrentConductFavorite, setIsCurrentConductFavorite] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  // --- HELPER FUNCTIONS ---
+  // --- INIT ---
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme_preference');
+    if (savedTheme === 'dark') setIsDarkMode(true);
+    if (localStorage.getItem('terms_accepted_v1') === 'true') setHasAcceptedTerms(true);
+    if (firebaseConfig && firebaseConfig.apiKey) setIsCloudConnected(true);
+  }, []);
+
+  const toggleTheme = () => {
+    const newMode = !isDarkMode;
+    setIsDarkMode(newMode);
+    localStorage.setItem('theme_preference', newMode ? 'dark' : 'light');
+  };
+
+  // --- AUTH LISTENER ---
+  useEffect(() => {
+    if (!auth) return;
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        try {
+          const userDocRef = doc(db, 'artifacts', appId, 'users', user.uid);
+          const docSnap = await getDoc(userDocRef);
+          
+          if (docSnap.exists()) {
+            const userData = docSnap.data();
+            if (userData.status === 'approved') {
+              setCurrentUser({ ...userData, uid: user.uid, email: user.email });
+              setApprovalStatus('approved');
+              loadHistory(user.uid);
+              fetchNotesFromCloud(user.uid);
+            } else {
+              setApprovalStatus(userData.status || 'pending');
+              setCurrentUser(null);
+            }
+          } else {
+            await setDoc(userDocRef, {
+              name: user.displayName || 'Usuário',
+              email: user.email,
+              status: 'pending',
+              role: 'user',
+              createdAt: new Date().toISOString()
+            }, { merge: true });
+            setApprovalStatus('pending');
+            setCurrentUser(null);
+          }
+        } catch (e) {
+          console.error("Erro ao buscar perfil:", e);
+          setLoginError("Erro ao verificar permissões.");
+        }
+      } else {
+        setCurrentUser(null);
+        setApprovalStatus(null);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // --- LOGIN HANDLERS ---
+  const handleEmailLogin = async (email, password) => {
+    setAuthLoading(true); setLoginError('');
+    try { await signInWithEmailAndPassword(auth, email, password); } 
+    catch (error) { setLoginError("Email ou senha incorretos."); } 
+    finally { setAuthLoading(false); }
+  };
+
+  const handleSignUp = async (email, password, fullName, crm) => {
+    setAuthLoading(true); setLoginError('');
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      await setDoc(doc(db, 'artifacts', appId, 'users', userCredential.user.uid), {
+        name: fullName, crm: crm, email: email, status: 'pending', role: 'user', createdAt: new Date().toISOString()
+      });
+    } catch (error) { setLoginError("Erro ao criar conta."); } 
+    finally { setAuthLoading(false); }
+  };
+
+  const handleGoogleLogin = async () => {
+    setAuthLoading(true); setLoginError('');
+    try { await signInWithPopup(auth, googleProvider); } 
+    catch (error) { setLoginError("Erro no login com Google."); } 
+    finally { setAuthLoading(false); }
+  };
+
+  const handleLogout = async () => {
+    await signOut(auth); setCurrentUser(null); setConduct(null); setFavorites([]);
+  };
+
+  // --- HELPERS ---
   const showError = (msg) => { setErrorMsg(msg); setTimeout(() => setErrorMsg(''), 4000); };
   const getConductDocId = (query, room) => `${query.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}_${room}`;
-
+  
   const getVitalIcon = (text) => {
     const t = text.toLowerCase();
     if (t.includes('fc') || t.includes('bpm')) return <HeartPulse size={16} className="text-rose-500" />;
@@ -130,210 +192,63 @@ function EmergencyGuideAppContent() {
     return <Activity size={16} className="text-slate-400" />;
   };
 
-  // --- DATA FETCHING ---
-  const loadLocalHistory = (username) => {
-      try {
-        const history = localStorage.getItem(`history_${username}`);
-        if (history) setRecentSearches(JSON.parse(history));
-        else setRecentSearches([]);
-      } catch (e) { setRecentSearches([]); }
-  };
-
-  const loadHistory = (username) => loadLocalHistory(username);
-
-  const fetchHistoryFromCloud = async (username) => {
-      loadLocalHistory(username);
-      if (db && auth?.currentUser) {
-        try {
-          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', username);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists() && docSnap.data().searches) {
-              setRecentSearches(docSnap.data().searches);
-              localStorage.setItem(`history_${username}`, JSON.stringify(docSnap.data().searches));
-          }
-        } catch (error) { console.error("Erro sync histórico:", error); }
-      }
-  };
-
-  const fetchNotesFromCloud = async (username) => {
-    const localNotes = localStorage.getItem(`notes_${username}`);
-    if (localNotes) setUserNotes(localNotes);
-
-    if (db && auth?.currentUser) {
-      try {
-        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'notes', username);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists() && docSnap.data().content) {
-          setUserNotes(docSnap.data().content);
-          localStorage.setItem(`notes_${username}`, docSnap.data().content);
-        }
-      } catch (error) { console.error("Erro sync notas:", error); }
-    }
+  // --- DATA SYNC ---
+  const loadHistory = async (uid) => {
+    if (!db) return;
+    try {
+      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', uid);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists() && docSnap.data().searches) setRecentSearches(docSnap.data().searches);
+    } catch (e) {}
   };
 
   const saveToHistory = async (term, room) => {
-      if (!currentUser) return;
-      const newEntry = { query: term, room, timestamp: new Date().toISOString() };
-      const hist = recentSearches.filter(s => s.query.toLowerCase() !== term.toLowerCase());
-      const updated = [newEntry, ...hist].slice(0, 10); 
-      setRecentSearches(updated);
-      localStorage.setItem(`history_${currentUser.username}`, JSON.stringify(updated));
-      if (db && auth?.currentUser) {
-        try {
-          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', currentUser.username);
-          await setDoc(docRef, { searches: updated, lastUpdated: new Date().toISOString(), username: currentUser.username }, { merge: true });
-        } catch (error) { console.error("Erro nuvem:", error); }
-      }
+    if (!currentUser || !db) return;
+    const newEntry = { query: term, room, timestamp: new Date().toISOString() };
+    const updated = [newEntry, ...recentSearches.filter(s => s.query.toLowerCase() !== term.toLowerCase())].slice(0, 10);
+    setRecentSearches(updated);
+    try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'history', currentUser.uid), { searches: updated }, { merge: true }); } catch (e) {}
   };
 
-  const subscribeToFavorites = (username) => {
-      if (!db) return;
-      const favoritesRef = collection(db, 'artifacts', appId, 'users', username, 'conducts');
-      const q = firestoreQuery(favoritesRef, where("isFavorite", "==", true));
-      return onSnapshot(q, (snapshot) => {
-          const favs = [];
-          snapshot.forEach((doc) => favs.push({ id: doc.id, ...doc.data() }));
-          setFavorites(favs);
-      });
+  const fetchNotesFromCloud = async (uid) => {
+    if (!db) return;
+    try {
+      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'notes', uid);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) setUserNotes(docSnap.data().content || '');
+    } catch (e) {}
   };
 
-  // --- EFFECTS ---
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme_preference');
-    if (savedTheme === 'dark') setIsDarkMode(true);
-  }, []);
-
-  const toggleTheme = () => {
-    const newMode = !isDarkMode;
-    setIsDarkMode(newMode);
-    localStorage.setItem('theme_preference', newMode ? 'dark' : 'light');
-  };
-
-  useEffect(() => {
-    if (!firebaseConfig || !firebaseConfig.apiKey) { setConfigStatus('missing'); return; }
-    setConfigStatus('ok');
-    if (!auth) return;
-    const initAuth = async () => {
-      try {
-        if (initialToken) await signInWithCustomToken(auth, initialToken);
-        else await signInAnonymously(auth);
-      } catch (error) { console.error("Auth error:", error); }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) { setFirebaseUser(user); setIsCloudConnected(true); } 
-      else { setFirebaseUser(null); setIsCloudConnected(false); }
-    });
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    const savedUser = localStorage.getItem('emergency_app_user');
-    if (savedUser) {
-      try {
-        const parsedUser = JSON.parse(savedUser);
-        if (parsedUser.expiresAt && new Date() > new Date(parsedUser.expiresAt)) {
-             localStorage.removeItem('emergency_app_user'); return;
-        }
-        setCurrentUser(parsedUser);
-        loadHistory(parsedUser.username);
-      } catch (e) {}
-    }
-  }, []);
-
-  useEffect(() => {
-    if (currentUser && isCloudConnected) {
-      fetchNotesFromCloud(currentUser.username);
-      fetchHistoryFromCloud(currentUser.username);
-      const unsubFavs = subscribeToFavorites(currentUser.username);
-      return () => { if(unsubFavs) unsubFavs(); };
-    } else if (currentUser) {
-      const localNotes = localStorage.getItem(`notes_${currentUser.username}`);
-      if (localNotes) setUserNotes(localNotes);
-      loadLocalHistory(currentUser.username);
-    }
-  }, [currentUser, isCloudConnected]);
-
-  useEffect(() => {
-    setSelectedPrescriptionItems([]);
-    if (conduct && favorites.length > 0) {
-      const docId = getConductDocId(conduct.condicao || searchQuery, activeRoom);
-      setIsCurrentConductFavorite(favorites.some(f => f.id === docId || f.query === searchQuery));
-    } else {
-      setIsCurrentConductFavorite(false);
-    }
-  }, [conduct, favorites]);
-
-  useEffect(() => {
-    const delayDebounceFn = setTimeout(async () => {
-      if (currentUser) {
-        localStorage.setItem(`notes_${currentUser.username}`, userNotes);
-        if (db && auth?.currentUser) {
-          setIsSaving(true);
-          try {
-            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'notes', currentUser.username);
-            await setDoc(docRef, {
-              content: userNotes, lastUpdated: new Date().toISOString(),
-              author: currentUser.name || "Usuário", username: currentUser.username
-            }, { merge: true });
-          } catch (error) { console.error("Erro save nuvem:", error); } 
-          finally { setIsSaving(false); }
-        }
-      }
-    }, 1500);
-    return () => clearTimeout(delayDebounceFn);
+  useEffect(() => { 
+    if (!currentUser || !db) return;
+    const timeout = setTimeout(async () => {
+      setIsSaving(true);
+      try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'notes', currentUser.uid), { content: userNotes, lastUpdated: new Date().toISOString() }, { merge: true }); } 
+      finally { setIsSaving(false); }
+    }, 2000);
+    return () => clearTimeout(timeout);
   }, [userNotes, currentUser]);
 
-  // --- ACTIONS ---
-  const handleLogin = async (e) => {
-    e.preventDefault(); setLoginError('');
-    if (!db || !isCloudConnected) { setLoginError("Sem conexão com o servidor."); return; }
-    try {
-      const userId = usernameInput.toLowerCase().trim();
-      const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'registered_users', userId);
-      const userSnap = await getDoc(userDocRef);
-      if (userSnap.exists()) {
-        const userData = userSnap.data();
-        if (userData.password === passwordInput) {
-          if (userData.expiresAt && new Date() > new Date(userData.expiresAt)) {
-             setLoginError(`Assinatura expirada.`); return;
-          }
-          const userSession = { ...userData, username: userId };
-          setCurrentUser(userSession);
-          localStorage.setItem('emergency_app_user', JSON.stringify(userSession));
-          setUsernameInput(''); setPasswordInput('');
-        } else setLoginError("Senha incorreta.");
-      } else setLoginError(`Usuário não encontrado.`);
-    } catch (err) { setLoginError("Erro técnico ao tentar login."); }
-  };
+  const handleNoteChange = (e) => setUserNotes(e.target.value);
 
-  const handleLogout = () => {
-    setCurrentUser(null); setConduct(null); setSearchQuery('');
-    setRecentSearches([]); setUserNotes(''); setFavorites([]);
-    localStorage.removeItem('emergency_app_user');
-  };
-
+  // --- CORE LOGIC ---
   const toggleFavorite = async () => {
-    if (!currentUser || !conduct || !isCloudConnected) { showError("Necessário estar online."); return; }
+    if (!currentUser || !conduct) { showError("Necessário estar online."); return; }
     const newStatus = !isCurrentConductFavorite;
     setIsCurrentConductFavorite(newStatus);
     try {
       const docId = getConductDocId(searchQuery, activeRoom);
-      const docRef = doc(db, 'artifacts', appId, 'users', currentUser.username, 'conducts', docId);
-      if (newStatus) {
-          await setDoc(docRef, { query: searchQuery, room: activeRoom, conductData: conduct, isFavorite: true, lastAccessed: new Date().toISOString() }, { merge: true });
-      } else {
-          await setDoc(docRef, { isFavorite: false }, { merge: true });
-      }
-    } catch (error) { setIsCurrentConductFavorite(!newStatus); showError("Erro ao atualizar favorito."); }
+      const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', docId);
+      await setDoc(docRef, { query: searchQuery, room: activeRoom, conductData: conduct, isFavorite: newStatus, lastAccessed: new Date().toISOString() }, { merge: true });
+    } catch (error) { setIsCurrentConductFavorite(!newStatus); showError("Erro ao favoritar."); }
   };
-   
+
   const removeFavoriteFromList = async (docId) => {
-      if (!currentUser || !isCloudConnected) return;
+      if (!currentUser) return;
       try {
-          const docRef = doc(db, 'artifacts', appId, 'users', currentUser.username, 'conducts', docId);
+          const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', docId);
           await setDoc(docRef, { isFavorite: false }, { merge: true });
-      } catch (e) { console.error("Erro remove fav", e); }
+      } catch (e) { console.error(e); }
   };
 
   const loadFavoriteConduct = (fav) => {
@@ -341,19 +256,46 @@ function EmergencyGuideAppContent() {
       setShowFavoritesModal(false); setIsCurrentConductFavorite(true);
   };
 
-  const manageCacheLimit = async (username) => {
-    if (!db) return;
+  const generateConduct = async (overrideRoom = null) => {
+    if (!searchQuery.trim()) { showError('Digite uma condição clínica.'); return; }
+    const targetRoom = overrideRoom || activeRoom;
+    setLoading(true); setConduct(null); setErrorMsg(''); setIsCurrentConductFavorite(false);
+    if (overrideRoom) setActiveRoom(overrideRoom);
+
+    const docId = getConductDocId(searchQuery, targetRoom);
+    
+    // Check Cache
+    if (currentUser && db) {
+      try {
+        const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', docId);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setConduct(data.conductData); setIsCurrentConductFavorite(data.isFavorite || false);
+          setLoading(false); saveToHistory(searchQuery, targetRoom);
+          return;
+        }
+      } catch (e) {}
+    }
+
     try {
-      const conductsRef = collection(db, 'artifacts', appId, 'users', username, 'conducts');
-      const q = firestoreQuery(conductsRef, where("isFavorite", "==", false), orderBy("lastAccessed", "desc"));
-      const snapshot = await getDocs(q);
-      if (snapshot.size > 10) {
-        const deletePromises = snapshot.docs.slice(10).map(d => deleteDoc(d.ref));
-        await Promise.all(deletePromises);
+      const response = await fetch('/api/generate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ searchQuery, activeRoom: targetRoom })
+      });
+      if (!response.ok) throw new Error('Erro IA.');
+      const parsedConduct = await response.json();
+      setConduct(parsedConduct);
+      
+      if (currentUser && db) {
+        const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', docId);
+        await setDoc(docRef, { query: searchQuery, room: targetRoom, conductData: parsedConduct, isFavorite: false, lastAccessed: new Date().toISOString() });
       }
-    } catch (error) { console.error("Cache clean error:", error); }
+      saveToHistory(searchQuery, targetRoom);
+    } catch (error) { showError("Erro ao gerar conduta."); } finally { setLoading(false); }
   };
 
+  // --- OTHER HANDLERS ---
   const togglePrescriptionItem = (med) => {
     if (activeRoom !== 'verde' || !med.receita) return;
     setSelectedPrescriptionItems(prev => {
@@ -377,9 +319,7 @@ function EmergencyGuideAppContent() {
       setSelectedPrescriptionItems(newItems);
     }
   };
-
-  const handleNoteChange = (e) => setUserNotes(e.target.value);
-
+  
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -421,46 +361,6 @@ function EmergencyGuideAppContent() {
     } catch (error) { showError("Erro ao processar."); } finally { setIsGeneratingBedside(false); }
   };
 
-  const generateConduct = async (overrideRoom = null) => {
-    if (!searchQuery.trim()) { showError('Digite uma condição clínica.'); return; }
-    const targetRoom = overrideRoom || activeRoom;
-    setLoading(true); setConduct(null); setErrorMsg(''); setIsCurrentConductFavorite(false);
-    if (overrideRoom) setActiveRoom(overrideRoom);
-
-    const docId = getConductDocId(searchQuery, targetRoom);
-    if (isCloudConnected && currentUser) {
-      try {
-        const docRef = doc(db, 'artifacts', appId, 'users', currentUser.username, 'conducts', docId);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setConduct(data.conductData); setIsCurrentConductFavorite(data.isFavorite || false);
-          await setDoc(docRef, { lastAccessed: new Date().toISOString() }, { merge: true });
-          setLoading(false); saveToHistory(searchQuery, targetRoom);
-          setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
-          return;
-        }
-      } catch (error) { console.error("Erro cache:", error); }
-    }
-
-    try {
-      const response = await fetch('/api/generate', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ searchQuery, activeRoom: targetRoom })
-      });
-      if (!response.ok) throw new Error('Erro IA.');
-      const parsedConduct = await response.json();
-      setConduct(parsedConduct);
-      if (isCloudConnected && currentUser) {
-        const docRef = doc(db, 'artifacts', appId, 'users', currentUser.username, 'conducts', docId);
-        await setDoc(docRef, { query: searchQuery, room: targetRoom, conductData: parsedConduct, isFavorite: false, lastAccessed: new Date().toISOString() });
-        manageCacheLimit(currentUser.username);
-      }
-      saveToHistory(searchQuery, targetRoom);
-      setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
-    } catch (error) { showError("Erro ao gerar conduta."); } finally { setLoading(false); }
-  };
-
   const roomConfig = {
     verde: { name: 'Sala Verde', color: 'emerald', accent: isDarkMode ? 'bg-emerald-600' : 'bg-emerald-500', border: isDarkMode ? 'border-emerald-700' : 'border-emerald-500', text: isDarkMode ? 'text-emerald-300' : 'text-emerald-800', light: isDarkMode ? 'bg-emerald-900/30' : 'bg-emerald-50', icon: <Stethoscope className="w-5 h-5" />, description: 'Ambulatorial / Baixa Complexidade' },
     amarela: { name: 'Sala Amarela', color: 'amber', accent: isDarkMode ? 'bg-amber-600' : 'bg-amber-500', border: isDarkMode ? 'border-amber-700' : 'border-amber-500', text: isDarkMode ? 'text-amber-300' : 'text-amber-800', light: isDarkMode ? 'bg-amber-900/30' : 'bg-amber-50', icon: <BedDouble className="w-5 h-5" />, description: 'Observação / Média Complexidade' },
@@ -468,31 +368,42 @@ function EmergencyGuideAppContent() {
   };
   const RED_ROOM_CATEGORIES = ['Dieta', 'Hidratação', 'Drogas Vasoativas', 'Antibiótico', 'Sintomáticos', 'Profilaxias', 'Outros'];
 
-  if (!currentUser) {
+  // --- VIEWS ---
+  if (!hasAcceptedTerms) {
+    return <DisclaimerScreen onAccept={() => { setHasAcceptedTerms(true); localStorage.setItem('terms_accepted_v1', 'true'); }} isDarkMode={isDarkMode} toggleTheme={toggleTheme} />;
+  }
+
+  if (!currentUser && approvalStatus !== 'pending' && approvalStatus !== 'rejected') {
+    return <LoginScreen isDarkMode={isDarkMode} toggleTheme={toggleTheme} loginError={loginError} handleEmailLogin={handleEmailLogin} handleGoogleLogin={handleGoogleLogin} handleSignUp={handleSignUp} configStatus={configStatus} isCloudConnected={isCloudConnected} isLoading={authLoading} />;
+  }
+
+  if (approvalStatus === 'pending') {
     return (
-      <LoginScreen 
-        isDarkMode={isDarkMode} toggleTheme={toggleTheme} loginError={loginError} handleLogin={handleLogin}
-        usernameInput={usernameInput} setUsernameInput={setUsernameInput} passwordInput={passwordInput} setPasswordInput={setPasswordInput}
-        configStatus={configStatus} isCloudConnected={isCloudConnected}
-      />
+      <div className={`min-h-screen flex items-center justify-center p-4 font-sans ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-gray-50 text-slate-800'}`}>
+        <div className={`max-w-md w-full p-8 rounded-2xl shadow-xl text-center border ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
+          <div className="bg-yellow-100 text-yellow-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><Lock size={32} /></div>
+          <h2 className="text-2xl font-bold mb-2">Acesso em Análise</h2>
+          <p className="text-sm mb-6 opacity-80">Seu cadastro foi realizado e está aguardando aprovação do administrador.</p>
+          <button onClick={handleLogout} className="text-blue-600 hover:underline text-sm">Voltar</button>
+        </div>
+      </div>
     );
   }
 
+  // --- MAIN APP RENDER ---
   return (
     <div className={`min-h-screen flex flex-col font-sans selection:bg-blue-100 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
       <header className={`border-b sticky top-0 z-40 shadow-sm ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-             <img src={isDarkMode ? "https://i.ibb.co/d0W4s2yH/logobranco.png" : "https://i.ibb.co/vCp5pXZP/logopreto.png"} alt="Lister Guidance Logo" className="h-12 w-auto object-contain" />
+             <img src={isDarkMode ? "https://i.ibb.co/d0W4s2yH/logobranco.png" : "https://i.ibb.co/vCp5pXZP/logopreto.png"} alt="Logo" className="h-12 w-auto object-contain" />
              <div><h1 className={`text-lg font-bold leading-none ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>Lister Guidance</h1><span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Suporte Médico</span></div>
           </div>
           <div className="flex items-center gap-3">
-             <div className="hidden sm:flex flex-col items-end mr-2"><span className={`text-xs font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{currentUser?.name}</span><span className="text-[10px] text-slate-400 uppercase">{currentUser?.role}</span></div>
+             <div className="hidden sm:flex flex-col items-end mr-2"><span className={`text-xs font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{currentUser.name}</span><span className="text-[10px] text-slate-400 uppercase">Médico(a)</span></div>
              <ThemeToggle isDarkMode={isDarkMode} toggleTheme={toggleTheme} />
-             
-             {/* FERRAMENTAS */}
              <div className="relative">
-                <button aria-label="Ferramentas" onClick={() => setShowToolsMenu(!showToolsMenu)} className={`px-3 py-2 rounded-lg flex items-center gap-2 transition-colors font-bold text-sm ${isDarkMode ? 'bg-blue-900/30 text-blue-300 hover:bg-blue-900/50' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}>
+                <button onClick={() => setShowToolsMenu(!showToolsMenu)} className={`px-3 py-2 rounded-lg flex items-center gap-2 transition-colors font-bold text-sm ${isDarkMode ? 'bg-blue-900/30 text-blue-300 hover:bg-blue-900/50' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}>
                   <LayoutGrid size={18} /><span className="hidden sm:inline">Ferramentas</span><ChevronDown size={14} className={`transition-transform ${showToolsMenu ? 'rotate-180' : ''}`} />
                 </button>
                 {showToolsMenu && (
@@ -511,11 +422,8 @@ function EmergencyGuideAppContent() {
                   </div>
                 )}
              </div>
-             
-             {/* BOTÃO DE AJUDA */}
-             <button aria-label="Ajuda" onClick={() => setShowHelpModal(true)} className={`p-2 rounded-full ${isDarkMode ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-500 hover:bg-gray-100'}`}><HelpCircle size={20} /></button>
-             
-             <button aria-label="Sair" onClick={handleLogout} className={`p-2 rounded-full ${isDarkMode ? 'text-red-400 hover:bg-red-900/30' : 'text-red-400 hover:bg-red-50'}`}><LogOut size={20} /></button>
+             <button onClick={() => setShowHelpModal(true)} className={`p-2 rounded-full ${isDarkMode ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-500 hover:bg-gray-100'}`}><HelpCircle size={20} /></button>
+             <button onClick={handleLogout} className={`p-2 rounded-full ${isDarkMode ? 'text-red-400 hover:bg-red-900/30' : 'text-red-400 hover:bg-red-50'}`}><LogOut size={20} /></button>
           </div>
         </div>
       </header>
@@ -600,14 +508,14 @@ function EmergencyGuideAppContent() {
                    <div className="p-5 space-y-5 text-sm">
                      {conduct.avaliacao_inicial?.sinais_vitais_alvos && (<div><span className="text-xs font-bold text-slate-400 uppercase block mb-2">Alvos Terapêuticos</span><div className="grid grid-cols-1 gap-2">{conduct.avaliacao_inicial.sinais_vitais_alvos.map((s,i)=>(<div key={i} className={`p-3 rounded-lg border flex items-center gap-3 ${isDarkMode ? 'bg-indigo-900/20 border-indigo-900/50 text-indigo-300' : 'bg-indigo-50 border-indigo-100 text-indigo-900'}`}>{getVitalIcon(s)} <span className="font-bold">{s}</span></div>))}</div></div>)}
                      <div className="space-y-3">
-                         <div><span className="text-xs font-bold text-rose-600 uppercase block mb-1">Prioridade 1</span><ul className="space-y-1">{conduct.avaliacao_inicial?.exames_prioridade1?.map((ex,i)=><li key={i} className={`flex gap-2 items-start font-medium ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}><div className="mt-1.5 w-1.5 h-1.5 bg-rose-500 rounded-full shrink-0"/>{ex}</li>)}</ul></div>
+                         <div><span className="text-xs font-bold text-rose-600 uppercase block mb-1">Prioridade 1 (Obrigatórios)</span><ul className="space-y-1">{conduct.avaliacao_inicial?.exames_prioridade1?.map((ex,i)=><li key={i} className={`flex gap-2 items-start font-medium ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}><div className="mt-1.5 w-1.5 h-1.5 bg-rose-500 rounded-full shrink-0"/>{ex}</li>)}</ul></div>
                          <div><span className="text-xs font-bold text-slate-400 uppercase block mb-1">Complementares</span><ul className="space-y-1">{conduct.avaliacao_inicial?.exames_complementares?.map((ex,i)=><li key={i} className="flex gap-2 items-start text-slate-500"><div className="mt-1.5 w-1.5 h-1.5 bg-slate-500 rounded-full shrink-0"/>{ex}</li>)}</ul></div>
                      </div>
                    </div>
                 </div>
                 
                 <div className={`rounded-2xl shadow-sm border overflow-hidden ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
-                   <div className={`px-5 py-3 border-b flex items-center gap-2 ${isDarkMode ? 'bg-blue-900/20 border-slate-800' : 'bg-blue-50 border-blue-100'}`}><Search size={18} className="text-blue-600"/><h3 className={`font-bold text-sm uppercase ${isDarkMode ? 'text-blue-400' : 'text-blue-900'}`}>Investigação</h3></div>
+                   <div className={`px-5 py-3 border-b flex items-center gap-2 ${isDarkMode ? 'bg-blue-900/20 border-slate-800' : 'bg-blue-50 border-blue-100'}`}><Search size={18} className="text-blue-600"/><h3 className={`font-bold text-sm uppercase ${isDarkMode ? 'text-blue-400' : 'text-blue-900'}`}>Investigação Diagnóstica</h3></div>
                    <div className="p-5 space-y-4 text-sm">
                      {conduct.achados_exames?.ecg && <div><div className={`flex items-center gap-2 font-bold mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}><HeartPulse size={14} className="text-rose-500"/> ECG</div><p className={`p-2 rounded border ${isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>{conduct.achados_exames.ecg}</p></div>}
                      {conduct.achados_exames?.laboratorio && <div><div className={`flex items-center gap-2 font-bold mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}><Microscope size={14} className="text-purple-500"/> Laboratório</div><p className={`p-2 rounded border ${isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>{conduct.achados_exames.laboratorio}</p></div>}
@@ -627,6 +535,7 @@ function EmergencyGuideAppContent() {
               <div className="lg:col-span-8 space-y-6">
                 <div className="space-y-4">
                    <div className={`flex items-center gap-2 mb-2 px-2 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}><div className={`p-1.5 rounded ${isDarkMode ? 'bg-emerald-900/50' : 'bg-emerald-100'}`}><Pill size={18}/></div><h3 className="font-bold text-lg">Prescrição e Conduta</h3></div>
+                   
                    {activeRoom === 'verde' ? (
                       conduct.tratamento_medicamentoso?.map((med, idx) => (
                         <MedicationCard key={idx} med={med} activeRoom={activeRoom} selectedPrescriptionItems={selectedPrescriptionItems} togglePrescriptionItem={togglePrescriptionItem} updateItemDays={updateItemDays} isDarkMode={isDarkMode} />
@@ -638,13 +547,20 @@ function EmergencyGuideAppContent() {
                               const mCat = m.categoria || "Outros";
                               return mCat.toLowerCase() === catName.toLowerCase() || (catName === "Outros" && !RED_ROOM_CATEGORIES.slice(0,6).some(c => c.toLowerCase() === mCat.toLowerCase()));
                            });
+
                            if (!catItems || catItems.length === 0) return null;
+
                            return (
                               <div key={catName} className="relative">
                                  <h4 className={`flex items-center gap-2 font-bold uppercase text-xs mb-3 pl-1 border-b pb-1 ${isDarkMode ? 'text-rose-300 border-rose-800/50' : 'text-rose-800 border-rose-100'}`}>
-                                   {catName === 'Dieta' && <Utensils size={14}/>}{catName === 'Hidratação' && <Droplets size={14}/>}{catName === 'Drogas Vasoativas' && <Zap size={14}/>}{catName}
+                                   {catName === 'Dieta' && <Utensils size={14}/>}
+                                   {catName === 'Hidratação' && <Droplets size={14}/>}
+                                   {catName === 'Drogas Vasoativas' && <Zap size={14}/>}
+                                   {catName}
                                  </h4>
-                                 <div className="grid gap-4">{catItems.map((med, idx) => (<MedicationCard key={idx} med={med} activeRoom={activeRoom} selectedPrescriptionItems={selectedPrescriptionItems} togglePrescriptionItem={togglePrescriptionItem} updateItemDays={updateItemDays} isDarkMode={isDarkMode} />))}</div>
+                                 <div className="grid gap-4">
+                                   {catItems.map((med, idx) => (<MedicationCard key={idx} med={med} activeRoom={activeRoom} selectedPrescriptionItems={selectedPrescriptionItems} togglePrescriptionItem={togglePrescriptionItem} updateItemDays={updateItemDays} isDarkMode={isDarkMode} />))}
+                                 </div>
                               </div>
                            );
                          })}
@@ -670,17 +586,7 @@ function EmergencyGuideAppContent() {
         )}
       </main>
 
-      <footer className={`border-t mt-auto ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
-        <div className="max-w-4xl mx-auto px-4 py-8 text-center">
-          <div className={`border rounded-xl p-4 mb-6 flex flex-col md:flex-row gap-4 items-center text-left ${isDarkMode ? 'bg-amber-900/20 border-amber-900/50' : 'bg-amber-50 border-amber-200'}`}>
-             <ShieldAlert className="text-amber-600 shrink-0 w-8 h-8" />
-             <div><h4 className={`font-bold uppercase text-sm mb-1 ${isDarkMode ? 'text-amber-400' : 'text-amber-900'}`}>Aviso Legal Importante</h4><p className={`text-xs leading-relaxed text-justify ${isDarkMode ? 'text-amber-200/90' : 'text-amber-800/90'}`}>Esta é uma ferramenta de <strong>guia de plantão</strong>. O conteúdo pode conter imprecisões.</p></div>
-          </div>
-          <p className="text-xs text-slate-400">&copy; {new Date().getFullYear()} EmergencyCorp.</p>
-        </div>
-      </footer>
-
-      {/* RENDERIZAÇÃO DOS MODALS VIA COMPONENTES */}
+      {/* Modals */}
       <InfusionCalculator isOpen={showCalculatorModal} onClose={() => setShowCalculatorModal(false)} isDarkMode={isDarkMode} />
       <NotepadModal isOpen={showNotepad} onClose={() => setShowNotepad(false)} isDarkMode={isDarkMode} userNotes={userNotes} handleNoteChange={handleNoteChange} currentUser={currentUser} isCloudConnected={isCloudConnected} isSaving={isSaving} />
       <FavoritesModal isOpen={showFavoritesModal} onClose={() => setShowFavoritesModal(false)} isDarkMode={isDarkMode} favorites={favorites} loadFavoriteConduct={loadFavoriteConduct} removeFavoriteFromList={removeFavoriteFromList} />
@@ -688,33 +594,11 @@ function EmergencyGuideAppContent() {
       <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} isDarkMode={isDarkMode} />
       <MedicalScoresModal isOpen={showScoresModal} onClose={() => setShowScoresModal(false)} isDarkMode={isDarkMode} />
       <QuickPrescriptionsModal isOpen={showQuickPrescriptions} onClose={() => setShowQuickPrescriptions(false)} isDarkMode={isDarkMode} />
-      
-      <ImageAnalysisModal 
-        isOpen={showImageModal} onClose={() => setShowImageModal(false)} isDarkMode={isDarkMode}
-        selectedImage={selectedImage} handleImageUpload={handleImageUpload} imageQuery={imageQuery} setImageQuery={setImageQuery}
-        handleAnalyzeImage={handleAnalyzeImage} isAnalyzingImage={isAnalyzingImage} imageAnalysisResult={imageAnalysisResult} setImageAnalysisResult={setImageAnalysisResult}
-      />
-
-      <BedsideModal 
-        isOpen={showBedsideModal} onClose={() => setShowBedsideModal(false)} isDarkMode={isDarkMode}
-        bedsideAnamnesis={bedsideAnamnesis} setBedsideAnamnesis={setBedsideAnamnesis}
-        bedsideExams={bedsideExams} setBedsideExams={setBedsideExams}
-        generateBedsideConduct={generateBedsideConduct} isGeneratingBedside={isGeneratingBedside} bedsideResult={bedsideResult}
-      />
-      
-      {/* RENDERIZAÇÃO DO MODAL DE EXAME FÍSICO */}
-      <PhysicalExamModal 
-        isOpen={showPhysicalExam} onClose={() => setShowPhysicalExam(false)} isDarkMode={isDarkMode}
-      />
+      <ImageAnalysisModal isOpen={showImageModal} onClose={() => setShowImageModal(false)} isDarkMode={isDarkMode} selectedImage={selectedImage} handleImageUpload={handleImageUpload} imageQuery={imageQuery} setImageQuery={setImageQuery} handleAnalyzeImage={handleAnalyzeImage} isAnalyzingImage={isAnalyzingImage} imageAnalysisResult={imageAnalysisResult} setImageAnalysisResult={setImageAnalysisResult} />
+      <BedsideModal isOpen={showBedsideModal} onClose={() => setShowBedsideModal(false)} isDarkMode={isDarkMode} bedsideAnamnesis={bedsideAnamnesis} setBedsideAnamnesis={setBedsideAnamnesis} bedsideExams={bedsideExams} setBedsideExams={setBedsideExams} generateBedsideConduct={generateBedsideConduct} isGeneratingBedside={isGeneratingBedside} bedsideResult={bedsideResult} />
+      <PhysicalExamModal isOpen={showPhysicalExam} onClose={() => setShowPhysicalExam(false)} isDarkMode={isDarkMode} />
     </div>
   );
 }
 
-// Wrapper para aplicar o ErrorBoundary
-export default function EmergencyGuideApp() {
-  return (
-    <ErrorBoundary>
-      <EmergencyGuideAppContent />
-    </ErrorBoundary>
-  );
-}
+export default function EmergencyGuideApp() { return <ErrorBoundary><EmergencyGuideAppContent /></ErrorBoundary>; }
