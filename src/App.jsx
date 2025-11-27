@@ -56,10 +56,8 @@ function EmergencyGuideAppContent() {
   const [authLoading, setAuthLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [isCloudConnected, setIsCloudConnected] = useState(false);
-  const [approvalStatus, setApprovalStatus] = useState(null); // 'pending', 'approved', 'rejected', null
+  const [approvalStatus, setApprovalStatus] = useState(null);
   const [configStatus, setConfigStatus] = useState('verificando');
-  
-  // Estado para usuário do Google que precisa completar cadastro
   const [pendingGoogleUser, setPendingGoogleUser] = useState(null);
 
   // App States
@@ -99,7 +97,49 @@ function EmergencyGuideAppContent() {
   const [isCurrentConductFavorite, setIsCurrentConductFavorite] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // --- INIT ---
+  // --- HELPER FUNCTIONS (MOVIDAS PARA CIMA PARA EVITAR ERRO DE REFERÊNCIA) ---
+  const showError = (msg) => { setErrorMsg(msg); setTimeout(() => setErrorMsg(''), 4000); };
+  const getConductDocId = (query, room) => `${query.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}_${room}`;
+
+  // --- DATA SYNC FUNCTIONS (MOVIDAS PARA CIMA) ---
+  const loadHistory = async (uid) => {
+    if (!db) return;
+    try {
+      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', uid);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists() && docSnap.data().searches) setRecentSearches(docSnap.data().searches);
+    } catch (e) {}
+  };
+
+  const fetchNotesFromCloud = async (uid) => {
+    if (!db) return;
+    try {
+      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'notes', uid);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) setUserNotes(docSnap.data().content || '');
+    } catch (e) {}
+  };
+
+  const saveToHistory = async (term, room) => {
+    if (!currentUser || !db) return;
+    const newEntry = { query: term, room, timestamp: new Date().toISOString() };
+    const updated = [newEntry, ...recentSearches.filter(s => s.query.toLowerCase() !== term.toLowerCase())].slice(0, 10);
+    setRecentSearches(updated);
+    try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'history', currentUser.uid), { searches: updated }, { merge: true }); } catch (e) {}
+  };
+
+  const subscribeToFavorites = (uid) => {
+    if (!db) return;
+    const favoritesRef = collection(db, 'artifacts', appId, 'users', uid, 'conducts');
+    const q = firestoreQuery(favoritesRef, where("isFavorite", "==", true));
+    return onSnapshot(q, (snapshot) => {
+        const favs = [];
+        snapshot.forEach((doc) => favs.push({ id: doc.id, ...doc.data() }));
+        setFavorites(favs);
+    });
+  };
+
+  // --- EFFECTS ---
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme_preference');
     if (savedTheme === 'dark') setIsDarkMode(true);
@@ -119,7 +159,7 @@ function EmergencyGuideAppContent() {
     localStorage.setItem('theme_preference', newMode ? 'dark' : 'light');
   };
 
-  // --- AUTH LISTENER ---
+  // --- AUTH LISTENER (AGORA AS FUNÇÕES JÁ EXISTEM) ---
   useEffect(() => {
     if (!auth) return;
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -129,11 +169,11 @@ function EmergencyGuideAppContent() {
           const docSnap = await getDoc(userDocRef);
           
           if (docSnap.exists()) {
-            // Usuário já existe no banco
             const userData = docSnap.data();
             if (userData.status === 'approved') {
               setCurrentUser({ ...userData, uid: user.uid, email: user.email });
               setApprovalStatus('approved');
+              // Funções chamadas aqui agora são seguras
               loadHistory(user.uid);
               fetchNotesFromCloud(user.uid);
             } else {
@@ -142,7 +182,6 @@ function EmergencyGuideAppContent() {
             }
             setPendingGoogleUser(null);
           } else {
-            // Usuário logou (Google) mas não tem doc -> Pendente de completar perfil
             setPendingGoogleUser(user);
             setCurrentUser(null);
             setApprovalStatus(null);
@@ -160,7 +199,24 @@ function EmergencyGuideAppContent() {
     return () => unsubscribe();
   }, []);
 
-  // --- LOGIN HANDLERS ---
+  useEffect(() => {
+    if (currentUser && isCloudConnected) {
+      const unsubFavs = subscribeToFavorites(currentUser.uid);
+      return () => { if(unsubFavs) unsubFavs(); };
+    }
+  }, [currentUser, isCloudConnected]);
+
+  useEffect(() => { 
+    if (!currentUser || !db) return;
+    const timeout = setTimeout(async () => {
+      setIsSaving(true);
+      try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'notes', currentUser.uid), { content: userNotes, lastUpdated: new Date().toISOString() }, { merge: true }); } 
+      finally { setIsSaving(false); }
+    }, 2000);
+    return () => clearTimeout(timeout);
+  }, [userNotes, currentUser]);
+
+  // --- HANDLERS ---
   const handleEmailLogin = async (email, password) => {
     setAuthLoading(true); setLoginError('');
     try { await signInWithEmailAndPassword(auth, email, password); } 
@@ -195,7 +251,6 @@ function EmergencyGuideAppContent() {
     finally { setAuthLoading(false); }
   };
 
-  // --- FINALIZAR CADASTRO GOOGLE ---
   const handleCompleteGoogleSignup = async (name, crm) => {
       if (!pendingGoogleUser) return;
       try {
@@ -220,59 +275,8 @@ function EmergencyGuideAppContent() {
     setPendingGoogleUser(null); setApprovalStatus(null);
   };
 
-  // --- HELPERS ---
-  const showError = (msg) => { setErrorMsg(msg); setTimeout(() => setErrorMsg(''), 4000); };
-  const getConductDocId = (query, room) => `${query.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}_${room}`;
-  
-  const getVitalIcon = (text) => {
-    const t = text.toLowerCase();
-    if (t.includes('fc') || t.includes('bpm')) return <HeartPulse size={16} className="text-rose-500" />;
-    if (t.includes('pa') || t.includes('mmhg') || t.includes('pam')) return <Activity size={16} className="text-blue-500" />;
-    if (t.includes('sat') || t.includes('o2')) return <Droplet size={16} className="text-cyan-500" />;
-    if (t.includes('fr') || t.includes('resp')) return <Wind size={16} className="text-teal-500" />;
-    return <Activity size={16} className="text-slate-400" />;
-  };
-
-  // --- DATA SYNC ---
-  const loadHistory = async (uid) => {
-    if (!db) return;
-    try {
-      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', uid);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists() && docSnap.data().searches) setRecentSearches(docSnap.data().searches);
-    } catch (e) {}
-  };
-
-  const saveToHistory = async (term, room) => {
-    if (!currentUser || !db) return;
-    const newEntry = { query: term, room, timestamp: new Date().toISOString() };
-    const updated = [newEntry, ...recentSearches.filter(s => s.query.toLowerCase() !== term.toLowerCase())].slice(0, 10);
-    setRecentSearches(updated);
-    try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'history', currentUser.uid), { searches: updated }, { merge: true }); } catch (e) {}
-  };
-
-  const fetchNotesFromCloud = async (uid) => {
-    if (!db) return;
-    try {
-      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'notes', uid);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) setUserNotes(docSnap.data().content || '');
-    } catch (e) {}
-  };
-
-  useEffect(() => { 
-    if (!currentUser || !db) return;
-    const timeout = setTimeout(async () => {
-      setIsSaving(true);
-      try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'notes', currentUser.uid), { content: userNotes, lastUpdated: new Date().toISOString() }, { merge: true }); } 
-      finally { setIsSaving(false); }
-    }, 2000);
-    return () => clearTimeout(timeout);
-  }, [userNotes, currentUser]);
-
   const handleNoteChange = (e) => setUserNotes(e.target.value);
 
-  // --- CORE LOGIC ---
   const toggleFavorite = async () => {
     if (!currentUser || !conduct) { showError("Necessário estar online."); return; }
     const newStatus = !isCurrentConductFavorite;
@@ -383,7 +387,6 @@ function EmergencyGuideAppContent() {
 
     const docId = getConductDocId(searchQuery, targetRoom);
     
-    // Check Cache
     if (currentUser && db) {
       try {
         const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', docId);
@@ -426,7 +429,6 @@ function EmergencyGuideAppContent() {
     return <DisclaimerScreen onAccept={() => { setHasAcceptedTerms(true); localStorage.setItem('terms_accepted_v1', 'true'); }} isDarkMode={isDarkMode} toggleTheme={toggleTheme} />;
   }
 
-  // Se tem pendência de dados do Google, abre o modal de completar
   if (pendingGoogleUser) {
       return <CompleteProfileModal isOpen={true} googleUser={pendingGoogleUser} onComplete={handleCompleteGoogleSignup} />;
   }
@@ -460,8 +462,6 @@ function EmergencyGuideAppContent() {
           <div className="flex items-center gap-3">
              <div className="hidden sm:flex flex-col items-end mr-2"><span className={`text-xs font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{currentUser.name}</span><span className="text-[10px] text-slate-400 uppercase">Médico(a)</span></div>
              <ThemeToggle isDarkMode={isDarkMode} toggleTheme={toggleTheme} />
-             
-             {/* FERRAMENTAS */}
              <div className="relative">
                 <button aria-label="Ferramentas" onClick={() => setShowToolsMenu(!showToolsMenu)} className={`px-3 py-2 rounded-lg flex items-center gap-2 transition-colors font-bold text-sm ${isDarkMode ? 'bg-blue-900/30 text-blue-300 hover:bg-blue-900/50' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}>
                   <LayoutGrid size={18} /><span className="hidden sm:inline">Ferramentas</span><ChevronDown size={14} className={`transition-transform ${showToolsMenu ? 'rotate-180' : ''}`} />
@@ -482,18 +482,14 @@ function EmergencyGuideAppContent() {
                   </div>
                 )}
              </div>
-             
-             {/* BOTÃO DE AJUDA */}
-             <button aria-label="Ajuda" onClick={() => setShowHelpModal(true)} className={`p-2 rounded-full ${isDarkMode ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-500 hover:bg-gray-100'}`}><HelpCircle size={20} /></button>
-             
-             <button aria-label="Sair" onClick={handleLogout} className={`p-2 rounded-full ${isDarkMode ? 'text-red-400 hover:bg-red-900/30' : 'text-red-400 hover:bg-red-50'}`}><LogOut size={20} /></button>
+             <button onClick={() => setShowHelpModal(true)} className={`p-2 rounded-full ${isDarkMode ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-500 hover:bg-gray-100'}`}><HelpCircle size={20} /></button>
+             <button onClick={handleLogout} className={`p-2 rounded-full ${isDarkMode ? 'text-red-400 hover:bg-red-900/30' : 'text-red-400 hover:bg-red-50'}`}><LogOut size={20} /></button>
           </div>
         </div>
       </header>
 
       <main className="flex-grow max-w-6xl mx-auto px-4 py-8 space-y-8 w-full relative" onClick={() => setShowToolsMenu(false)}>
         {activeRoom === 'verde' && selectedPrescriptionItems.length > 0 && (
-          {/* CORREÇÃO: O botão agora chama setShowPrescriptionModal(true) corretamente */}
           <button onClick={() => setShowPrescriptionModal(true)} className="fixed bottom-24 right-6 z-50 bg-blue-600 hover:bg-blue-700 text-white px-6 py-4 rounded-full shadow-xl flex items-center gap-3 font-bold transition-all animate-in slide-in-from-bottom-4"><Printer size={24} /> Gerar Receita ({selectedPrescriptionItems.length})</button>
         )}
 
