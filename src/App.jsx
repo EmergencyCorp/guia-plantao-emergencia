@@ -172,7 +172,6 @@ function EmergencyGuideAppContent() {
     setAuthLoading(true); setLoginError('');
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      // Salva o usuário usando o UID como chave (ID)
       await setDoc(doc(db, 'artifacts', appId, 'users', userCredential.user.uid), {
         name: fullName, crm: crm, email: email, status: 'pending', role: 'user', createdAt: new Date().toISOString()
       });
@@ -461,6 +460,8 @@ function EmergencyGuideAppContent() {
           <div className="flex items-center gap-3">
              <div className="hidden sm:flex flex-col items-end mr-2"><span className={`text-xs font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{currentUser.name}</span><span className="text-[10px] text-slate-400 uppercase">Médico(a)</span></div>
              <ThemeToggle isDarkMode={isDarkMode} toggleTheme={toggleTheme} />
+             
+             {/* FERRAMENTAS */}
              <div className="relative">
                 <button aria-label="Ferramentas" onClick={() => setShowToolsMenu(!showToolsMenu)} className={`px-3 py-2 rounded-lg flex items-center gap-2 transition-colors font-bold text-sm ${isDarkMode ? 'bg-blue-900/30 text-blue-300 hover:bg-blue-900/50' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}>
                   <LayoutGrid size={18} /><span className="hidden sm:inline">Ferramentas</span><ChevronDown size={14} className={`transition-transform ${showToolsMenu ? 'rotate-180' : ''}`} />
@@ -481,14 +482,18 @@ function EmergencyGuideAppContent() {
                   </div>
                 )}
              </div>
-             <button onClick={() => setShowHelpModal(true)} className={`p-2 rounded-full ${isDarkMode ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-500 hover:bg-gray-100'}`}><HelpCircle size={20} /></button>
-             <button onClick={handleLogout} className={`p-2 rounded-full ${isDarkMode ? 'text-red-400 hover:bg-red-900/30' : 'text-red-400 hover:bg-red-50'}`}><LogOut size={20} /></button>
+             
+             {/* BOTÃO DE AJUDA */}
+             <button aria-label="Ajuda" onClick={() => setShowHelpModal(true)} className={`p-2 rounded-full ${isDarkMode ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-500 hover:bg-gray-100'}`}><HelpCircle size={20} /></button>
+             
+             <button aria-label="Sair" onClick={handleLogout} className={`p-2 rounded-full ${isDarkMode ? 'text-red-400 hover:bg-red-900/30' : 'text-red-400 hover:bg-red-50'}`}><LogOut size={20} /></button>
           </div>
         </div>
       </header>
 
       <main className="flex-grow max-w-6xl mx-auto px-4 py-8 space-y-8 w-full relative" onClick={() => setShowToolsMenu(false)}>
         {activeRoom === 'verde' && selectedPrescriptionItems.length > 0 && (
+          {/* CORREÇÃO: O botão agora chama setShowPrescriptionModal(true) corretamente */}
           <button onClick={() => setShowPrescriptionModal(true)} className="fixed bottom-24 right-6 z-50 bg-blue-600 hover:bg-blue-700 text-white px-6 py-4 rounded-full shadow-xl flex items-center gap-3 font-bold transition-all animate-in slide-in-from-bottom-4"><Printer size={24} /> Gerar Receita ({selectedPrescriptionItems.length})</button>
         )}
 

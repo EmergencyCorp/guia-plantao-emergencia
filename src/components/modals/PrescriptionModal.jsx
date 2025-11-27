@@ -1,399 +1,179 @@
-// Arquivo: src/components/modals/QuickPrescriptionsModal.jsx
-import React, { useState, useMemo } from 'react';
-import { X, Search, ChevronRight, ArrowLeft, FileText, Activity, Wind, Brain, Stethoscope, Utensils, Zap, Pill } from 'lucide-react';
+// Arquivo: src/components/modals/PrescriptionModal.jsx
+import React, { useState, useEffect } from 'react';
+import { FilePlus, Printer, X, Activity, Trash2 } from 'lucide-react';
 
-// --- BASE DE DADOS DE RECEITAS ---
-const PRESCRIPTIONS_DB = [
-  {
-    category: 'Cardiologia',
-    icon: Activity,
-    color: 'text-rose-500',
-    pathologies: [
-      {
-        name: 'Síndrome Coronariana Aguda (SCA)',
-        drugs: [
-          { name: 'AAS', dose: '300mg (3 cp de 100mg)', obs: 'Mastigar. Dose de ataque. Manutenção 100mg/dia.', route: 'VO', ref: '' },
-          { name: 'Clopidogrel', dose: '300mg (4 cp de 75mg)', obs: 'Dose de ataque (600mg se for para Angioplastia). Manutenção 75mg/dia.', route: 'VO', ref: '' },
-          { name: 'Enoxaparina', dose: '1 mg/kg', obs: 'De 12/12h. Ajustar se ClCr < 30 ou Idade > 75.', route: 'SC', ref: '' },
-          { name: 'Atorvastatina', dose: '40mg', obs: 'Alta potência. Tomar 1x ao dia.', route: 'VO', ref: '' },
-          { name: 'Isordil', dose: '5mg', obs: 'Sublingual se dor (máx 3 doses). Evitar se uso de Viagra/Cialis ou Infarto de VD.', route: 'SL', ref: '' }
-        ]
-      },
-      {
-        name: 'Edema Agudo de Pulmão (EAP)',
-        drugs: [
-          { name: 'Furosemida', dose: '20-40mg (1-2 ampolas)', obs: 'Ou 1-2.5x a dose habitual do paciente.', route: 'IV', ref: '' },
-          { name: 'Nitroglicerina (Tridil)', dose: 'Início 5mcg/min', obs: 'Se PAS > 90mmHg. Titular a cada 5-10 min.', route: 'IV (BIC)', ref: '' },
-          { name: 'Morfina', dose: '2-4mg', obs: 'Com parcimônia se muita ansiedade/dispneia.', route: 'IV', ref: '' }
-        ]
-      },
-      {
-        name: 'Fibrilação Atrial (Controle de FC)',
-        drugs: [
-          { name: 'Metoprolol', dose: '5mg', obs: 'Fazer em 2 min. Pode repetir a cada 5 min (máx 15mg).', route: 'IV', ref: '' },
-          { name: 'Deslanosídeo', dose: '0.4mg (1 ampola)', obs: 'Lentamente. Opção se IC descompensada.', route: 'IV', ref: '' }
-        ]
-      },
-      {
-        name: 'Taquicardia Supraventricular',
-        drugs: [
-          { name: 'Manobra Vagal', dose: '---', obs: 'Primeira linha (Valsalva modificada).', route: '---', ref: '' },
-          { name: 'Adenosina', dose: '6mg', obs: 'Bolus rápido + Flush 20ml SF + Elevação membro. Se falha: 12mg.', route: 'IV', ref: '' }
-        ]
-      }
-    ]
-  },
-  {
-    category: 'Pneumologia',
-    icon: Wind,
-    color: 'text-blue-500',
-    pathologies: [
-      {
-        name: 'Crise Asmática',
-        drugs: [
-          { name: 'Salbutamol (Aerolin)', dose: '4-10 jatos', obs: 'Via espaçador. Repetir a cada 20 min na 1ª hora.', route: 'Inalatório', ref: '' },
-          { name: 'Ipratrópio (Atrovent)', dose: '40 gotas (500mcg) ou 4 jatos', obs: 'Associar ao beta-agonista na 1ª hora.', route: 'NBZ/Inal', ref: '' },
-          { name: 'Prednisolona', dose: '40-60mg', obs: 'Dose única matinal por 5-7 dias.', route: 'VO', ref: '' },
-          { name: 'Hidrocortisona', dose: '100-500mg', obs: 'Se intolerância oral ou caso grave.', route: 'IV', ref: '' }
-        ]
-      },
-      {
-        name: 'Pneumonia Adquirida na Comunidade (PAC)',
-        drugs: [
-          { name: 'Amoxicilina + Clavulanato', dose: '875/125mg', obs: 'De 12/12h por 7 dias.', route: 'VO', ref: '' },
-          { name: 'Azitromicina', dose: '500mg', obs: '1x ao dia por 5 dias.', route: 'VO', ref: '' },
-          { name: 'Ceftriaxona', dose: '1g - 2g', obs: '1x ao dia (Internação/Sala Amarela).', route: 'IV', ref: '' }
-        ]
-      },
-      {
-        name: 'DPOC Exacerbado',
-        drugs: [
-          { name: 'Salbutamol + Ipratrópio', dose: '---', obs: 'Manter broncodilatação frequente.', route: 'Inalatório', ref: '' },
-          { name: 'Prednisona', dose: '40mg', obs: '1x ao dia por 5 dias.', route: 'VO', ref: '' },
-          { name: 'Levofloxacino', dose: '750mg', obs: 'Se indicação de ATB (Escarro purulento, aumento volume, dispneia).', route: 'VO', ref: '' }
-        ]
-      }
-    ]
-  },
-  {
-    category: 'Neurologia',
-    icon: Brain,
-    color: 'text-purple-500',
-    pathologies: [
-      {
-        name: 'Crise Convulsiva',
-        drugs: [
-          { name: 'Diazepam', dose: '10mg', obs: 'Lentamente. Pode repetir após 5 min.', route: 'IV', ref: '' },
-          { name: 'Fenitoína', dose: '15-20mg/kg', obs: 'Dose de ataque. Diluir em SF 0.9% (Não usar SG).', route: 'IV', ref: '' }
-        ]
-      },
-      {
-        name: 'Enxaqueca / Cefaleia',
-        drugs: [
-          { name: 'Dipirona', dose: '1g', obs: 'Diluída.', route: 'IV', ref: '' },
-          { name: 'Cetoprofeno', dose: '100mg', obs: 'Diluir em 100ml SF. Correr em 20 min.', route: 'IV', ref: '' },
-          { name: 'Dexametasona', dose: '10mg', obs: 'Previne recorrência.', route: 'IV/IM', ref: '' },
-          { name: 'Metoclopramida', dose: '10mg', obs: 'Se náuseas.', route: 'IV', ref: '' }
-        ]
-      },
-      {
-        name: 'Vertigem Aguda',
-        drugs: [
-          { name: 'Dimenidrato (Dramin)', dose: '50mg', obs: 'Diluir.', route: 'IV', ref: '' },
-          { name: 'Clonazepam', dose: '0.5mg', obs: 'Inibidor vestibular agudo (uso pontual).', route: 'VO', ref: '' }
-        ]
-      }
-    ]
-  },
-  {
-    category: 'Infectologia',
-    icon: Stethoscope,
-    color: 'text-emerald-500',
-    pathologies: [
-      {
-        name: 'Infecção Urinária (Cistite)',
-        drugs: [
-          { name: 'Fosfomicina', dose: '3g (1 envelope)', obs: 'Dose única (preferencialmente à noite).', route: 'VO', ref: '' },
-          { name: 'Nitrofurantoína', dose: '100mg', obs: 'De 6/6h por 5-7 dias.', route: 'VO', ref: '' }
-        ]
-      },
-      {
-        name: 'Pielonefrite (Não complicada)',
-        drugs: [
-          { name: 'Ciprofloxacino', dose: '500mg', obs: 'De 12/12h por 7-10 dias.', route: 'VO', ref: '' },
-          { name: 'Ceftriaxona', dose: '1g', obs: '1x ao dia (se internação ou dia-hospital).', route: 'IV/IM', ref: '' }
-        ]
-      },
-      {
-        name: 'Faringoamigdalite Bacteriana',
-        drugs: [
-          { name: 'Penicilina Benzatina', dose: '1.200.000 UI', obs: 'Dose única profunda.', route: 'IM', ref: '' },
-          { name: 'Azitromicina', dose: '500mg', obs: '1x ao dia por 5 dias (se alergia).', route: 'VO', ref: '' }
-        ]
-      },
-      {
-        name: 'Sífilis (Primária/Secundária)',
-        drugs: [
-          { name: 'Penicilina Benzatina', dose: '2.400.000 UI', obs: '1.2MI em cada glúteo. Dose única.', route: 'IM', ref: '' }
-        ]
-      }
-    ]
-  },
-  {
-    category: 'Gastroenterologia',
-    icon: Utensils,
-    color: 'text-amber-500',
-    pathologies: [
-      {
-        name: 'Hemorragia Digestiva Alta',
-        drugs: [
-          { name: 'Omeprazol', dose: '40mg (ou 80mg bolus)', obs: 'Seguido de 40mg 12/12h ou BIC.', route: 'IV', ref: '' },
-          { name: 'Ondansetrona', dose: '8mg', obs: 'Controle de náusea.', route: 'IV', ref: '' },
-          { name: 'Terlipressina', dose: '2mg', obs: 'Se suspeita de varizes (bolus).', route: 'IV', ref: '' }
-        ]
-      },
-      {
-        name: 'Gastroenterite Aguda',
-        drugs: [
-          { name: 'SRO (Rehidrat)', dose: 'Ad libitum', obs: 'Após cada evacuação líquida.', route: 'VO', ref: '' },
-          { name: 'Ondansetrona', dose: '4-8mg', obs: 'Se vômitos.', route: 'IV/VO', ref: '' },
-          { name: 'Escopolamina (Buscopan)', dose: '20mg', obs: 'Se cólica.', route: 'IV/VO', ref: '' }
-        ]
-      }
-    ]
-  },
-  {
-    category: 'Endocrinologia',
-    icon: Zap,
-    color: 'text-indigo-500',
-    pathologies: [
-      {
-        name: 'Cetoacidose Diabética',
-        drugs: [
-          { name: 'Hidratação (SF 0.9%)', dose: '15-20 ml/kg', obs: 'Na primeira hora.', route: 'IV', ref: '' },
-          { name: 'Insulina Regular', dose: '0.1 U/kg/h', obs: 'Bomba de infusão contínua. Só iniciar se K > 3.3.', route: 'IV', ref: '' },
-          { name: 'Reposição de K', dose: '20-30 mEq/L', obs: 'Adicionar ao soro de manutenção se K < 5.2.', route: 'IV', ref: '' }
-        ]
-      },
-      {
-        name: 'Hipoglicemia Grave',
-        drugs: [
-          { name: 'Glicose 50%', dose: '40ml (4 ampolas)', obs: 'Bolus IV. Repetir se necessário.', route: 'IV', ref: '' },
-          { name: 'Glucagon', dose: '1mg', obs: 'Se sem acesso venoso.', route: 'IM', ref: '' }
-        ]
-      }
-    ]
-  },
-  {
-    category: 'Analgesia',
-    icon: Pill,
-    color: 'text-teal-500',
-    pathologies: [
-      {
-        name: 'Dor Leve',
-        drugs: [
-          { name: 'Dipirona', dose: '500mg-1g', obs: 'Até 6/6h.', route: 'VO/IV', ref: '' },
-          { name: 'Paracetamol', dose: '500-750mg', obs: 'Até 6/6h.', route: 'VO', ref: '' }
-        ]
-      },
-      {
-        name: 'Dor Moderada (Lombalgia/Cólica)',
-        drugs: [
-          { name: 'Cetoprofeno', dose: '100mg', obs: 'Diluído em 100ml SF.', route: 'IV', ref: '' },
-          { name: 'Tramadol', dose: '50-100mg', obs: 'Diluído. Pode causar náusea.', route: 'IV', ref: '' }
-        ]
-      },
-      {
-        name: 'Dor Intensa (Cólicas Nefréticas/Trauma)',
-        drugs: [
-          { name: 'Morfina', dose: '2-5mg (titular)', obs: 'Diluir para 1mg/ml. Fazer lento.', route: 'IV', ref: '' }
-        ]
-      }
-    ]
-  }
-];
+export default function PrescriptionModal({ isOpen, onClose, currentUser, selectedPrescriptionItems }) {
+  // Estado local para manipular os itens da receita (edição/remoção)
+  const [items, setItems] = useState([]);
 
-export default function QuickPrescriptionsModal({ isOpen, onClose, isDarkMode }) {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState(null);
-  const [selectedPathology, setSelectedPathology] = useState(null);
-
-  const filteredPathologies = useMemo(() => {
-    if (!searchTerm) return [];
-    const results = [];
-    PRESCRIPTIONS_DB.forEach(cat => {
-      cat.pathologies.forEach(path => {
-        if (path.name.toLowerCase().includes(searchTerm.toLowerCase())) {
-          results.push({ ...path, categoryName: cat.category, categoryColor: cat.color });
-        }
-      });
-    });
-    return results;
-  }, [searchTerm]);
+  // Sincroniza o estado local quando os itens selecionados mudam ou o modal abre
+  useEffect(() => {
+    if (isOpen) {
+      // Cria uma cópia profunda para não alterar o objeto original da conduta
+      setItems(JSON.parse(JSON.stringify(selectedPrescriptionItems)));
+    }
+  }, [isOpen, selectedPrescriptionItems]);
 
   if (!isOpen) return null;
 
-  const handleBack = () => {
-    if (selectedPathology) {
-      setSelectedPathology(null);
-    } else if (selectedCategory) {
-      setSelectedCategory(null);
-    } else {
-      onClose();
+  // Função para atualizar os campos de texto
+  const handleUpdateItem = (index, field, value) => {
+    const newItems = [...items];
+    // Como filtramos a lista na renderização, precisamos encontrar o item correto no array original
+    // O 'index' passado aqui é o índice REAL no array 'items', que passamos via item.originalIndex
+    
+    if (field === 'nome') {
+        if (newItems[index].receita) newItems[index].receita.nome_comercial = value;
+        else newItems[index].farmaco = value;
+    } else if (field === 'quantidade') {
+        if (newItems[index].receita) newItems[index].receita.quantidade = value;
+    } else if (field === 'instrucoes') {
+        if (newItems[index].receita) newItems[index].receita.instrucoes = value;
     }
+    setItems(newItems);
   };
 
-  const renderContent = () => {
-    if (searchTerm) {
-      return (
-        <div className="space-y-2 p-4">
-          <h4 className={`text-xs font-bold uppercase mb-2 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Resultados da busca</h4>
-          {filteredPathologies.length === 0 ? (
-            <p className="text-sm text-center py-8 opacity-50">Nenhuma patologia encontrada.</p>
-          ) : (
-            filteredPathologies.map((path, idx) => (
-              <button
-                key={idx}
-                onClick={() => { setSelectedPathology(path); setSearchTerm(''); }}
-                className={`w-full text-left p-4 rounded-xl border transition-all flex justify-between items-center ${isDarkMode ? 'bg-slate-800 border-slate-700 hover:border-blue-500' : 'bg-white border-gray-200 hover:border-blue-300'}`}
-              >
-                <div>
-                  <span className={`text-xs font-bold uppercase mb-1 block ${path.categoryColor}`}>{path.categoryName}</span>
-                  <span className={`font-bold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>{path.name}</span>
-                </div>
-                <ChevronRight size={16} className="opacity-50"/>
-              </button>
-            ))
-          )}
-        </div>
-      );
-    }
-
-    if (selectedPathology) {
-      return (
-        <div className="p-6 overflow-y-auto h-full animate-in slide-in-from-right-4 duration-300">
-          <div className="mb-6">
-            <span className={`text-xs font-bold uppercase tracking-wide px-2 py-1 rounded ${isDarkMode ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'}`}>
-              Prescrição Sugerida
-            </span>
-            <h2 className={`text-2xl font-bold mt-2 ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>{selectedPathology.name}</h2>
-          </div>
-
-          <div className="space-y-4">
-            {selectedPathology.drugs.map((drug, idx) => (
-              <div key={idx} className={`p-4 rounded-xl border border-l-4 ${isDarkMode ? 'bg-slate-800/50 border-slate-700 border-l-blue-500' : 'bg-white border-gray-200 border-l-blue-600'}`}>
-                <div className="flex justify-between items-start mb-2">
-                  <h3 className={`font-bold text-lg ${isDarkMode ? 'text-blue-300' : 'text-blue-800'}`}>{drug.name}</h3>
-                  <span className={`text-xs font-bold px-2 py-1 rounded uppercase ${isDarkMode ? 'bg-slate-700 text-slate-300' : 'bg-gray-100 text-gray-600'}`}>{drug.route}</span>
-                </div>
-                <div className={`text-sm font-mono mb-2 p-2 rounded ${isDarkMode ? 'bg-slate-900 text-emerald-400' : 'bg-slate-50 text-emerald-700'}`}>
-                  <strong>Dose:</strong> {drug.dose}
-                </div>
-                {drug.obs && (
-                  <p className={`text-sm italic ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                    <span className="font-bold not-italic">Obs:</span> {drug.obs}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-          
-          <div className={`mt-8 p-4 rounded-xl text-center text-xs border ${isDarkMode ? 'bg-yellow-900/10 border-yellow-900/30 text-yellow-500' : 'bg-yellow-50 border-yellow-200 text-yellow-800'}`}>
-            ⚠ Atenção: Confira doses e alergias antes de prescrever. Este é um guia de consulta rápida.
-          </div>
-        </div>
-      );
-    }
-
-    if (selectedCategory) {
-      return (
-        <div className="p-4 space-y-2 animate-in slide-in-from-right-4 duration-300">
-          <div className="flex items-center gap-3 mb-4 pb-2 border-b border-gray-200 dark:border-slate-700">
-            <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-slate-800' : 'bg-gray-100'} ${selectedCategory.color}`}>
-              <selectedCategory.icon size={24} />
-            </div>
-            <h2 className={`text-xl font-bold ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>{selectedCategory.category}</h2>
-          </div>
-          
-          {selectedCategory.pathologies.map((path, idx) => (
-            <button
-              key={idx}
-              onClick={() => setSelectedPathology(path)}
-              className={`w-full text-left p-4 rounded-xl border transition-all flex justify-between items-center group ${isDarkMode ? 'bg-slate-800 border-slate-700 hover:border-blue-500' : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-sm'}`}
-            >
-              <span className={`font-medium ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>{path.name}</span>
-              <ChevronRight size={18} className={`opacity-30 group-hover:opacity-100 transition-opacity ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}/>
-            </button>
-          ))}
-        </div>
-      );
-    }
-
-    return (
-      <div className="p-6 grid grid-cols-2 sm:grid-cols-3 gap-4 overflow-y-auto">
-        {PRESCRIPTIONS_DB.map((cat, idx) => (
-          <button
-            key={idx}
-            onClick={() => setSelectedCategory(cat)}
-            className={`flex flex-col items-center justify-center p-6 rounded-2xl border transition-all hover:scale-105 active:scale-95 ${isDarkMode ? 'bg-slate-800 border-slate-700 hover:bg-slate-700' : 'bg-white border-gray-100 shadow-sm hover:shadow-md hover:border-blue-200'}`}
-          >
-            <div className={`p-3 rounded-full mb-3 ${isDarkMode ? 'bg-slate-900' : 'bg-slate-50'} ${cat.color}`}>
-              <cat.icon size={28} />
-            </div>
-            <span className={`text-xs font-bold uppercase text-center ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>{cat.category}</span>
-          </button>
-        ))}
-      </div>
-    );
+  const handleRemoveItem = (index) => {
+    const newItems = items.filter((_, i) => i !== index);
+    setItems(newItems);
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className={`w-full max-w-2xl h-[80vh] rounded-3xl shadow-2xl overflow-hidden flex flex-col ${isDarkMode ? 'bg-slate-900 text-slate-100' : 'bg-slate-50'}`}>
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 print:p-0 animate-in fade-in duration-200">
+      <div className="bg-white w-full max-w-3xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] print:max-h-none print:h-full print:rounded-none print:shadow-none">
         
-        <div className={`p-4 border-b flex items-center gap-3 ${isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-white border-gray-200'}`}>
-          {(selectedCategory || selectedPathology) ? (
-            <button onClick={handleBack} className={`p-2 rounded-full hover:bg-opacity-20 hover:bg-gray-500`}>
-              <ArrowLeft size={20} />
+        {/* Header (Não sai na impressão) */}
+        <div className="bg-slate-100 p-4 border-b border-slate-200 flex justify-between items-center print:hidden">
+          <div>
+             <h3 className="font-bold text-slate-800 flex items-center gap-2"><FilePlus size={20} /> Gerador de Receituário</h3>
+             <p className="text-xs text-slate-500">Edite os campos abaixo antes de imprimir. O que você digitar sairá no papel.</p>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => window.print()} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors shadow-sm">
+                <Printer size={16}/> Imprimir
             </button>
-          ) : (
-            <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-100 text-blue-600'}`}>
-              <FileText size={20} />
-            </div>
-          )}
+            <button onClick={onClose} className="bg-gray-200 hover:bg-gray-300 text-gray-600 p-2 rounded-lg transition-colors">
+                <X size={20}/>
+            </button>
+          </div>
+        </div>
+
+        {/* Corpo da Receita (Papel) */}
+        <div className="p-12 overflow-y-auto print:overflow-visible font-serif text-slate-900 bg-white flex-1 flex flex-col h-full relative">
           
-          <div className="flex-1">
-            {(selectedCategory || selectedPathology) ? (
-               <h3 className="font-bold text-sm">Voltar</h3>
-            ) : (
-               <h3 className="font-bold text-lg">Receitas Rápidas</h3>
+          {/* Marca D'água */}
+          <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none">
+            <Activity size={400} />
+          </div>
+
+          {/* Cabeçalho do Médico */}
+          <header className="flex flex-col items-center border-b-4 border-double border-slate-800 pb-6 mb-8">
+            <h1 className="text-3xl font-bold tracking-widest uppercase text-slate-900 text-center">{currentUser?.name || "NOME DO MÉDICO"}</h1>
+            <div className="flex items-center gap-2 mt-2 text-sm font-bold text-slate-600 uppercase tracking-wide">
+                <span>CRM: {currentUser?.crm || "00000/UF"}</span>
+                <span>•</span>
+                <span>CLÍNICA MÉDICA</span>
+            </div>
+          </header>
+
+          {/* Lista de Medicamentos Editável */}
+          <div className="flex-1 space-y-8">
+            {['USO ORAL', 'USO TÓPICO', 'USO RETAL', 'USO INALATÓRIO', 'USO OFTÁLMICO', 'USO OTOLÓGICO'].map((usoType) => {
+              // Filtra os itens para esta categoria, mas guarda o índice original para editar depois
+              const filteredItems = items.map((item, index) => ({ ...item, originalIndex: index }))
+                                         .filter(item => {
+                                            const uso = item.receita?.uso?.toUpperCase() || '';
+                                            return uso.includes(usoType.replace('USO ', '')) || (usoType === 'USO ORAL' && !uso);
+                                         });
+
+              if (filteredItems.length === 0) return null;
+
+              return (
+                <div key={usoType}>
+                  <div className="flex items-center gap-4 mb-4">
+                    <h3 className="font-bold text-lg underline decoration-2 underline-offset-4">{usoType}</h3>
+                  </div>
+                  <ul className="space-y-6 list-none">
+                    {filteredItems.map((item, idx) => (
+                      <li key={item.originalIndex} className="relative pl-6 group">
+                        {/* Botão de Remover (Só aparece na tela ao passar o mouse e não sai na impressão) */}
+                        <button 
+                            onClick={() => handleRemoveItem(item.originalIndex)}
+                            className="absolute -left-10 top-2 p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-all print:hidden"
+                            title="Remover item da receita"
+                        >
+                            <Trash2 size={16} />
+                        </button>
+
+                        <span className="absolute left-0 top-1.5 font-bold text-lg">{idx + 1}.</span>
+                        
+                        <div className="flex items-end mb-1 w-full">
+                          {/* Nome do Medicamento Editável */}
+                          <input 
+                            type="text" 
+                            className="font-bold text-xl bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-500 outline-none w-full print:border-none transition-colors p-0 m-0"
+                            value={item.receita?.nome_comercial || item.farmaco}
+                            onChange={(e) => handleUpdateItem(item.originalIndex, 'nome', e.target.value)}
+                          />
+                          
+                          <div className="flex-1 mx-2 border-b-2 border-dotted border-slate-400 mb-1.5 opacity-30"></div>
+                          
+                          {/* Quantidade Editável */}
+                          <input 
+                            type="text" 
+                            className="font-bold text-lg whitespace-nowrap text-right bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-500 outline-none w-40 print:border-none transition-colors p-0 m-0"
+                            value={item.receita?.quantidade || "1 un"}
+                            onChange={(e) => handleUpdateItem(item.originalIndex, 'quantidade', e.target.value)}
+                          />
+                        </div>
+                        
+                        {/* Instruções Editáveis (Textarea que cresce) */}
+                        <textarea 
+                            className="w-full text-base leading-relaxed text-slate-800 mt-1 pl-2 border-l-4 border-slate-200 bg-transparent outline-none resize-none overflow-hidden hover:border-l-blue-300 focus:border-l-blue-500 print:border-l-slate-300 transition-colors"
+                            rows={2}
+                            value={`${item.receita?.instrucoes || ''}${item.dias_tratamento ? ` (Uso por ${item.dias_tratamento} dias)` : ''}`}
+                            onChange={(e) => handleUpdateItem(item.originalIndex, 'instrucoes', e.target.value)}
+                            onInput={(e) => {
+                                e.target.style.height = "auto";
+                                e.target.style.height = e.target.scrollHeight + "px";
+                            }}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )
+            })}
+            
+            {items.length === 0 && (
+                <div className="text-center py-20 text-slate-400 italic print:hidden border-2 border-dashed border-slate-200 rounded-xl">
+                    <p>Nenhum medicamento selecionado.</p>
+                    <p className="text-xs mt-1">Selecione itens na tela anterior ou adicione manualmente aqui em futuras atualizações.</p>
+                </div>
             )}
           </div>
 
-          <button onClick={onClose} className={`p-2 rounded-full transition-colors ${isDarkMode ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-gray-100 text-slate-500'}`}>
-            <X size={20}/>
-          </button>
-        </div>
-
-        {!selectedPathology && (
-          <div className={`p-4 border-b ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
-            <div className="relative">
-              <input 
-                type="text" 
-                placeholder="Pesquisar patologia (ex: Pneumonia, IAM...)" 
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className={`w-full pl-10 pr-4 py-3 rounded-xl outline-none border focus:ring-2 focus:ring-blue-500 transition-all ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500' : 'bg-gray-50 border-gray-200 text-slate-800'}`} 
-              />
-              <Search className="absolute left-3 top-3.5 text-gray-400" size={18} />
+          {/* Rodapé da Receita */}
+          <footer className="mt-auto pt-12 print:break-inside-avoid">
+            <div className="flex justify-between items-end">
+                <div className="text-sm">
+                    <p className="font-bold">Data:</p>
+                    <div className="w-40 border-b border-slate-800 mt-4 text-center relative top-1 font-mono">
+                        {new Date().toLocaleDateString('pt-BR')}
+                    </div>
+                </div>
+                <div className="text-center">
+                    <div className="w-64 border-b border-slate-800 mb-2"></div>
+                    <p className="font-bold uppercase text-sm">{currentUser?.name}</p>
+                    <p className="text-xs text-slate-500">Assinatura e Carimbo</p>
+                </div>
             </div>
-          </div>
-        )}
+            <div className="text-center mt-8 pt-4 border-t border-slate-200 text-[10px] text-slate-400 uppercase">
+                Receituário gerado via Lister Guidance • Uso Profissional
+            </div>
+          </footer>
 
-        <div className="flex-1 overflow-y-auto bg-opacity-50">
-          {renderContent()}
         </div>
-
       </div>
     </div>
   );
