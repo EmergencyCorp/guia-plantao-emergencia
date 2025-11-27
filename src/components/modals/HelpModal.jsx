@@ -1,7 +1,7 @@
 // Arquivo: src/components/modals/HelpModal.jsx
 import React from 'react';
-// CORREÇÃO: HelpCircle -> CircleHelp
-import { X, Search, Camera, ClipboardList, Calculator, Star, Edit, CircleHelp } from 'lucide-react';
+// CORREÇÃO: Revertido para nomes compatíveis com sua versão (HelpCircle e Edit)
+import { X, Search, Camera, ClipboardList, Calculator, Star, Edit, HelpCircle } from 'lucide-react';
 
 export default function HelpModal({ isOpen, onClose, isDarkMode }) {
   if (!isOpen) return null;
@@ -24,8 +24,8 @@ export default function HelpModal({ isOpen, onClose, isDarkMode }) {
         
         <div className={`p-4 border-b flex justify-between items-center ${isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-white border-gray-200'}`}>
           <h3 className={`font-bold flex items-center gap-2 ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>
-            {/* CORREÇÃO: CircleHelp */}
-            <CircleHelp size={20} className="text-blue-500"/> Central de Ajuda
+            {/* CORREÇÃO: HelpCircle */}
+            <HelpCircle size={20} className="text-blue-500"/> Central de Ajuda
           </h3>
           <button onClick={onClose} className={`p-2 rounded-full transition-colors ${isDarkMode ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-gray-100 text-slate-500'}`}>
             <X size={20}/>
@@ -63,7 +63,7 @@ export default function HelpModal({ isOpen, onClose, isDarkMode }) {
               desc="Calcule rapidamente a velocidade de infusão (ml/h) de drogas vasoativas e sedativos baseando-se no peso do paciente e concentração."
             />
             <FeatureItem 
-              icon={Edit} 
+              icon={Edit} // CORREÇÃO: Edit
               color="text-amber-500"
               title="Meu Caderno" 
               desc="Um bloco de notas pessoal persistente. Suas anotações são salvas automaticamente na nuvem e sincronizadas entre seus dispositivos."

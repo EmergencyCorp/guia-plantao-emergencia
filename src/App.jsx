@@ -5,8 +5,8 @@ import {
   AlertTriangle, ArrowRight, X, User, CheckCircle2, Siren, ShieldAlert, 
   LogOut, History, Cloud, CloudOff, HeartPulse, Microscope, Image as ImageIcon, 
   Wind, Droplet, Skull, Printer, Calculator, Star, Utensils, Zap, Camera, 
-  BedDouble, ClipboardList, Pencil, LayoutGrid, ChevronDown, FileText, Droplets,
-  Pill, CircleHelp
+  BedDouble, ClipboardList, Edit, LayoutGrid, ChevronDown, FileText, Droplets, // CORREÇÃO: Edit
+  Pill, HelpCircle // CORREÇÃO: HelpCircle
 } from 'lucide-react';
 
 // --- CONFIG & COMPONENTS ---
