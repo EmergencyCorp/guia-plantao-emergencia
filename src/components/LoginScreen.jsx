@@ -26,17 +26,35 @@ export default function LoginScreen({
           {loginError && <div className={`p-3 rounded-lg text-xs flex items-center gap-2 border font-mono ${isDarkMode ? 'bg-red-900/30 text-red-200 border-red-800' : 'bg-red-50 text-red-600 border-red-100'}`}>{loginError}</div>}
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-                <label className={`text-xs font-bold uppercase ml-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Usuário</label>
+                <label htmlFor="username" className={`text-xs font-bold uppercase ml-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Usuário</label>
                 <div className="relative">
                     <User className={`absolute left-3 top-3 w-5 h-5 ${isDarkMode ? 'text-slate-500' : 'text-gray-400'}`} />
-                    <input type="text" value={usernameInput} onChange={(e)=>setUsernameInput(e.target.value)} className={`w-full pl-10 pr-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-900 ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500' : 'bg-gray-50 border-gray-200'}`} placeholder="Ex: admin" />
+                    <input 
+                      id="username"
+                      name="username"
+                      type="text" 
+                      value={usernameInput} 
+                      onChange={(e)=>setUsernameInput(e.target.value)} 
+                      className={`w-full pl-10 pr-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-900 ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500' : 'bg-gray-50 border-gray-200'}`} 
+                      placeholder="Ex: admin" 
+                      autoComplete="username"
+                    />
                 </div>
             </div>
             <div>
-                <label className={`text-xs font-bold uppercase ml-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Senha</label>
+                <label htmlFor="password" className={`text-xs font-bold uppercase ml-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Senha</label>
                 <div className="relative">
                     <KeyRound className={`absolute left-3 top-3 w-5 h-5 ${isDarkMode ? 'text-slate-500' : 'text-gray-400'}`} />
-                    <input type="password" value={passwordInput} onChange={(e)=>setPasswordInput(e.target.value)} className={`w-full pl-10 pr-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-900 ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500' : 'bg-gray-50 border-gray-200'}`} placeholder="••••••" />
+                    <input 
+                      id="password"
+                      name="password"
+                      type="password" 
+                      value={passwordInput} 
+                      onChange={(e)=>setPasswordInput(e.target.value)} 
+                      className={`w-full pl-10 pr-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-900 ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500' : 'bg-gray-50 border-gray-200'}`} 
+                      placeholder="••••••" 
+                      autoComplete="current-password"
+                    />
                 </div>
             </div>
             <button type="submit" className="w-full flex items-center justify-center gap-3 bg-blue-900 text-white font-bold p-3.5 rounded-xl hover:bg-blue-800 transition-all shadow-lg mt-2"><LogIn className="w-5 h-5" /> Acessar Sistema</button>

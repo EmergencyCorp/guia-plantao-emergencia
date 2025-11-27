@@ -1,14 +1,11 @@
-// Arquivo: src/App.jsx
 import React, { useState, useRef, useEffect } from 'react';
-// IMPORTAÇÃO RESTAURADA COMPLETA PARA EVITAR TELA BRANCA
 import { 
-  Activity, AlertCircle, Search, Clock, Pill, FileText, Loader2, BookOpen, 
-  Stethoscope, ClipboardCheck, AlertTriangle, ArrowRight, X, User, 
-  CheckCircle2, Thermometer, Syringe, Siren, FlaskConical, Tag, Package,
-  ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save, Cloud, CloudOff, Settings, Info,
-  HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine, Wind, Droplet, Timer, Skull, Printer, FilePlus, Calculator,
-  Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2, SprayCan, CalendarDays, Utensils, Zap, Camera, Upload, Eye,
-  Sun, Moon, BedDouble, ClipboardList, UserCheck, Calculator as CalcIcon, HelpCircle, LayoutGrid, ChevronDown
+  Activity, AlertCircle, Search, Loader2, BookOpen, Stethoscope, 
+  AlertTriangle, ArrowRight, X, User, CheckCircle2, Siren, ShieldAlert, 
+  LogOut, History, Cloud, CloudOff, HeartPulse, Microscope, Image as ImageIcon, 
+  Wind, Droplet, Skull, Printer, Calculator, Star, Utensils, Zap, Camera, 
+  BedDouble, ClipboardList, Edit, LayoutGrid, ChevronDown, FileText, Droplets,
+  Pill, HelpCircle // Adicionado HelpCircle
 } from 'lucide-react';
 
 // --- CONFIG & COMPONENTS ---
@@ -17,7 +14,7 @@ import ThemeToggle from './components/ThemeToggle';
 import LoginScreen from './components/LoginScreen';
 import MedicationCard from './components/MedicationCard';
 
-// --- MODALS (FERRAMENTAS) ---
+// --- MODALS ---
 import InfusionCalculator from './components/modals/InfusionCalculator';
 import ImageAnalysisModal from './components/modals/ImageAnalysisModal';
 import BedsideModal from './components/modals/BedsideModal';
@@ -32,7 +29,43 @@ import { doc, setDoc, getDoc, collection, query as firestoreQuery, where, orderB
 const appId = (typeof __app_id !== 'undefined') ? __app_id : 'emergency-guide-app';
 const initialToken = (typeof __initial_auth_token !== 'undefined') ? __initial_auth_token : null;
 
-export default function EmergencyGuideApp() {
+// --- ERROR BOUNDARY PARA EVITAR TELA BRANCA ---
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    this.setState({ error, errorInfo });
+    console.error("Erro capturado pelo ErrorBoundary:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-red-50 text-red-900 font-mono">
+          <div className="bg-white p-6 rounded-xl shadow-xl border border-red-200 max-w-2xl w-full">
+            <h1 className="text-2xl font-bold mb-4 flex items-center gap-2"><AlertTriangle className="text-red-600"/> Ops! O aplicativo encontrou um erro.</h1>
+            <p className="mb-4 text-sm text-gray-600">Por favor, tire um print desta tela e envie para o suporte.</p>
+            <div className="bg-slate-900 text-red-300 p-4 rounded-lg overflow-auto text-xs mb-4">
+              <strong>{this.state.error && this.state.error.toString()}</strong>
+              <pre className="mt-2 text-slate-500">{this.state.errorInfo && this.state.errorInfo.componentStack}</pre>
+            </div>
+            <button onClick={() => window.location.reload()} className="bg-red-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-red-700 transition-colors">Recarregar Página</button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children; 
+  }
+}
+
+function EmergencyGuideAppContent() {
   // --- STATE MANAGEMENT ---
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
@@ -441,7 +474,7 @@ export default function EmergencyGuideApp() {
              
              {/* FERRAMENTAS */}
              <div className="relative">
-                <button onClick={() => setShowToolsMenu(!showToolsMenu)} className={`px-3 py-2 rounded-lg flex items-center gap-2 transition-colors font-bold text-sm ${isDarkMode ? 'bg-blue-900/30 text-blue-300 hover:bg-blue-900/50' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}>
+                <button aria-label="Ferramentas" onClick={() => setShowToolsMenu(!showToolsMenu)} className={`px-3 py-2 rounded-lg flex items-center gap-2 transition-colors font-bold text-sm ${isDarkMode ? 'bg-blue-900/30 text-blue-300 hover:bg-blue-900/50' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}>
                   <LayoutGrid size={18} /><span className="hidden sm:inline">Ferramentas</span><ChevronDown size={14} className={`transition-transform ${showToolsMenu ? 'rotate-180' : ''}`} />
                 </button>
                 {showToolsMenu && (
@@ -457,7 +490,10 @@ export default function EmergencyGuideApp() {
                   </div>
                 )}
              </div>
-             <button onClick={handleLogout} className={`p-2 rounded-full ${isDarkMode ? 'text-red-400 hover:bg-red-900/30' : 'text-red-400 hover:bg-red-50'}`}><LogOut size={20} /></button>
+             {/* ÍCONE DE AJUDA RESTAURADO - Mesmo sem função por enquanto, evita crash se referenciado */}
+             <button aria-label="Ajuda" className={`p-2 rounded-full ${isDarkMode ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-500 hover:bg-gray-100'}`}><HelpCircle size={20} /></button>
+             
+             <button aria-label="Sair" onClick={handleLogout} className={`p-2 rounded-full ${isDarkMode ? 'text-red-400 hover:bg-red-900/30' : 'text-red-400 hover:bg-red-50'}`}><LogOut size={20} /></button>
           </div>
         </div>
       </header>
@@ -487,8 +523,8 @@ export default function EmergencyGuideApp() {
 
           <div className={`p-2 rounded-2xl shadow-lg border flex items-center gap-2 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-100'}`}>
             <Search className="ml-3 text-gray-400" size={20} />
-            <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && generateConduct()} placeholder="Digite o quadro clínico (ex: Cetoacidose, IAM...)" className={`flex-1 py-3 bg-transparent outline-none font-medium ${isDarkMode ? 'text-white placeholder-slate-600' : 'text-slate-800'}`} />
-            <button onClick={() => generateConduct()} disabled={loading} className={`px-6 py-3 rounded-xl font-bold text-white flex items-center gap-2 transition-all ${loading ? 'bg-slate-600' : 'bg-blue-900 hover:bg-blue-800'}`}>{loading ? <Loader2 className="animate-spin" /> : <>Gerar <ArrowRight size={18} /></>}</button>
+            <input id="search-input" name="search" type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && generateConduct()} placeholder="Digite o quadro clínico (ex: Cetoacidose, IAM...)" className={`flex-1 py-3 bg-transparent outline-none font-medium ${isDarkMode ? 'text-white placeholder-slate-600' : 'text-slate-800'}`} />
+            <button aria-label="Gerar Conduta" onClick={() => generateConduct()} disabled={loading} className={`px-6 py-3 rounded-xl font-bold text-white flex items-center gap-2 transition-all ${loading ? 'bg-slate-600' : 'bg-blue-900 hover:bg-blue-800'}`}>{loading ? <Loader2 className="animate-spin" /> : <>Gerar <ArrowRight size={18} /></>}</button>
           </div>
 
           {recentSearches.length > 0 && (<div className="flex flex-wrap gap-2 px-1"><div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase mr-2"><History size={14} /> Recentes</div>{recentSearches.map((search, idx) => (<button key={idx} onClick={() => {setActiveRoom(search.room); setSearchQuery(search.query);}} className={`flex items-center gap-2 text-xs px-3 py-1 border rounded-full transition-colors ${isDarkMode ? 'bg-slate-900 border-slate-700 hover:border-blue-500 hover:text-blue-400 text-slate-300' : 'bg-white border-gray-200 hover:border-blue-300 hover:text-blue-700'}`}><div className={`w-2 h-2 rounded-full shrink-0 ${search.room === 'verde' ? 'bg-emerald-500' : search.room === 'amarela' ? 'bg-amber-500' : 'bg-rose-500'}`} />{search.query}</button>))}</div>)}
@@ -641,5 +677,14 @@ export default function EmergencyGuideApp() {
         generateBedsideConduct={generateBedsideConduct} isGeneratingBedside={isGeneratingBedside} bedsideResult={bedsideResult}
       />
     </div>
+  );
+}
+
+// Wrapper para aplicar o ErrorBoundary
+export default function EmergencyGuideApp() {
+  return (
+    <ErrorBoundary>
+      <EmergencyGuideAppContent />
+    </ErrorBoundary>
   );
 }
