@@ -5,7 +5,8 @@ import {
   AlertTriangle, ArrowRight, X, User, CheckCircle2, Siren, ShieldAlert, 
   LogOut, History, Cloud, CloudOff, HeartPulse, Microscope, Image as ImageIcon, 
   Wind, Droplet, Skull, Printer, Calculator, Star, Utensils, Zap, Camera, 
-  BedDouble, ClipboardList, Edit, LayoutGrid, ChevronDown, FileText, Droplets
+  BedDouble, ClipboardList, Edit, LayoutGrid, ChevronDown, FileText, Droplets,
+  Pill // <--- O ÍCONE QUE FALTAVA ESTÁ AQUI
 } from 'lucide-react';
 
 // --- CONFIG & COMPONENTS ---
@@ -14,7 +15,7 @@ import ThemeToggle from './components/ThemeToggle';
 import LoginScreen from './components/LoginScreen';
 import MedicationCard from './components/MedicationCard';
 
-// --- MODALS (Verifique se a pasta src/components/modals existe!) ---
+// --- MODALS ---
 import InfusionCalculator from './components/modals/InfusionCalculator';
 import ImageAnalysisModal from './components/modals/ImageAnalysisModal';
 import BedsideModal from './components/modals/BedsideModal';
@@ -346,7 +347,6 @@ export default function EmergencyGuideApp() {
       if (!response.ok) throw new Error('Erro ao analisar.');
       const data = await response.json();
       let finalResult = data.analysis;
-      // Lógica de parser simplificada
       if (typeof finalResult === 'string' && finalResult.trim().startsWith('{')) {
          try { const p = JSON.parse(finalResult); finalResult = p.analise_ecg || p.analysis || p; } catch(e){}
       }
@@ -437,7 +437,6 @@ export default function EmergencyGuideApp() {
              <div className="hidden sm:flex flex-col items-end mr-2"><span className={`text-xs font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{currentUser?.name}</span><span className="text-[10px] text-slate-400 uppercase">{currentUser?.role}</span></div>
              <ThemeToggle isDarkMode={isDarkMode} toggleTheme={toggleTheme} />
              
-             {/* FERRAMENTAS */}
              <div className="relative">
                 <button onClick={() => setShowToolsMenu(!showToolsMenu)} className={`px-3 py-2 rounded-lg flex items-center gap-2 transition-colors font-bold text-sm ${isDarkMode ? 'bg-blue-900/30 text-blue-300 hover:bg-blue-900/50' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}>
                   <LayoutGrid size={18} /><span className="hidden sm:inline">Ferramentas</span><ChevronDown size={14} className={`transition-transform ${showToolsMenu ? 'rotate-180' : ''}`} />
