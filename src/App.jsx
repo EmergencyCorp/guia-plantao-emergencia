@@ -27,6 +27,7 @@ import HelpModal from './components/modals/HelpModal';
 import MedicalScoresModal from './components/modals/MedicalScoresModal';
 import QuickPrescriptionsModal from './components/modals/QuickPrescriptionsModal';
 import PhysicalExamModal from './components/modals/PhysicalExamModal';
+import CompleteProfileModal from './components/modals/CompleteProfileModal'; // <--- NOVO IMPORT
 
 // --- FIREBASE IMPORTS ---
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
@@ -56,9 +57,10 @@ function EmergencyGuideAppContent() {
   const [loginError, setLoginError] = useState('');
   const [isCloudConnected, setIsCloudConnected] = useState(false);
   const [approvalStatus, setApprovalStatus] = useState(null); // 'pending', 'approved', 'rejected', null
-  
-  // CORREÇÃO: Estado configStatus adicionado aqui
   const [configStatus, setConfigStatus] = useState('verificando');
+  
+  // Estado para usuário do Google que precisa completar cadastro
+  const [pendingGoogleUser, setPendingGoogleUser] = useState(null);
 
   // App States
   const [activeRoom, setActiveRoom] = useState('verde');
@@ -103,7 +105,6 @@ function EmergencyGuideAppContent() {
     if (savedTheme === 'dark') setIsDarkMode(true);
     if (localStorage.getItem('terms_accepted_v1') === 'true') setHasAcceptedTerms(true);
     
-    // Verificação de configuração
     if (firebaseConfig && firebaseConfig.apiKey) {
         setIsCloudConnected(true);
         setConfigStatus('ok');
@@ -128,6 +129,7 @@ function EmergencyGuideAppContent() {
           const docSnap = await getDoc(userDocRef);
           
           if (docSnap.exists()) {
+            // Usuário já existe no banco (Cadastro completo)
             const userData = docSnap.data();
             if (userData.status === 'approved') {
               setCurrentUser({ ...userData, uid: user.uid, email: user.email });
@@ -138,16 +140,13 @@ function EmergencyGuideAppContent() {
               setApprovalStatus(userData.status || 'pending');
               setCurrentUser(null);
             }
+            setPendingGoogleUser(null); // Limpa pendência se existir
           } else {
-            await setDoc(userDocRef, {
-              name: user.displayName || 'Usuário',
-              email: user.email,
-              status: 'pending',
-              role: 'user',
-              createdAt: new Date().toISOString()
-            }, { merge: true });
-            setApprovalStatus('pending');
+            // Usuário logou no Auth (Google) mas NÃO tem doc no Firestore
+            // NÃO cria automático. Salva no estado para abrir o modal de completar perfil.
+            setPendingGoogleUser(user);
             setCurrentUser(null);
+            setApprovalStatus(null);
           }
         } catch (e) {
           console.error("Erro ao buscar perfil:", e);
@@ -156,6 +155,7 @@ function EmergencyGuideAppContent() {
       } else {
         setCurrentUser(null);
         setApprovalStatus(null);
+        setPendingGoogleUser(null);
       }
     });
     return () => unsubscribe();
@@ -183,12 +183,42 @@ function EmergencyGuideAppContent() {
   const handleGoogleLogin = async () => {
     setAuthLoading(true); setLoginError('');
     try { await signInWithPopup(auth, googleProvider); } 
-    catch (error) { setLoginError("Erro no login com Google."); } 
+    catch (error) { 
+        console.error(error);
+        if (error.code === 'auth/unauthorized-domain') {
+            setLoginError("Erro: Domínio não autorizado no Firebase.");
+        } else if (error.code === 'auth/popup-closed-by-user') {
+            setLoginError("Login cancelado.");
+        } else {
+            setLoginError("Erro no login: " + error.message); 
+        }
+    } 
     finally { setAuthLoading(false); }
+  };
+
+  // --- FINALIZAR CADASTRO GOOGLE ---
+  const handleCompleteGoogleSignup = async (name, crm) => {
+      if (!pendingGoogleUser) return;
+      try {
+          await setDoc(doc(db, 'artifacts', appId, 'users', pendingGoogleUser.uid), {
+              name: name,
+              crm: crm,
+              email: pendingGoogleUser.email,
+              status: 'pending',
+              role: 'user',
+              createdAt: new Date().toISOString()
+          });
+          setPendingGoogleUser(null);
+          setApprovalStatus('pending'); // Força a tela de pendência
+      } catch (error) {
+          console.error("Erro ao salvar perfil:", error);
+          setLoginError("Erro ao salvar dados do perfil.");
+      }
   };
 
   const handleLogout = async () => {
     await signOut(auth); setCurrentUser(null); setConduct(null); setFavorites([]);
+    setPendingGoogleUser(null); setApprovalStatus(null);
   };
 
   // --- HELPERS ---
@@ -395,6 +425,11 @@ function EmergencyGuideAppContent() {
   // --- VIEWS ---
   if (!hasAcceptedTerms) {
     return <DisclaimerScreen onAccept={() => { setHasAcceptedTerms(true); localStorage.setItem('terms_accepted_v1', 'true'); }} isDarkMode={isDarkMode} toggleTheme={toggleTheme} />;
+  }
+
+  // Se tem pendência de dados do Google, abre o modal de completar
+  if (pendingGoogleUser) {
+      return <CompleteProfileModal isOpen={true} googleUser={pendingGoogleUser} onComplete={handleCompleteGoogleSignup} />;
   }
 
   if (!currentUser && approvalStatus !== 'pending' && approvalStatus !== 'rejected') {
