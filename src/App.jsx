@@ -27,7 +27,7 @@ import HelpModal from './components/modals/HelpModal';
 import MedicalScoresModal from './components/modals/MedicalScoresModal';
 import QuickPrescriptionsModal from './components/modals/QuickPrescriptionsModal';
 import PhysicalExamModal from './components/modals/PhysicalExamModal';
-import CompleteProfileModal from './components/modals/CompleteProfileModal'; // <--- NOVO IMPORT
+import CompleteProfileModal from './components/modals/CompleteProfileModal';
 
 // --- FIREBASE IMPORTS ---
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
@@ -129,7 +129,7 @@ function EmergencyGuideAppContent() {
           const docSnap = await getDoc(userDocRef);
           
           if (docSnap.exists()) {
-            // Usuário já existe no banco (Cadastro completo)
+            // Usuário já existe no banco
             const userData = docSnap.data();
             if (userData.status === 'approved') {
               setCurrentUser({ ...userData, uid: user.uid, email: user.email });
@@ -140,10 +140,9 @@ function EmergencyGuideAppContent() {
               setApprovalStatus(userData.status || 'pending');
               setCurrentUser(null);
             }
-            setPendingGoogleUser(null); // Limpa pendência se existir
+            setPendingGoogleUser(null);
           } else {
-            // Usuário logou no Auth (Google) mas NÃO tem doc no Firestore
-            // NÃO cria automático. Salva no estado para abrir o modal de completar perfil.
+            // Usuário logou (Google) mas não tem doc -> Pendente de completar perfil
             setPendingGoogleUser(user);
             setCurrentUser(null);
             setApprovalStatus(null);
@@ -173,6 +172,7 @@ function EmergencyGuideAppContent() {
     setAuthLoading(true); setLoginError('');
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      // Salva o usuário usando o UID como chave (ID)
       await setDoc(doc(db, 'artifacts', appId, 'users', userCredential.user.uid), {
         name: fullName, crm: crm, email: email, status: 'pending', role: 'user', createdAt: new Date().toISOString()
       });
@@ -209,7 +209,7 @@ function EmergencyGuideAppContent() {
               createdAt: new Date().toISOString()
           });
           setPendingGoogleUser(null);
-          setApprovalStatus('pending'); // Força a tela de pendência
+          setApprovalStatus('pending'); 
       } catch (error) {
           console.error("Erro ao salvar perfil:", error);
           setLoginError("Erro ao salvar dados do perfil.");
