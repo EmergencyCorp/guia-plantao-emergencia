@@ -1,6 +1,7 @@
 // Arquivo: src/components/modals/InfusionCalculator.jsx
 import React, { useState, useEffect } from 'react';
-import { Calculator, X, Syringe, Weight } from 'lucide-react';
+// CORREÇÃO: 'Weight' não existe na sua versão. Substituído por 'User' para representar o paciente.
+import { Calculator, X, Syringe, User } from 'lucide-react';
 
 export default function InfusionCalculator({ isOpen, onClose, isDarkMode }) {
   const [calcInputs, setCalcInputs] = useState({
@@ -99,7 +100,8 @@ export default function InfusionCalculator({ isOpen, onClose, isDarkMode }) {
                 <label className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-slate-300' : 'text-gray-700'}`}>Peso do Paciente (kg)</label>
                 <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <Weight className="text-gray-400" size={18} />
+                        {/* CORREÇÃO: Weight substituído por User */}
+                        <User className="text-gray-400" size={18} />
                     </div>
                     <input 
                         type="number" 

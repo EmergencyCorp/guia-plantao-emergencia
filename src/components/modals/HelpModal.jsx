@@ -1,7 +1,9 @@
 // Arquivo: src/components/modals/HelpModal.jsx
 import React from 'react';
-// CORREÇÃO: Usando nomes compatíveis com sua versão
-import { X, Search, Camera, ClipboardList, Calculator, Star, Edit, HelpCircle } from 'lucide-react';
+import { 
+  X, Search, Camera, ClipboardList, Calculator, Star, Edit, HelpCircle, 
+  FileText, Activity, UserCheck 
+} from 'lucide-react';
 
 export default function HelpModal({ isOpen, onClose, isDarkMode }) {
   if (!isOpen) return null;
@@ -20,7 +22,7 @@ export default function HelpModal({ isOpen, onClose, isDarkMode }) {
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className={`w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] ${isDarkMode ? 'bg-slate-900 text-slate-100' : 'bg-white'}`}>
+      <div className={`w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] ${isDarkMode ? 'bg-slate-900 text-slate-100' : 'bg-white'}`}>
         
         <div className={`p-4 border-b flex justify-between items-center ${isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-white border-gray-200'}`}>
           <h3 className={`font-bold flex items-center gap-2 ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>
@@ -33,7 +35,7 @@ export default function HelpModal({ isOpen, onClose, isDarkMode }) {
 
         <div className="p-6 overflow-y-auto space-y-4">
           <p className={`text-sm mb-4 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-            Bem-vindo ao <strong>Lister Guidance</strong>. Abaixo estão as principais ferramentas disponíveis para auxiliar no seu plantão:
+            Bem-vindo ao <strong>Lister Guidance</strong>. Abaixo estão as ferramentas disponíveis para auxiliar no seu plantão:
           </p>
 
           <div className="grid md:grid-cols-2 gap-4">
@@ -42,6 +44,24 @@ export default function HelpModal({ isOpen, onClose, isDarkMode }) {
               color="text-blue-500"
               title="Busca de Condutas" 
               desc="Digite qualquer condição clínica (ex: IAM, Sepse) na barra principal para receber um guia completo de tratamento baseado na sala (Verde, Amarela ou Vermelha)."
+            />
+            <FeatureItem 
+              icon={FileText} 
+              color="text-teal-500"
+              title="Receitas Rápidas" 
+              desc="Banco de dados com prescrições prontas para as patologias mais comuns (Cardio, Pneumo, Gastro, etc.), ideal para agilizar o atendimento ambulatorial."
+            />
+            <FeatureItem 
+              icon={Activity} 
+              color="text-emerald-500"
+              title="Scores Médicos" 
+              desc="Calculadoras integradas para os principais scores de risco e prognóstico (Glasgow, CURB-65, Wells, SOFA, HEART, etc.)."
+            />
+            <FeatureItem 
+              icon={UserCheck} 
+              color="text-sky-500"
+              title="Exame Físico Padrão" 
+              desc="Modelos de descrição de exame físico normal (Masculino/Feminino) prontos para copiar e colar no prontuário."
             />
             <FeatureItem 
               icon={Camera} 
@@ -53,31 +73,31 @@ export default function HelpModal({ isOpen, onClose, isDarkMode }) {
               icon={ClipboardList} 
               color="text-emerald-500"
               title="BedSide Guidance" 
-              desc="Ferramenta para casos complexos à beira leito. Insira a anamnese completa e exames para gerar uma conduta personalizada e hipóteses diagnósticas."
+              desc="Ferramenta para casos complexos à beira leito. Insira a anamnese completa e exames para gerar uma conduta personalizada."
             />
             <FeatureItem 
               icon={Calculator} 
               color="text-rose-500"
               title="Calculadora de Infusão" 
-              desc="Calcule rapidamente a velocidade de infusão (ml/h) de drogas vasoativas e sedativos baseando-se no peso do paciente e concentração."
+              desc="Calcule rapidamente a vazão (ml/h) de drogas vasoativas e sedativos baseando-se no peso e concentração."
             />
             <FeatureItem 
               icon={Edit} 
               color="text-amber-500"
               title="Meu Caderno" 
-              desc="Um bloco de notas pessoal persistente. Suas anotações são salvas automaticamente na nuvem e sincronizadas entre seus dispositivos."
+              desc="Um bloco de notas pessoal persistente. Suas anotações são salvas automaticamente na nuvem e sincronizadas."
             />
-            <FeatureItem 
+             <FeatureItem 
               icon={Star} 
               color="text-yellow-500"
-              title="Favoritos Offline" 
-              desc="Salve as condutas mais utilizadas para acesso rápido. Os favoritos recentes ficam armazenados em cache para acesso ágil."
+              title="Favoritos" 
+              desc="Salve as condutas mais utilizadas para acesso rápido. Os favoritos recentes ficam armazenados para acesso ágil."
             />
           </div>
           
           <div className={`mt-6 p-4 rounded-xl border text-center ${isDarkMode ? 'bg-blue-900/20 border-blue-800 text-blue-300' : 'bg-blue-50 border-blue-100 text-blue-800'}`}>
             <p className="text-xs font-bold">Dica Pro</p>
-            <p className="text-xs mt-1">Use a ferramenta de <strong>Gerar Receita</strong> que aparece automaticamente ao selecionar medicamentos na Sala Verde.</p>
+            <p className="text-xs mt-1">Use a ferramenta de <strong>Gerar Receita</strong> que aparece automaticamente ao selecionar medicamentos (checkbox) na Sala Verde.</p>
           </div>
         </div>
 
