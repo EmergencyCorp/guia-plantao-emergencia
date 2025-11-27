@@ -5,7 +5,7 @@ import {
   AlertTriangle, ArrowRight, X, User, CheckCircle2, Siren, ShieldAlert, 
   LogOut, History, Cloud, CloudOff, HeartPulse, Microscope, Image as ImageIcon, 
   Wind, Droplet, Skull, Printer, Calculator, Star, Utensils, Zap, Camera, 
-  BedDouble, ClipboardList, Edit, LayoutGrid, ChevronDown, FileText, Droplets,
+  BedDouble, ClipboardList, Pencil, LayoutGrid, ChevronDown, FileText, Droplets,
   Pill, HelpCircle, UserCheck
 } from 'lucide-react';
 
@@ -13,6 +13,7 @@ import {
 import { auth, db, firebaseConfig } from './firebaseClient'; 
 import ThemeToggle from './components/ThemeToggle';
 import LoginScreen from './components/LoginScreen';
+import DisclaimerScreen from './components/DisclaimerScreen'; // <--- NOVO IMPORT
 import MedicationCard from './components/MedicationCard';
 
 // --- MODALS ---
@@ -71,6 +72,7 @@ class ErrorBoundary extends React.Component {
 function EmergencyGuideAppContent() {
   // --- STATE MANAGEMENT ---
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false); // <--- ESTADO DO TERMO
   const [currentUser, setCurrentUser] = useState(null);
   const [usernameInput, setUsernameInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
@@ -199,6 +201,10 @@ function EmergencyGuideAppContent() {
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme_preference');
     if (savedTheme === 'dark') setIsDarkMode(true);
+    
+    // Checar se já aceitou os termos
+    const terms = localStorage.getItem('terms_accepted_v1');
+    if (terms === 'true') setHasAcceptedTerms(true);
   }, []);
 
   const toggleTheme = () => {
@@ -283,6 +289,11 @@ function EmergencyGuideAppContent() {
   }, [userNotes, currentUser]);
 
   // --- ACTIONS ---
+  const handleAcceptTerms = () => {
+    setHasAcceptedTerms(true);
+    localStorage.setItem('terms_accepted_v1', 'true');
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault(); setLoginError('');
     if (!db || !isCloudConnected) { setLoginError("Sem conexão com o servidor."); return; }
@@ -309,6 +320,8 @@ function EmergencyGuideAppContent() {
     setCurrentUser(null); setConduct(null); setSearchQuery('');
     setRecentSearches([]); setUserNotes(''); setFavorites([]);
     localStorage.removeItem('emergency_app_user');
+    // Se quiser que o disclaimer apareça sempre ao deslogar, descomente:
+    // localStorage.removeItem('terms_accepted_v1'); setHasAcceptedTerms(false);
   };
 
   const toggleFavorite = async () => {
@@ -466,6 +479,11 @@ function EmergencyGuideAppContent() {
   };
   const RED_ROOM_CATEGORIES = ['Dieta', 'Hidratação', 'Drogas Vasoativas', 'Antibiótico', 'Sintomáticos', 'Profilaxias', 'Outros'];
 
+  // --- RENDERIZAÇÃO CONDICIONAL (DISCLAIMER -> LOGIN -> APP) ---
+  if (!hasAcceptedTerms) {
+    return <DisclaimerScreen onAccept={handleAcceptTerms} isDarkMode={isDarkMode} toggleTheme={toggleTheme} />;
+  }
+
   if (!currentUser) {
     return (
       <LoginScreen 
@@ -510,7 +528,7 @@ function EmergencyGuideAppContent() {
                 )}
              </div>
              
-             {/* BOTÃO DE AJUDA CORRIGIDO */}
+             {/* BOTÃO DE AJUDA */}
              <button aria-label="Ajuda" onClick={() => setShowHelpModal(true)} className={`p-2 rounded-full ${isDarkMode ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-500 hover:bg-gray-100'}`}><HelpCircle size={20} /></button>
              
              <button aria-label="Sair" onClick={handleLogout} className={`p-2 rounded-full ${isDarkMode ? 'text-red-400 hover:bg-red-900/30' : 'text-red-400 hover:bg-red-50'}`}><LogOut size={20} /></button>
