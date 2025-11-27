@@ -6,7 +6,7 @@ import {
   LogOut, History, Cloud, CloudOff, HeartPulse, Microscope, Image as ImageIcon, 
   Wind, Droplet, Skull, Printer, Calculator, Star, Utensils, Zap, Camera, 
   BedDouble, ClipboardList, Edit, LayoutGrid, ChevronDown, FileText, Droplets,
-  Pill, HelpCircle // Ícones essenciais
+  Pill, HelpCircle
 } from 'lucide-react';
 
 // --- CONFIG & COMPONENTS ---
@@ -22,7 +22,8 @@ import BedsideModal from './components/modals/BedsideModal';
 import PrescriptionModal from './components/modals/PrescriptionModal';
 import NotepadModal from './components/modals/NotepadModal';
 import FavoritesModal from './components/modals/FavoritesModal';
-import HelpModal from './components/modals/HelpModal'; // <--- IMPORTADO AQUI
+import HelpModal from './components/modals/HelpModal';
+import MedicalScoresModal from './components/modals/MedicalScoresModal'; // <--- NOVO IMPORT
 
 // --- FIREBASE IMPORTS ---
 import { signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
@@ -94,7 +95,8 @@ function EmergencyGuideAppContent() {
   const [showCalculatorModal, setShowCalculatorModal] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [showBedsideModal, setShowBedsideModal] = useState(false);
-  const [showHelpModal, setShowHelpModal] = useState(false); // <--- NOVO ESTADO
+  const [showHelpModal, setShowHelpModal] = useState(false);
+  const [showScoresModal, setShowScoresModal] = useState(false); // <--- NOVO ESTADO
 
   // Specific Data States
   const [userNotes, setUserNotes] = useState('');
@@ -122,8 +124,7 @@ function EmergencyGuideAppContent() {
     return <Activity size={16} className="text-slate-400" />;
   };
 
-  // --- DATA FETCHING FUNCTIONS ---
-  
+  // --- DATA FETCHING ---
   const loadLocalHistory = (username) => {
       try {
         const history = localStorage.getItem(`history_${username}`);
@@ -493,6 +494,8 @@ function EmergencyGuideAppContent() {
                     <div className="p-1 space-y-1">
                       <button onClick={() => { setShowImageModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-blue-300 hover:bg-slate-800' : 'text-blue-700 hover:bg-blue-50'}`}><Camera size={16} /> IA Vision</button>
                       <button onClick={() => { setShowBedsideModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-indigo-300 hover:bg-slate-800' : 'text-indigo-700 hover:bg-indigo-50'}`}><ClipboardList size={16} /> BedSide Guidance</button>
+                      {/* BOTÃO SCORES MÉDICOS ADICIONADO AQUI */}
+                      <button onClick={() => { setShowScoresModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-emerald-300 hover:bg-slate-800' : 'text-emerald-700 hover:bg-emerald-50'}`}><Activity size={16} /> Scores Médicos</button>
                       <button onClick={() => { setShowCalculatorModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-rose-300 hover:bg-slate-800' : 'text-rose-700 hover:bg-rose-50'}`}><Calculator size={16} /> Calc. Infusão</button>
                       <div className={`h-px my-1 ${isDarkMode ? 'bg-slate-800' : 'bg-gray-100'}`}></div>
                       <button onClick={() => { setShowFavoritesModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-yellow-400 hover:bg-slate-800' : 'text-yellow-600 hover:bg-yellow-50'}`}><Star size={16} /> Favoritos</button>
@@ -502,7 +505,7 @@ function EmergencyGuideAppContent() {
                 )}
              </div>
              
-             {/* BOTÃO DE AJUDA FUNCIONAL */}
+             {/* BOTÃO DE AJUDA */}
              <button aria-label="Ajuda" onClick={() => setShowHelpModal(true)} className={`p-2 rounded-full ${isDarkMode ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-500 hover:bg-gray-100'}`}><HelpCircle size={20} /></button>
              
              <button aria-label="Sair" onClick={handleLogout} className={`p-2 rounded-full ${isDarkMode ? 'text-red-400 hover:bg-red-900/30' : 'text-red-400 hover:bg-red-50'}`}><LogOut size={20} /></button>
@@ -676,6 +679,7 @@ function EmergencyGuideAppContent() {
       <FavoritesModal isOpen={showFavoritesModal} onClose={() => setShowFavoritesModal(false)} isDarkMode={isDarkMode} favorites={favorites} loadFavoriteConduct={loadFavoriteConduct} removeFavoriteFromList={removeFavoriteFromList} />
       <PrescriptionModal isOpen={showPrescriptionModal} onClose={() => setShowPrescriptionModal(false)} currentUser={currentUser} selectedPrescriptionItems={selectedPrescriptionItems} />
       <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} isDarkMode={isDarkMode} />
+      <MedicalScoresModal isOpen={showScoresModal} onClose={() => setShowScoresModal(false)} isDarkMode={isDarkMode} /> {/* <--- RENDERIZADO AQUI */}
       
       <ImageAnalysisModal 
         isOpen={showImageModal} onClose={() => setShowImageModal(false)} isDarkMode={isDarkMode}
