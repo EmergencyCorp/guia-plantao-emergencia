@@ -1,75 +1,188 @@
+// Arquivo: src/components/modals/InfusionCalculator.jsx
 import React, { useState, useEffect } from 'react';
-import { Calculator, X } from 'lucide-react';
+import { Calculator, X, Syringe, Weight } from 'lucide-react';
 
 export default function InfusionCalculator({ isOpen, onClose, isDarkMode }) {
   const [calcInputs, setCalcInputs] = useState({
-    dose: '', peso: '', conc: '', tp_dose: 'mcgmin', tp_conc: 'mgml'
+    dose: '', 
+    peso: '', 
+    conc: '', 
+    tp_dose: 'mcgmin', 
+    tp_conc: 'mgml'
   });
   const [calcResult, setCalcResult] = useState('---');
+  const [errorMsg, setErrorMsg] = useState('');
 
   const calcularMl = () => {
-    const dose = parseFloat(calcInputs.dose);
-    const peso = parseFloat(calcInputs.peso);
-    const conc = parseFloat(calcInputs.conc);
-    const tp_dose = calcInputs.tp_dose;
-    const tp_conc = calcInputs.tp_conc;
-
-    if (isNaN(dose) || isNaN(peso) || isNaN(conc) || dose <= 0 || peso <= 0 || conc <= 0) {
-      setCalcResult("Preencha valores válidos.");
-      return;
-    }
-    let dosePeloPeso = dose * peso;
-    let doseTotalHora = tp_dose.includes('min') ? dosePeloPeso * 60 : dosePeloPeso;
-    if (tp_dose.includes('mg')) doseTotalHora = doseTotalHora * 1000;
+    // Pega os valores do Estado
+    let dose = parseFloat(calcInputs.dose);
+    let peso = parseFloat(calcInputs.peso);
+    let conc = parseFloat(calcInputs.conc);
     
-    let concPadronizada = tp_conc === 'mgml' ? conc * 1000 : conc;
+    let tp_dose = calcInputs.tp_dose; // ex: mcgmin, mgmin, mcgh, mgh
+    let tp_conc = calcInputs.tp_conc; // ex: mgml, mcgml
+    
+    // Validação de entrada
+    if (isNaN(dose) || isNaN(peso) || isNaN(conc) || dose <= 0 || peso <= 0 || conc <= 0) {
+        setErrorMsg('Por favor, preencha todos os campos com valores válidos.');
+        setCalcResult('---');
+        return;
+    } else {
+        setErrorMsg('');
+    }
+    
+    // 1. Ajusta Dose Pelo Peso
+    let dosePeloPeso = dose * peso;
+    
+    // 2. Ajusta pelo Tempo (Minuto ou Hora)
+    let doseTotalHora = 0;
+    if (tp_dose.includes('min')) {
+        doseTotalHora = dosePeloPeso * 60; // Converte de /min para /hora
+    } else {
+        doseTotalHora = dosePeloPeso; // Já está em /hora
+    }
+    
+    // 3. Padroniza Unidades (tudo para mesma unidade antes de dividir)
+    // Converte dose para mcg/hora se necessário (Lógica baseada no seu HTML)
+    if (tp_dose.includes('mg') && !tp_dose.includes('mcg')) { 
+        doseTotalHora = doseTotalHora * 1000; // mg para mcg
+    }
+    
+    // Converte concentração para mcg/ml se necessário
+    let concPadronizada = conc;
+    if (tp_conc === 'mgml') {
+        concPadronizada = conc * 1000; // mg/ml para mcg/ml
+    }
+    
+    // 4. Cálculo Final: ml/h = (mcg/h) / (mcg/ml)
     let resultado = doseTotalHora / concPadronizada;
-
-    setCalcResult(resultado < 1 ? resultado.toFixed(2) + " ml/h" : resultado.toFixed(1) + " ml/h");
+    
+    // Exibe com formatação adequada
+    if (resultado < 1) {
+        setCalcResult(resultado.toFixed(2) + " ml/h");
+    } else {
+        setCalcResult(resultado.toFixed(1) + " ml/h");
+    }
   };
 
-  useEffect(() => { if (isOpen) calcularMl(); }, [calcInputs, isOpen]);
-  const handleCalcChange = (field, value) => setCalcInputs(prev => ({ ...prev, [field]: value }));
+  // Calcula automaticamente sempre que um input muda
+  useEffect(() => {
+    if (isOpen) calcularMl();
+  }, [calcInputs, isOpen]);
+
+  const handleCalcChange = (field, value) => {
+    setCalcInputs(prev => ({ ...prev, [field]: value }));
+  };
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className={`w-full max-w-md rounded-2xl shadow-2xl overflow-hidden ${isDarkMode ? 'bg-slate-900 text-slate-100' : 'bg-white'}`}>
-        <div className={`p-4 border-b flex justify-between items-center ${isDarkMode ? 'bg-rose-900/30 border-rose-800/50' : 'bg-rose-50 border-rose-100'}`}>
-          <h3 className={`font-bold flex items-center gap-2 ${isDarkMode ? 'text-rose-300' : 'text-rose-800'}`}><Calculator size={20} /> Calculadora de Infusão</h3>
-          <button onClick={onClose} className={`p-2 rounded-full transition-colors ${isDarkMode ? 'hover:bg-rose-900/50 text-rose-300' : 'hover:bg-rose-100 text-rose-700'}`}><X size={20}/></button>
+      <div className={`w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-100'}`}>
+        
+        {/* Header */}
+        <div className="bg-blue-600 p-6 text-center relative">
+            <button onClick={onClose} className="absolute right-4 top-4 text-blue-100 hover:text-white transition-colors">
+                <X size={24}/>
+            </button>
+            <h1 className="text-white text-2xl font-bold flex items-center justify-center gap-2">
+                <Syringe className="text-blue-200" size={24} /> Calc. Infusão
+            </h1>
+            <p className="text-blue-100 text-sm mt-1">Calculadora de Vazão (ml/h)</p>
         </div>
-        <div className="p-6 space-y-4">
-          <div>
-            <label className="text-xs font-bold text-slate-500 uppercase ml-1 mb-1 block">Peso do Paciente</label>
-            <div className="relative">
-                <input type="number" value={calcInputs.peso} onChange={(e) => handleCalcChange('peso', e.target.value)} placeholder="0.0" className={`w-full pl-4 pr-12 py-3 border rounded-xl focus:ring-2 focus:ring-rose-500 font-bold ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-gray-50 border-gray-200 text-slate-800'}`} />
-                <span className="absolute right-4 top-3.5 text-xs font-bold text-gray-400">kg</span>
+
+        {/* Form */}
+        <div className="p-6 space-y-5">
+            
+            {/* Peso do Paciente */}
+            <div>
+                <label className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-slate-300' : 'text-gray-700'}`}>Peso do Paciente (kg)</label>
+                <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Weight className="text-gray-400" size={18} />
+                    </div>
+                    <input 
+                        type="number" 
+                        value={calcInputs.peso}
+                        onChange={(e) => handleCalcChange('peso', e.target.value)}
+                        placeholder="Ex: 70" 
+                        className={`pl-10 block w-full rounded-lg border p-2.5 focus:ring-2 focus:ring-blue-500 outline-none transition-all ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'}`}
+                    />
+                </div>
             </div>
-          </div>
-          <div>
-            <label className="text-xs font-bold text-slate-500 uppercase ml-1 mb-1 block">Dose Desejada</label>
-            <div className="flex gap-2">
-                <input type="number" value={calcInputs.dose} onChange={(e) => handleCalcChange('dose', e.target.value)} placeholder="0.0" className={`w-1/2 pl-4 py-3 border rounded-xl focus:ring-2 focus:ring-rose-500 font-bold ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-gray-50 border-gray-200 text-slate-800'}`} />
-                <select value={calcInputs.tp_dose} onChange={(e) => handleCalcChange('tp_dose', e.target.value)} className={`w-1/2 px-2 border rounded-xl text-xs font-bold focus:ring-2 focus:ring-rose-500 outline-none ${isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-white border-gray-200 text-slate-600'}`}>
-                  <option value="mcgmin">mcg/kg/min</option><option value="mgmin">mg/kg/min</option><option value="mcgh">mcg/kg/h</option><option value="mgh">mg/kg/h</option>
-                </select>
+
+            {/* Dose Desejada */}
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-slate-300' : 'text-gray-700'}`}>Dose</label>
+                    <input 
+                        type="number" 
+                        value={calcInputs.dose}
+                        onChange={(e) => handleCalcChange('dose', e.target.value)}
+                        placeholder="Ex: 0.5" 
+                        className={`block w-full rounded-lg border p-2.5 focus:ring-2 focus:ring-blue-500 outline-none ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'}`}
+                    />
+                </div>
+                <div>
+                    <label className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-slate-300' : 'text-gray-700'}`}>Unidade</label>
+                    <select 
+                        value={calcInputs.tp_dose}
+                        onChange={(e) => handleCalcChange('tp_dose', e.target.value)}
+                        className={`block w-full rounded-lg border p-2.5 focus:ring-2 focus:ring-blue-500 outline-none ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'}`}
+                    >
+                        <option value="mcgmin">mcg/kg/min</option>
+                        <option value="mgmin">mg/kg/min</option>
+                        <option value="mcgh">mcg/kg/h</option>
+                        <option value="mgh">mg/kg/h</option>
+                    </select>
+                </div>
             </div>
-          </div>
-          <div>
-            <label className="text-xs font-bold text-slate-500 uppercase ml-1 mb-1 block">Concentração da Solução</label>
-            <div className="flex gap-2">
-                <input type="number" value={calcInputs.conc} onChange={(e) => handleCalcChange('conc', e.target.value)} placeholder="0.0" className={`w-1/2 pl-4 py-3 border rounded-xl focus:ring-2 focus:ring-rose-500 font-bold ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-gray-50 border-gray-200 text-slate-800'}`} />
-                <select value={calcInputs.tp_conc} onChange={(e) => handleCalcChange('tp_conc', e.target.value)} className={`w-1/2 px-2 border rounded-xl text-xs font-bold focus:ring-2 focus:ring-rose-500 outline-none ${isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-white border-gray-200 text-slate-600'}`}>
-                  <option value="mgml">mg/ml</option><option value="mcgml">mcg/ml</option>
-                </select>
+
+            <div className={`border-t border-dashed my-4 ${isDarkMode ? 'border-slate-700' : 'border-gray-200'}`}></div>
+
+            {/* Concentração da Solução */}
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-slate-300' : 'text-gray-700'}`}>Concentração</label>
+                    <input 
+                        type="number" 
+                        value={calcInputs.conc}
+                        onChange={(e) => handleCalcChange('conc', e.target.value)}
+                        placeholder="Ex: 2" 
+                        className={`block w-full rounded-lg border p-2.5 focus:ring-2 focus:ring-blue-500 outline-none ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'}`}
+                    />
+                </div>
+                <div>
+                    <label className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-slate-300' : 'text-gray-700'}`}>Unidade Conc.</label>
+                    <select 
+                        value={calcInputs.tp_conc}
+                        onChange={(e) => handleCalcChange('tp_conc', e.target.value)}
+                        className={`block w-full rounded-lg border p-2.5 focus:ring-2 focus:ring-blue-500 outline-none ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'}`}
+                    >
+                        <option value="mgml">mg/ml</option>
+                        <option value="mcgml">mcg/ml</option>
+                    </select>
+                </div>
             </div>
-          </div>
-          <div className={`rounded-xl p-6 text-center mt-6 ${isDarkMode ? 'bg-rose-900/20' : 'bg-rose-100'}`}>
-            <span className={`text-xs font-bold uppercase mb-1 block ${isDarkMode ? 'text-rose-400' : 'text-rose-600'}`}>Velocidade de Infusão</span>
-            <div className={`text-3xl font-extrabold ${isDarkMode ? 'text-rose-200' : 'text-rose-900'}`}>{calcResult}</div>
-          </div>
+
+            {/* Resultado */}
+            {errorMsg ? (
+                 <div className="text-center text-red-500 text-sm bg-red-50 p-2 rounded-lg border border-red-100">
+                    {errorMsg}
+                 </div>
+            ) : (
+                <div className={`rounded-xl p-4 text-center border ${isDarkMode ? 'bg-green-900/20 border-green-800' : 'bg-green-50 border-green-200'}`}>
+                    <p className={`text-sm font-semibold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-green-400' : 'text-green-600'}`}>Vazão da Bomba</p>
+                    <div className={`text-4xl font-bold ${isDarkMode ? 'text-green-300' : 'text-green-700'}`}>
+                        {calcResult}
+                    </div>
+                </div>
+            )}
+
+        </div>
+        
+        <div className={`p-3 text-center text-xs ${isDarkMode ? 'bg-slate-950 text-slate-500' : 'bg-gray-50 text-gray-400'}`}>
+            Verifique sempre os cálculos antes da administração.
         </div>
       </div>
     </div>
