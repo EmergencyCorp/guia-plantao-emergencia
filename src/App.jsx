@@ -23,7 +23,8 @@ import PrescriptionModal from './components/modals/PrescriptionModal';
 import NotepadModal from './components/modals/NotepadModal';
 import FavoritesModal from './components/modals/FavoritesModal';
 import HelpModal from './components/modals/HelpModal';
-import MedicalScoresModal from './components/modals/MedicalScoresModal'; // <--- NOVO IMPORT
+import MedicalScoresModal from './components/modals/MedicalScoresModal';
+import QuickPrescriptionsModal from './components/modals/QuickPrescriptionsModal'; // <--- NOVO IMPORT
 
 // --- FIREBASE IMPORTS ---
 import { signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
@@ -96,7 +97,8 @@ function EmergencyGuideAppContent() {
   const [showImageModal, setShowImageModal] = useState(false);
   const [showBedsideModal, setShowBedsideModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
-  const [showScoresModal, setShowScoresModal] = useState(false); // <--- NOVO ESTADO
+  const [showScoresModal, setShowScoresModal] = useState(false);
+  const [showQuickPrescriptions, setShowQuickPrescriptions] = useState(false); // <--- NOVO ESTADO
 
   // Specific Data States
   const [userNotes, setUserNotes] = useState('');
@@ -494,7 +496,7 @@ function EmergencyGuideAppContent() {
                     <div className="p-1 space-y-1">
                       <button onClick={() => { setShowImageModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-blue-300 hover:bg-slate-800' : 'text-blue-700 hover:bg-blue-50'}`}><Camera size={16} /> IA Vision</button>
                       <button onClick={() => { setShowBedsideModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-indigo-300 hover:bg-slate-800' : 'text-indigo-700 hover:bg-indigo-50'}`}><ClipboardList size={16} /> BedSide Guidance</button>
-                      {/* BOTÃO SCORES MÉDICOS ADICIONADO AQUI */}
+                      <button onClick={() => { setShowQuickPrescriptions(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-teal-300 hover:bg-slate-800' : 'text-teal-700 hover:bg-teal-50'}`}><FileText size={16} /> Acesso Rápido Receitas</button>
                       <button onClick={() => { setShowScoresModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-emerald-300 hover:bg-slate-800' : 'text-emerald-700 hover:bg-emerald-50'}`}><Activity size={16} /> Scores Médicos</button>
                       <button onClick={() => { setShowCalculatorModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-rose-300 hover:bg-slate-800' : 'text-rose-700 hover:bg-rose-50'}`}><Calculator size={16} /> Calc. Infusão</button>
                       <div className={`h-px my-1 ${isDarkMode ? 'bg-slate-800' : 'bg-gray-100'}`}></div>
@@ -679,7 +681,8 @@ function EmergencyGuideAppContent() {
       <FavoritesModal isOpen={showFavoritesModal} onClose={() => setShowFavoritesModal(false)} isDarkMode={isDarkMode} favorites={favorites} loadFavoriteConduct={loadFavoriteConduct} removeFavoriteFromList={removeFavoriteFromList} />
       <PrescriptionModal isOpen={showPrescriptionModal} onClose={() => setShowPrescriptionModal(false)} currentUser={currentUser} selectedPrescriptionItems={selectedPrescriptionItems} />
       <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} isDarkMode={isDarkMode} />
-      <MedicalScoresModal isOpen={showScoresModal} onClose={() => setShowScoresModal(false)} isDarkMode={isDarkMode} /> {/* <--- RENDERIZADO AQUI */}
+      <MedicalScoresModal isOpen={showScoresModal} onClose={() => setShowScoresModal(false)} isDarkMode={isDarkMode} />
+      <QuickPrescriptionsModal isOpen={showQuickPrescriptions} onClose={() => setShowQuickPrescriptions(false)} isDarkMode={isDarkMode} /> {/* <--- RENDERIZADO AQUI */}
       
       <ImageAnalysisModal 
         isOpen={showImageModal} onClose={() => setShowImageModal(false)} isDarkMode={isDarkMode}
