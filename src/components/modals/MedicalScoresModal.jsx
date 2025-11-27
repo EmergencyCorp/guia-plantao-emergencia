@@ -1,8 +1,8 @@
 // Arquivo: src/components/modals/MedicalScoresModal.jsx
 import React, { useState, useEffect } from 'react';
 import { 
-  X, Calculator, ChevronRight, Activity, CheckCircle2, Search, AlertTriangle, 
-  Brain, HeartPulse, Wind, Stethoscope, AlertOctagon, Thermometer, Baby, Beaker
+  X, Calculator, ChevronRight, Activity, AlertTriangle, 
+  Brain, HeartPulse, Wind, AlertOctagon, Thermometer, Baby, Beaker, Check
 } from 'lucide-react';
 
 // --- CONFIGURAÇÃO DOS SCORES ---
@@ -27,7 +27,6 @@ const SCORES_DB = [
   { id: 'kdigo', name: 'KDIGO (DRC)', category: 'Nefrologia', description: 'Estadiamento e Prognóstico da Doença Renal.' },
 ];
 
-// Helper para ícones de categoria
 const getCategoryIcon = (category) => {
     switch (category) {
         case 'Neurologia': return <Brain size={16} />;
@@ -53,11 +52,9 @@ export default function MedicalScoresModal({ isOpen, onClose, isDarkMode }) {
     setResult(null);
   }, [selectedScore]);
 
-  // --- CÁLCULO EM TEMPO REAL ---
+  // Cálculo Reativo
   useEffect(() => {
-    if (selectedScore) {
-        calculateResult();
-    }
+    if (selectedScore) calculateResult();
   }, [inputs, selectedScore]);
 
   if (!isOpen) return null;
@@ -84,45 +81,87 @@ export default function MedicalScoresModal({ isOpen, onClose, isDarkMode }) {
       }
   };
 
+  // --- COMPONENTES DE UI (Agora com feedback visual correto) ---
+  const ScoreInput = ({ label, children }) => (
+    <div className="mb-4">
+        <label className={`block text-xs font-bold uppercase mb-2 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>{label}</label>
+        {children}
+    </div>
+  );
+
+  const Select = ({ onChange, options, value }) => (
+    <div className="relative">
+        <select 
+            className={`w-full p-3 rounded-xl appearance-none outline-none border transition-all font-medium ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white focus:border-blue-500' : 'bg-gray-50 border-gray-200 text-gray-800 focus:border-blue-500'}`}
+            onChange={onChange}
+            value={value !== undefined && value !== null ? value : ''} // Força valor controlado
+        >
+            {options.map((opt, i) => <option key={i} value={opt.val}>{opt.label}</option>)}
+        </select>
+        <div className="absolute right-3 top-3.5 pointer-events-none opacity-50"><ChevronRight size={16} className="rotate-90"/></div>
+    </div>
+  );
+
+  const NumberInput = ({ onChange, placeholder, step, max, value }) => (
+    <input 
+        type="number" 
+        placeholder={placeholder} 
+        step={step}
+        max={max}
+        value={value !== undefined && value !== null ? value : ''} // Força valor controlado
+        className={`w-full p-3 rounded-xl outline-none border transition-all font-medium ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white focus:border-blue-500' : 'bg-gray-50 border-gray-200 text-gray-800 focus:border-blue-500'}`}
+        onChange={onChange}
+    />
+  );
+
+  const Checkbox = ({ label, onChange, checked }) => (
+    <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all group select-none ${checked ? (isDarkMode ? 'bg-blue-900/30 border-blue-500 ring-1 ring-blue-500' : 'bg-blue-50 border-blue-500 ring-1 ring-blue-500') : (isDarkMode ? 'bg-slate-800 border-slate-700 hover:border-slate-500' : 'bg-white border-gray-200 hover:border-gray-400')}`}>
+        <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${checked ? 'bg-blue-500 border-blue-500 text-white' : 'border-gray-400 text-transparent'}`}>
+            <Check size={14} strokeWidth={3} />
+        </div>
+        <input type="checkbox" className="hidden" checked={!!checked} onChange={onChange} />
+        <span className={`text-sm font-medium ${checked ? (isDarkMode ? 'text-blue-200' : 'text-blue-800') : (isDarkMode ? 'text-slate-300' : 'text-slate-700')}`}>{label}</span>
+    </label>
+  );
+
   // --- LÓGICA DE CÁLCULO ---
   const calculateResult = () => {
     let score = 0;
     let interpretation = '';
-    let severity = 'low'; // low, medium, high
+    let severity = 'low';
 
     try {
       switch (selectedScore.id) {
         case 'glasgow':
           score = (inputs.ocular || 0) + (inputs.verbal || 0) + (inputs.motor || 0);
-          if(score === 0) score = 3; // Ajuste inicial
+          if(score === 0) score = 3; 
           if (score <= 8) { interpretation = 'Coma / Trauma Grave (IOT Indicada)'; severity = 'high'; }
           else if (score <= 12) { interpretation = 'Trauma Moderado'; severity = 'medium'; }
           else { interpretation = 'Trauma Leve'; severity = 'low'; }
           break;
 
         case 'sofa2':
-            // SOFA 2.0
             let sofa2 = 0;
             if(inputs.sf_ratio && inputs.sf_ratio < 150 && inputs.resp_support) sofa2 += 4;
             else if(inputs.sf_ratio && inputs.sf_ratio < 235 && inputs.resp_support) sofa2 += 3;
             else if(inputs.sf_ratio && inputs.sf_ratio < 315) sofa2 += 2;
             else if(inputs.sf_ratio && inputs.sf_ratio < 400) sofa2 += 1;
             
-            if(inputs.plaq !== null && inputs.plaq < 20) sofa2 += 4; 
-            else if(inputs.plaq !== null && inputs.plaq < 50) sofa2 += 3; 
-            else if(inputs.plaq !== null && inputs.plaq < 100) sofa2 += 2; 
-            else if(inputs.plaq !== null && inputs.plaq < 150) sofa2 += 1;
+            if(inputs.plaq !== null && inputs.plaq !== undefined && inputs.plaq < 20) sofa2 += 4; 
+            else if(inputs.plaq !== null && inputs.plaq !== undefined && inputs.plaq < 50) sofa2 += 3; 
+            else if(inputs.plaq !== null && inputs.plaq !== undefined && inputs.plaq < 100) sofa2 += 2; 
+            else if(inputs.plaq !== null && inputs.plaq !== undefined && inputs.plaq < 150) sofa2 += 1;
             
             if(inputs.bili > 12) sofa2 += 4; else if(inputs.bili >= 6) sofa2 += 3; else if(inputs.bili >= 2) sofa2 += 2; else if(inputs.bili >= 1.2) sofa2 += 1;
 
             if(inputs.drogas) sofa2 += inputs.drogas;
-            else if(inputs.map !== null && inputs.map < 70) sofa2 += 1;
+            else if(inputs.map !== null && inputs.map !== undefined && inputs.map < 70) sofa2 += 1;
 
             const gcs = inputs.glasgow;
-            if(gcs !== null && gcs < 6) sofa2 += 4; 
-            else if(gcs !== null && gcs <= 9) sofa2 += 3; 
-            else if(gcs !== null && gcs <= 12) sofa2 += 2; 
-            else if(gcs !== null && gcs <= 14) sofa2 += 1;
+            if(gcs !== null && gcs !== undefined && gcs < 6) sofa2 += 4; 
+            else if(gcs !== null && gcs !== undefined && gcs <= 9) sofa2 += 3; 
+            else if(gcs !== null && gcs !== undefined && gcs <= 12) sofa2 += 2; 
+            else if(gcs !== null && gcs !== undefined && gcs <= 14) sofa2 += 1;
 
             if(inputs.creat > 5) sofa2 += 4; else if(inputs.creat >= 3.5) sofa2 += 3; else if(inputs.creat >= 2) sofa2 += 2; else if(inputs.creat >= 1.2) sofa2 += 1;
             if(inputs.lactate > 2) sofa2 += 1;
@@ -294,62 +333,23 @@ export default function MedicalScoresModal({ isOpen, onClose, isDarkMode }) {
     } catch (e) { setResult({ value: "Erro", text: "Verifique os dados.", color: getSeverityColor('medium') }); }
   };
 
-  // Componentes reutilizáveis de UI
-  const ScoreInput = ({ label, children }) => (
-    <div className="mb-4">
-        <label className={`block text-xs font-bold uppercase mb-2 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>{label}</label>
-        {children}
-    </div>
-  );
-
-  const Select = ({ onChange, options, value }) => (
-    <div className="relative">
-        <select 
-            className={`w-full p-3 rounded-xl appearance-none outline-none border transition-all ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white focus:border-blue-500' : 'bg-gray-50 border-gray-200 text-gray-800 focus:border-blue-500'}`}
-            onChange={onChange}
-            value={value}
-        >
-            {options.map((opt, i) => <option key={i} value={opt.val}>{opt.label}</option>)}
-        </select>
-        <div className="absolute right-3 top-3.5 pointer-events-none opacity-50"><ChevronRight size={16} className="rotate-90"/></div>
-    </div>
-  );
-
-  const NumberInput = ({ onChange, placeholder, step, max }) => (
-    <input 
-        type="number" 
-        placeholder={placeholder} 
-        step={step}
-        max={max}
-        className={`w-full p-3 rounded-xl outline-none border transition-all ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white focus:border-blue-500' : 'bg-gray-50 border-gray-200 text-gray-800 focus:border-blue-500'}`}
-        onChange={onChange}
-    />
-  );
-
-  const Checkbox = ({ label, onChange }) => (
-    <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all group ${isDarkMode ? 'bg-slate-800 border-slate-700 hover:border-blue-500' : 'bg-white border-gray-200 hover:border-blue-300'}`}>
-        <input type="checkbox" className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" onChange={onChange} />
-        <span className={`text-sm font-medium ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>{label}</span>
-    </label>
-  );
-
   // --- RENDERIZADORES DE INPUTS ---
   const renderInputs = () => {
     switch (selectedScore?.id) {
       case 'glasgow': return (
           <div className="space-y-2">
             <ScoreInput label="Abertura Ocular">
-                <Select onChange={(e) => handleInputChange('ocular', e.target.value)} options={[
+                <Select onChange={(e) => handleInputChange('ocular', e.target.value)} value={inputs.ocular} options={[
                     {val:0, label:'Selecione...'}, {val:4, label:'4 - Espontânea'}, {val:3, label:'3 - À voz'}, {val:2, label:'2 - À dor'}, {val:1, label:'1 - Ausente'}
                 ]} />
             </ScoreInput>
             <ScoreInput label="Resposta Verbal">
-                <Select onChange={(e) => handleInputChange('verbal', e.target.value)} options={[
+                <Select onChange={(e) => handleInputChange('verbal', e.target.value)} value={inputs.verbal} options={[
                     {val:0, label:'Selecione...'}, {val:5, label:'5 - Orientado'}, {val:4, label:'4 - Confuso'}, {val:3, label:'3 - Palavras inapropriadas'}, {val:2, label:'2 - Sons incompreensíveis'}, {val:1, label:'1 - Ausente'}
                 ]} />
             </ScoreInput>
             <ScoreInput label="Resposta Motora">
-                <Select onChange={(e) => handleInputChange('motor', e.target.value)} options={[
+                <Select onChange={(e) => handleInputChange('motor', e.target.value)} value={inputs.motor} options={[
                     {val:0, label:'Selecione...'}, {val:6, label:'6 - Obedece comandos'}, {val:5, label:'5 - Localiza dor'}, {val:4, label:'4 - Retirada'}, {val:3, label:'3 - Decorticação'}, {val:2, label:'2 - Descerebração'}, {val:1, label:'1 - Ausente'}
                 ]} />
             </ScoreInput>
@@ -359,22 +359,22 @@ export default function MedicalScoresModal({ isOpen, onClose, isDarkMode }) {
       case 'sofa2': return (
           <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                  <ScoreInput label="SpO2/FiO2 Ratio"><NumberInput onChange={(e)=>handleInputChange('sf_ratio', e.target.value)} placeholder="Ex: 300" /></ScoreInput>
-                  <div className="pt-6"><Checkbox label="Suporte Ventilatório?" onChange={() => handleCheckboxChange('resp_support')} /></div>
+                  <ScoreInput label="SpO2/FiO2 Ratio"><NumberInput onChange={(e)=>handleInputChange('sf_ratio', e.target.value)} value={inputs.sf_ratio} placeholder="Ex: 300" /></ScoreInput>
+                  <div className="pt-6"><Checkbox label="Suporte Ventilatório?" onChange={() => handleCheckboxChange('resp_support')} checked={inputs.resp_support} /></div>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                  <ScoreInput label="Plaquetas (x10³)"><NumberInput onChange={(e)=>handleInputChange('plaq', e.target.value)} placeholder="Ex: 150" /></ScoreInput>
-                  <ScoreInput label="Bilirrubina (mg/dL)"><NumberInput step="0.1" onChange={(e)=>handleInputChange('bili', e.target.value)} placeholder="Ex: 1.0" /></ScoreInput>
+                  <ScoreInput label="Plaquetas (x10³)"><NumberInput onChange={(e)=>handleInputChange('plaq', e.target.value)} value={inputs.plaq} placeholder="Ex: 150" /></ScoreInput>
+                  <ScoreInput label="Bilirrubina (mg/dL)"><NumberInput step="0.1" onChange={(e)=>handleInputChange('bili', e.target.value)} value={inputs.bili} placeholder="Ex: 1.0" /></ScoreInput>
               </div>
               <ScoreInput label="Cardiovascular">
-                  <Select onChange={(e)=>handleInputChange('drogas', e.target.value)} options={[
+                  <Select onChange={(e)=>handleInputChange('drogas', e.target.value)} value={inputs.drogas} options={[
                       {val:0, label:'Sem drogas vasoativas (PAM ≥ 70)'}, {val:1, label:'PAM < 70 mmHg'}, {val:2, label:'Dopamina/Dobutamina (qualquer dose)'}, {val:3, label:'Nora/Adrenalina ≤ 0.1 mcg/kg/min'}, {val:4, label:'Nora/Adrenalina > 0.1 mcg/kg/min'}
                   ]} />
               </ScoreInput>
               <div className="grid grid-cols-3 gap-4">
-                   <ScoreInput label="Glasgow"><NumberInput max="15" onChange={(e)=>handleInputChange('glasgow', e.target.value)} placeholder="3-15" /></ScoreInput>
-                   <ScoreInput label="Creatinina"><NumberInput step="0.1" onChange={(e)=>handleInputChange('creat', e.target.value)} placeholder="Ex: 1.0" /></ScoreInput>
-                   <ScoreInput label="Lactato"><NumberInput step="0.1" onChange={(e)=>handleInputChange('lactate', e.target.value)} placeholder="mmol/L" /></ScoreInput>
+                   <ScoreInput label="Glasgow"><NumberInput max="15" onChange={(e)=>handleInputChange('glasgow', e.target.value)} value={inputs.glasgow} placeholder="3-15" /></ScoreInput>
+                   <ScoreInput label="Creatinina"><NumberInput step="0.1" onChange={(e)=>handleInputChange('creat', e.target.value)} value={inputs.creat} placeholder="Ex: 1.0" /></ScoreInput>
+                   <ScoreInput label="Lactato"><NumberInput step="0.1" onChange={(e)=>handleInputChange('lactate', e.target.value)} value={inputs.lactate} placeholder="mmol/L" /></ScoreInput>
               </div>
           </div>
       );
@@ -384,29 +384,29 @@ export default function MedicalScoresModal({ isOpen, onClose, isDarkMode }) {
               <div>
                   <h4 className="text-sm font-bold text-emerald-600 mb-3 flex items-center gap-2"><Wind size={16}/> Respiratório</h4>
                   <div className="grid grid-cols-2 gap-4">
-                      <ScoreInput label="SpO2/FiO2"><NumberInput onChange={(e)=>handleInputChange('sf_ratio_ped', e.target.value)} placeholder="Ratio" /></ScoreInput>
-                      <ScoreInput label="PaO2/FiO2"><NumberInput onChange={(e)=>handleInputChange('pf_ratio_ped', e.target.value)} placeholder="Ratio" /></ScoreInput>
-                      <div className="col-span-2"><Checkbox label="Ventilação Mecânica Invasiva?" onChange={() => handleCheckboxChange('imv')} /></div>
+                      <ScoreInput label="SpO2/FiO2"><NumberInput onChange={(e)=>handleInputChange('sf_ratio_ped', e.target.value)} value={inputs.sf_ratio_ped} placeholder="Ratio" /></ScoreInput>
+                      <ScoreInput label="PaO2/FiO2"><NumberInput onChange={(e)=>handleInputChange('pf_ratio_ped', e.target.value)} value={inputs.pf_ratio_ped} placeholder="Ratio" /></ScoreInput>
+                      <div className="col-span-2"><Checkbox label="Ventilação Mecânica Invasiva?" onChange={() => handleCheckboxChange('imv')} checked={inputs.imv} /></div>
                   </div>
               </div>
               <div>
                   <h4 className="text-sm font-bold text-rose-600 mb-3 flex items-center gap-2"><HeartPulse size={16}/> Cardiovascular</h4>
                   <div className="grid grid-cols-2 gap-4">
-                      <ScoreInput label="Lactato (mmol/L)"><NumberInput step="0.1" onChange={(e)=>handleInputChange('lactate_ped', e.target.value)} placeholder="Ex: 2.0" /></ScoreInput>
+                      <ScoreInput label="Lactato (mmol/L)"><NumberInput step="0.1" onChange={(e)=>handleInputChange('lactate_ped', e.target.value)} value={inputs.lactate_ped} placeholder="Ex: 2.0" /></ScoreInput>
                       <ScoreInput label="Vasoativos">
-                          <Select onChange={(e)=>handleInputChange('vasoactives', e.target.value)} options={[{val:0, label:'Nenhum'}, {val:1, label:'1 Droga'}, {val:2, label:'2+ Drogas'}]} />
+                          <Select onChange={(e)=>handleInputChange('vasoactives', e.target.value)} value={inputs.vasoactives} options={[{val:0, label:'Nenhum'}, {val:1, label:'1 Droga'}, {val:2, label:'2+ Drogas'}]} />
                       </ScoreInput>
-                      <div className="col-span-2"><Checkbox label="PAM baixa para a idade?" onChange={() => handleCheckboxChange('low_map')} /></div>
+                      <div className="col-span-2"><Checkbox label="PAM baixa para a idade?" onChange={() => handleCheckboxChange('low_map')} checked={inputs.low_map} /></div>
                   </div>
               </div>
               <div>
                   <h4 className="text-sm font-bold text-blue-600 mb-3 flex items-center gap-2"><Activity size={16}/> Coagulação / Neuro</h4>
                   <div className="grid grid-cols-2 gap-4">
-                      <ScoreInput label="Plaquetas"><NumberInput onChange={(e)=>handleInputChange('plaq_ped', e.target.value)} placeholder="x10³" /></ScoreInput>
-                      <ScoreInput label="INR"><NumberInput step="0.1" onChange={(e)=>handleInputChange('inr_ped', e.target.value)} placeholder="Ex: 1.0" /></ScoreInput>
-                      <ScoreInput label="Fibrinogênio"><NumberInput onChange={(e)=>handleInputChange('fib_ped', e.target.value)} placeholder="mg/dL" /></ScoreInput>
-                      <ScoreInput label="Glasgow"><NumberInput max="15" onChange={(e)=>handleInputChange('gcs_ped', e.target.value)} placeholder="3-15" /></ScoreInput>
-                      <div className="col-span-2"><Checkbox label="Pupilas fixas bilateralmente?" onChange={() => handleCheckboxChange('pupils_fixed')} /></div>
+                      <ScoreInput label="Plaquetas"><NumberInput onChange={(e)=>handleInputChange('plaq_ped', e.target.value)} value={inputs.plaq_ped} placeholder="x10³" /></ScoreInput>
+                      <ScoreInput label="INR"><NumberInput step="0.1" onChange={(e)=>handleInputChange('inr_ped', e.target.value)} value={inputs.inr_ped} placeholder="Ex: 1.0" /></ScoreInput>
+                      <ScoreInput label="Fibrinogênio"><NumberInput onChange={(e)=>handleInputChange('fib_ped', e.target.value)} value={inputs.fib_ped} placeholder="mg/dL" /></ScoreInput>
+                      <ScoreInput label="Glasgow"><NumberInput max="15" onChange={(e)=>handleInputChange('gcs_ped', e.target.value)} value={inputs.gcs_ped} placeholder="3-15" /></ScoreInput>
+                      <div className="col-span-2"><Checkbox label="Pupilas fixas bilateralmente?" onChange={() => handleCheckboxChange('pupils_fixed')} checked={inputs.pupils_fixed} /></div>
                   </div>
               </div>
           </div>
@@ -414,37 +414,122 @@ export default function MedicalScoresModal({ isOpen, onClose, isDarkMode }) {
       
       case 'cha2ds2': return (
           <div className="space-y-3">
-            <Checkbox label="Insuficiência Cardíaca (+1)" onChange={() => handleCheckboxChange('icc')} />
-            <Checkbox label="Hipertensão (+1)" onChange={() => handleCheckboxChange('has')} />
-            <Checkbox label="Diabetes (+1)" onChange={() => handleCheckboxChange('dm')} />
-            <Checkbox label="AVC/AIT Prévio (+2)" onChange={() => handleCheckboxChange('avc')} />
-            <Checkbox label="Doença Vascular (+1)" onChange={() => handleCheckboxChange('vasc')} />
-            <Checkbox label="Sexo Feminino (+1)" onChange={() => handleCheckboxChange('female')} />
-            <ScoreInput label="Idade (Anos)"><NumberInput onChange={(e) => handleInputChange('age', e.target.value)} placeholder="Ex: 65" /></ScoreInput>
+            <Checkbox label="Insuficiência Cardíaca (+1)" onChange={() => handleCheckboxChange('icc')} checked={inputs.icc} />
+            <Checkbox label="Hipertensão (+1)" onChange={() => handleCheckboxChange('has')} checked={inputs.has} />
+            <Checkbox label="Diabetes (+1)" onChange={() => handleCheckboxChange('dm')} checked={inputs.dm} />
+            <Checkbox label="AVC/AIT Prévio (+2)" onChange={() => handleCheckboxChange('avc')} checked={inputs.avc} />
+            <Checkbox label="Doença Vascular (+1)" onChange={() => handleCheckboxChange('vasc')} checked={inputs.vasc} />
+            <Checkbox label="Sexo Feminino (+1)" onChange={() => handleCheckboxChange('female')} checked={inputs.female} />
+            <ScoreInput label="Idade (Anos)"><NumberInput onChange={(e) => handleInputChange('age', e.target.value)} value={inputs.age} placeholder="Ex: 65" /></ScoreInput>
           </div>
       );
       
       case 'nihss':
         const nihssItems = [{ k: '1a', label: '1a. Nível de Consciência', opts: [{v:0, l:'0 - Alerta'}, {v:1, l:'1 - Sonolento'}, {v:2, l:'2 - Torporoso'}, {v:3, l:'3 - Coma'}]},{ k: '1b', label: '1b. Perguntas', opts: [{v:0, l:'0 - Ambas corretas'}, {v:1, l:'1 - Uma correta'}, {v:2, l:'2 - Nenhuma correta'}]},{ k: '1c', label: '1c. Comandos', opts: [{v:0, l:'0 - Ambos corretos'}, {v:1, l:'1 - Um correto'}, {v:2, l:'2 - Nenhum correto'}]},{ k: '2', label: '2. Mov. Ocular', opts: [{v:0, l:'0 - Normal'}, {v:1, l:'1 - Paralisia parcial'}, {v:2, l:'2 - Desvio forçado'}]},{ k: '3', label: '3. Campo Visual', opts: [{v:0, l:'0 - Sem perda'}, {v:1, l:'1 - Parcial'}, {v:2, l:'2 - Completa'}, {v:3, l:'3 - Cegueira'}]},{ k: '4', label: '4. Facial', opts: [{v:0, l:'0 - Normal'}, {v:1, l:'1 - Paresia leve'}, {v:2, l:'2 - Paralisia parcial'}, {v:3, l:'3 - Completa'}]},{ k: '5a', label: '5a. Motor MSE', opts: [{v:0, l:'0 - Sem queda'}, {v:1, l:'1 - Queda <10s'}, {v:2, l:'2 - Queda rápida'}, {v:3, l:'3 - Movimento'}, {v:4, l:'4 - Nenhum'}]},{ k: '5b', label: '5b. Motor MSD', opts: [{v:0, l:'0 - Sem queda'}, {v:1, l:'1 - Queda <10s'}, {v:2, l:'2 - Queda rápida'}, {v:3, l:'3 - Movimento'}, {v:4, l:'4 - Nenhum'}]}];
-        return (<div className="space-y-4">{nihssItems.map((item) => (<ScoreInput key={item.k} label={item.label}><Select onChange={(e) => handleInputChange(item.k, e.target.value)} options={item.opts.map(o => ({val: o.v, label: o.l}))} /></ScoreInput>))}<p className="text-xs italic opacity-60 text-center mt-4">*Versão sumária para uso rápido.</p></div>);
+        return (<div className="space-y-4">{nihssItems.map((item) => (<ScoreInput key={item.k} label={item.label}><Select onChange={(e) => handleInputChange(item.k, e.target.value)} value={inputs[item.k]} options={item.opts.map(o => ({val: o.v, label: o.l}))} /></ScoreInput>))}<p className="text-xs italic opacity-60 text-center mt-4">*Versão sumária para uso rápido.</p></div>);
 
-      case 'curb65': return (<div className="space-y-3"><Checkbox label="Confusão Mental (+1)" onChange={() => handleCheckboxChange('confusao')} /><Checkbox label="Ureia > 43 mg/dL (+1)" onChange={() => handleCheckboxChange('ureia')} /><Checkbox label="FR ≥ 30 irpm (+1)" onChange={() => handleCheckboxChange('fr')} /><Checkbox label="PAS < 90 ou PAD ≤ 60 (+1)" onChange={() => handleCheckboxChange('pas')} /><Checkbox label="Idade ≥ 65 anos (+1)" onChange={() => handleCheckboxChange('age')} /></div>);
+      case 'curb65': return (<div className="space-y-3"><Checkbox label="Confusão Mental (+1)" onChange={() => handleCheckboxChange('confusao')} checked={inputs.confusao} /><Checkbox label="Ureia > 43 mg/dL (+1)" onChange={() => handleCheckboxChange('ureia')} checked={inputs.ureia} /><Checkbox label="FR ≥ 30 irpm (+1)" onChange={() => handleCheckboxChange('fr')} checked={inputs.fr} /><Checkbox label="PAS < 90 ou PAD ≤ 60 (+1)" onChange={() => handleCheckboxChange('pas')} checked={inputs.pas} /><Checkbox label="Idade ≥ 65 anos (+1)" onChange={() => handleCheckboxChange('age')} checked={inputs.age} /></div>);
 
-      case 'meld': return (<div className="space-y-4"><ScoreInput label="Bilirrubina (mg/dL)"><NumberInput step="0.1" onChange={(e)=>handleInputChange('bili', e.target.value)} placeholder="Ex: 1.2" /></ScoreInput><ScoreInput label="INR"><NumberInput step="0.1" onChange={(e)=>handleInputChange('inr', e.target.value)} placeholder="Ex: 1.1" /></ScoreInput><ScoreInput label="Creatinina (mg/dL)"><NumberInput step="0.1" onChange={(e)=>handleInputChange('cr', e.target.value)} placeholder="Ex: 0.9" /></ScoreInput><Checkbox label="Paciente em Diálise?" onChange={() => handleCheckboxChange('dialise')} /></div>);
+      case 'meld': return (<div className="space-y-4"><ScoreInput label="Bilirrubina (mg/dL)"><NumberInput step="0.1" onChange={(e)=>handleInputChange('bili', e.target.value)} value={inputs.bili} placeholder="Ex: 1.2" /></ScoreInput><ScoreInput label="INR"><NumberInput step="0.1" onChange={(e)=>handleInputChange('inr', e.target.value)} value={inputs.inr} placeholder="Ex: 1.1" /></ScoreInput><ScoreInput label="Creatinina (mg/dL)"><NumberInput step="0.1" onChange={(e)=>handleInputChange('cr', e.target.value)} value={inputs.cr} placeholder="Ex: 0.9" /></ScoreInput><Checkbox label="Paciente em Diálise?" onChange={() => handleCheckboxChange('dialise')} checked={inputs.dialise} /></div>);
 
-      case 'child_pugh': return (<div className="space-y-4"><ScoreInput label="Encefalopatia"><Select onChange={(e)=>handleInputChange('encef', e.target.value)} options={[{val:1, label:'Ausente (1)'}, {val:2, label:'Grau 1-2 (2)'}, {val:3, label:'Grau 3-4 (3)'}]} /></ScoreInput><ScoreInput label="Ascite"><Select onChange={(e)=>handleInputChange('ascite', e.target.value)} options={[{val:1, label:'Ausente (1)'}, {val:2, label:'Leve (2)'}, {val:3, label:'Moderada (3)'}]} /></ScoreInput><ScoreInput label="Bilirrubina"><Select onChange={(e)=>handleInputChange('bili', e.target.value)} options={[{val:1, label:'< 2 (1)'}, {val:2, label:'2 - 3 (2)'}, {val:3, label:'> 3 (3)'}]} /></ScoreInput><ScoreInput label="Albumina"><Select onChange={(e)=>handleInputChange('alb', e.target.value)} options={[{val:1, label:'> 3.5 (1)'}, {val:2, label:'2.8 - 3.5 (2)'}, {val:3, label:'< 2.8 (3)'}]} /></ScoreInput><ScoreInput label="INR"><Select onChange={(e)=>handleInputChange('inr', e.target.value)} options={[{val:1, label:'< 1.7 (1)'}, {val:2, label:'1.7 - 2.3 (2)'}, {val:3, label:'> 2.3 (3)'}]} /></ScoreInput></div>);
+      case 'child_pugh': return (<div className="space-y-4"><ScoreInput label="Encefalopatia"><Select onChange={(e)=>handleInputChange('encef', e.target.value)} value={inputs.encef} options={[{val:1, label:'Ausente (1)'}, {val:2, label:'Grau 1-2 (2)'}, {val:3, label:'Grau 3-4 (3)'}]} /></ScoreInput><ScoreInput label="Ascite"><Select onChange={(e)=>handleInputChange('ascite', e.target.value)} value={inputs.ascite} options={[{val:1, label:'Ausente (1)'}, {val:2, label:'Leve (2)'}, {val:3, label:'Moderada (3)'}]} /></ScoreInput><ScoreInput label="Bilirrubina"><Select onChange={(e)=>handleInputChange('bili', e.target.value)} value={inputs.bili} options={[{val:1, label:'< 2 (1)'}, {val:2, label:'2 - 3 (2)'}, {val:3, label:'> 3 (3)'}]} /></ScoreInput><ScoreInput label="Albumina"><Select onChange={(e)=>handleInputChange('alb', e.target.value)} value={inputs.alb} options={[{val:1, label:'> 3.5 (1)'}, {val:2, label:'2.8 - 3.5 (2)'}, {val:3, label:'< 2.8 (3)'}]} /></ScoreInput><ScoreInput label="INR"><Select onChange={(e)=>handleInputChange('inr', e.target.value)} value={inputs.inr} options={[{val:1, label:'< 1.7 (1)'}, {val:2, label:'1.7 - 2.3 (2)'}, {val:3, label:'> 2.3 (3)'}]} /></ScoreInput></div>);
 
-      case 'kdigo': return (<div className="space-y-4"><ScoreInput label="TFG (ml/min)"><NumberInput onChange={(e)=>handleInputChange('gfr', e.target.value)} placeholder="Ex: 60" /></ScoreInput><ScoreInput label="Albuminúria"><Select onChange={(e)=>handleStringChange('alb_stage', e.target.value)} options={[{val:'', label:'Selecione...'}, {val:'A1', label:'A1 - Normal (<30)'}, {val:'A2', label:'A2 - Moderada (30-300)'}, {val:'A3', label:'A3 - Grave (>300)'}]} /></ScoreInput></div>);
+      case 'kdigo': return (<div className="space-y-4"><ScoreInput label="TFG (ml/min)"><NumberInput onChange={(e)=>handleInputChange('gfr', e.target.value)} value={inputs.gfr} placeholder="Ex: 60" /></ScoreInput><ScoreInput label="Albuminúria"><Select onChange={(e)=>handleStringChange('alb_stage', e.target.value)} value={inputs.alb_stage} options={[{val:'', label:'Selecione...'}, {val:'A1', label:'A1 - Normal (<30)'}, {val:'A2', label:'A2 - Moderada (30-300)'}, {val:'A3', label:'A3 - Grave (>300)'}]} /></ScoreInput></div>);
 
-      case 'sofa': const sofaOpts = [0,1,2,3,4].map(n => ({val:n, label: n.toString()})); return (<div className="grid grid-cols-2 gap-4"><ScoreInput label="Resp"><Select onChange={(e)=>handleInputChange('resp', e.target.value)} options={sofaOpts} /></ScoreInput><ScoreInput label="Coag"><Select onChange={(e)=>handleInputChange('coag', e.target.value)} options={sofaOpts} /></ScoreInput><ScoreInput label="Fígado"><Select onChange={(e)=>handleInputChange('hep', e.target.value)} options={sofaOpts} /></ScoreInput><ScoreInput label="Cardio"><Select onChange={(e)=>handleInputChange('cardio', e.target.value)} options={sofaOpts} /></ScoreInput><ScoreInput label="SNC"><Select onChange={(e)=>handleInputChange('snc', e.target.value)} options={sofaOpts} /></ScoreInput><ScoreInput label="Renal"><Select onChange={(e)=>handleInputChange('renal', e.target.value)} options={sofaOpts} /></ScoreInput></div>);
+      case 'sofa': const sofaOpts = [0,1,2,3,4].map(n => ({val:n, label: n.toString()})); return (<div className="grid grid-cols-2 gap-4"><ScoreInput label="Resp"><Select onChange={(e)=>handleInputChange('resp', e.target.value)} value={inputs.resp} options={sofaOpts} /></ScoreInput><ScoreInput label="Coag"><Select onChange={(e)=>handleInputChange('coag', e.target.value)} value={inputs.coag} options={sofaOpts} /></ScoreInput><ScoreInput label="Fígado"><Select onChange={(e)=>handleInputChange('hep', e.target.value)} value={inputs.hep} options={sofaOpts} /></ScoreInput><ScoreInput label="Cardio"><Select onChange={(e)=>handleInputChange('cardio', e.target.value)} value={inputs.cardio} options={sofaOpts} /></ScoreInput><ScoreInput label="SNC"><Select onChange={(e)=>handleInputChange('snc', e.target.value)} value={inputs.snc} options={sofaOpts} /></ScoreInput><ScoreInput label="Renal"><Select onChange={(e)=>handleInputChange('renal', e.target.value)} value={inputs.renal} options={sofaOpts} /></ScoreInput></div>);
 
-      case 'qsofa': return (<div className="space-y-3"><Checkbox label="PAS ≤ 100 mmHg (+1)" onChange={() => handleCheckboxChange('pas')} /><Checkbox label="FR ≥ 22 irpm (+1)" onChange={() => handleCheckboxChange('fr')} /><Checkbox label="Glasgow < 15 (+1)" onChange={() => handleCheckboxChange('glasgow')} /></div>);
+      case 'qsofa': return (<div className="space-y-3"><Checkbox label="PAS ≤ 100 mmHg (+1)" onChange={() => handleCheckboxChange('pas')} checked={inputs.pas} /><Checkbox label="FR ≥ 22 irpm (+1)" onChange={() => handleCheckboxChange('fr')} checked={inputs.fr} /><Checkbox label="Glasgow < 15 (+1)" onChange={() => handleCheckboxChange('glasgow')} checked={inputs.glasgow} /></div>);
 
-      case 'alvarado': return (<div className="space-y-3"><Checkbox label="Dor migratória (+1)" onChange={() => handleCheckboxChange('migratoria')} /><Checkbox label="Anorexia (+1)" onChange={() => handleCheckboxChange('anorexia')} /><Checkbox label="Náuseas (+1)" onChange={() => handleCheckboxChange('nauseas')} /><Checkbox label="Dor QID (+2)" onChange={() => handleCheckboxChange('dor_qid')} /><Checkbox label="Descompressão (+1)" onChange={() => handleCheckboxChange('descompressao')} /><Checkbox label="Tax > 37.3 (+1)" onChange={() => handleCheckboxChange('temp')} /><Checkbox label="Leuco > 10k (+2)" onChange={() => handleCheckboxChange('leuco')} /><Checkbox label="Desvio Esq. (+1)" onChange={() => handleCheckboxChange('desvio')} /></div>);
+      case 'alvarado': return (<div className="space-y-3"><Checkbox label="Dor migratória (+1)" onChange={() => handleCheckboxChange('migratoria')} checked={inputs.migratoria} /><Checkbox label="Anorexia (+1)" onChange={() => handleCheckboxChange('anorexia')} checked={inputs.anorexia} /><Checkbox label="Náuseas (+1)" onChange={() => handleCheckboxChange('nauseas')} checked={inputs.nauseas} /><Checkbox label="Dor QID (+2)" onChange={() => handleCheckboxChange('dor_qid')} checked={inputs.dor_qid} /><Checkbox label="Descompressão (+1)" onChange={() => handleCheckboxChange('descompressao')} checked={inputs.descompressao} /><Checkbox label="Tax > 37.3 (+1)" onChange={() => handleCheckboxChange('temp')} checked={inputs.temp} /><Checkbox label="Leuco > 10k (+2)" onChange={() => handleCheckboxChange('leuco')} checked={inputs.leuco} /><Checkbox label="Desvio Esq. (+1)" onChange={() => handleCheckboxChange('desvio')} checked={inputs.desvio} /></div>);
       
-      case 'wells_tvp': return (<div className="space-y-3"><Checkbox label="Câncer Ativo (+1)" onChange={() => handleCheckboxChange('cancer_ativo')} /><Checkbox label="Paralisia/Paresia (+1)" onChange={() => handleCheckboxChange('paralisia')} /><Checkbox label="Acamado > 3d / Cirurgia (+1)" onChange={() => handleCheckboxChange('acamado')} /><Checkbox label="Dor no trajeto venoso (+1)" onChange={() => handleCheckboxChange('dor_palpacao')} /><Checkbox label="Edema de todo membro (+1)" onChange={() => handleCheckboxChange('edema_todo')} /><Checkbox label="Edema panturrilha > 3cm (+1)" onChange={() => handleCheckboxChange('edema_panturrilha')} /><Checkbox label="Edema de cacifo (+1)" onChange={() => handleCheckboxChange('edema_cacifo')} /><Checkbox label="Veias colaterais (+1)" onChange={() => handleCheckboxChange('veias_colaterais')} /><Checkbox label="Histórico de TVP (+1)" onChange={() => handleCheckboxChange('hist_tvp')} /><div className="border-t pt-2"><Checkbox label="Diag. Alternativo mais provável (-2)" onChange={() => handleCheckboxChange('diag_alternativo')} /></div></div>);
+      case 'wells_tvp': return (<div className="space-y-3"><Checkbox label="Câncer Ativo (+1)" onChange={() => handleCheckboxChange('cancer_ativo')} checked={inputs.cancer_ativo} /><Checkbox label="Paralisia/Paresia (+1)" onChange={() => handleCheckboxChange('paralisia')} checked={inputs.paralisia} /><Checkbox label="Acamado > 3d / Cirurgia (+1)" onChange={() => handleCheckboxChange('acamado')} checked={inputs.acamado} /><Checkbox label="Dor no trajeto venoso (+1)" onChange={() => handleCheckboxChange('dor_palpacao')} checked={inputs.dor_palpacao} /><Checkbox label="Edema de todo membro (+1)" onChange={() => handleCheckboxChange('edema_todo')} checked={inputs.edema_todo} /><Checkbox label="Edema panturrilha > 3cm (+1)" onChange={() => handleCheckboxChange('edema_panturrilha')} checked={inputs.edema_panturrilha} /><Checkbox label="Edema de cacifo (+1)" onChange={() => handleCheckboxChange('edema_cacifo')} checked={inputs.edema_cacifo} /><Checkbox label="Veias colaterais (+1)" onChange={() => handleCheckboxChange('veias_colaterais')} checked={inputs.veias_colaterais} /><Checkbox label="Histórico de TVP (+1)" onChange={() => handleCheckboxChange('hist_tvp')} checked={inputs.hist_tvp} /><div className="border-t pt-2"><Checkbox label="Diag. Alternativo mais provável (-2)" onChange={() => handleCheckboxChange('diag_alternativo')} checked={inputs.diag_alternativo} /></div></div>);
       
-      case 'wells_tep': return (<div className="space-y-3"><Checkbox label="Sinais clínicos TVP (+3)" onChange={() => handleCheckboxChange('tvp_sinais')} /><Checkbox label="TEP é a hipótese nº 1 (+3)" onChange={() => handleCheckboxChange('sem_diag_alt')} /><Checkbox label="FC > 100 bpm (+1.5)" onChange={() => handleCheckboxChange('fc')} /><Checkbox label="Imobilização/Cirurgia (+1.5)" onChange={() => handleCheckboxChange('imob')} /><Checkbox label="Histórico TEP/TVP (+1.5)" onChange={() => handleCheckboxChange('hist_tev')} /><Checkbox label="Hemoptise (+1)" onChange={() => handleCheckboxChange('hemoptise')} /><Checkbox label="Câncer ativo (+1)" onChange={() => handleCheckboxChange('cancer')} /></div>);
+      case 'wells_tep': return (<div className="space-y-3"><Checkbox label="Sinais clínicos TVP (+3)" onChange={() => handleCheckboxChange('tvp_sinais')} checked={inputs.tvp_sinais} /><Checkbox label="TEP é a hipótese nº 1 (+3)" onChange={() => handleCheckboxChange('sem_diag_alt')} checked={inputs.sem_diag_alt} /><Checkbox label="FC > 100 bpm (+1.5)" onChange={() => handleCheckboxChange('fc')} checked={inputs.fc} /><Checkbox label="Imobilização/Cirurgia (+1.5)" onChange={() => handleCheckboxChange('imob')} checked={inputs.imob} /><Checkbox label="Histórico TEP/TVP (+1.5)" onChange={() => handleCheckboxChange('hist_tev')} checked={inputs.hist_tev} /><Checkbox label="Hemoptise (+1)" onChange={() => handleCheckboxChange('hemoptise')} checked={inputs.hemoptise} /><Checkbox label="Câncer ativo (+1)" onChange={() => handleCheckboxChange('cancer')} checked={inputs.cancer} /></div>);
+      
+      case 'heart': return (
+          <div className="space-y-4">
+            <ScoreInput label="História"><Select onChange={(e) => handleInputChange('historia', e.target.value)} value={inputs.historia} options={[{val:0, label:'Baixa (0)'}, {val:1, label:'Moderada (1)'}, {val:2, label:'Alta (2)'}]} /></ScoreInput>
+            <ScoreInput label="ECG"><Select onChange={(e) => handleInputChange('ecg', e.target.value)} value={inputs.ecg} options={[{val:0, label:'Normal (0)'}, {val:1, label:'Inespecífico (1)'}, {val:2, label:'ST Alterado (2)'}]} /></ScoreInput>
+            <ScoreInput label="Idade"><Select onChange={(e) => handleInputChange('idade', e.target.value)} value={inputs.idade} options={[{val:0, label:'<45 (0)'}, {val:1, label:'45-65 (1)'}, {val:2, label:'>65 (2)'}]} /></ScoreInput>
+            <ScoreInput label="Fatores Risco"><Select onChange={(e) => handleInputChange('fatores', e.target.value)} value={inputs.fatores} options={[{val:0, label:'0 (0)'}, {val:1, label:'1-2 (1)'}, {val:2, label:'3+ (2)'}]} /></ScoreInput>
+            <ScoreInput label="Troponina"><Select onChange={(e) => handleInputChange('tropo', e.target.value)} value={inputs.tropo} options={[{val:0, label:'Normal (0)'}, {val:1, label:'1-3x (1)'}, {val:2, label:'>3x (2)'}]} /></ScoreInput>
+          </div>
+      );
+
+      case 'grace': return (
+            <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                    <ScoreInput label="Idade"><NumberInput onChange={(e)=>handleInputChange('age', e.target.value)} value={inputs.age} placeholder="Anos" /></ScoreInput>
+                    <ScoreInput label="FC (bpm)"><NumberInput onChange={(e)=>handleInputChange('hr', e.target.value)} value={inputs.hr} placeholder="Ex: 80" /></ScoreInput>
+                    <ScoreInput label="PAS (mmHg)"><NumberInput onChange={(e)=>handleInputChange('sbp', e.target.value)} value={inputs.sbp} placeholder="Ex: 120" /></ScoreInput>
+                    <ScoreInput label="Creatinina"><NumberInput step="0.1" onChange={(e)=>handleInputChange('creat', e.target.value)} value={inputs.creat} placeholder="mg/dL" /></ScoreInput>
+                </div>
+                <ScoreInput label="Killip"><Select onChange={(e)=>handleInputChange('killip', e.target.value)} value={inputs.killip} options={[{val:0, label:'I - Sem crepitações'}, {val:20, label:'II - Crepitações/B3'}, {val:39, label:'III - EAP'}, {val:59, label:'IV - Choque'}]} /></ScoreInput>
+                <div className="space-y-2 pt-2">
+                    <Checkbox label="PCR na admissão?" onChange={() => handleCheckboxChange('arrest')} checked={inputs.arrest} />
+                    <Checkbox label="Desvio ST?" onChange={() => handleCheckboxChange('st')} checked={inputs.st} />
+                    <Checkbox label="Enzimas elevadas?" onChange={() => handleCheckboxChange('enzymes')} checked={inputs.enzymes} />
+                </div>
+            </div>
+      );
+
+      case 'psi': return (
+            <div className="space-y-4">
+               <div className="grid grid-cols-2 gap-4">
+                   <ScoreInput label="Idade"><NumberInput onChange={(e)=>handleInputChange('age', e.target.value)} value={inputs.age} placeholder="Anos" /></ScoreInput>
+                   <div className="pt-6 space-y-2">
+                       <Checkbox label="Mulher?" onChange={() => handleCheckboxChange('female')} checked={inputs.female} />
+                       <Checkbox label="Casa de repouso?" onChange={() => handleCheckboxChange('nursing')} checked={inputs.nursing} />
+                   </div>
+               </div>
+               
+               <h4 className="font-bold text-xs uppercase text-slate-500 mt-2">Comorbidades</h4>
+               <div className="grid grid-cols-2 gap-2">
+                   <Checkbox label="Neoplasia" onChange={() => handleCheckboxChange('neo')} checked={inputs.neo} />
+                   <Checkbox label="Hepatopatia" onChange={() => handleCheckboxChange('liver')} checked={inputs.liver} />
+                   <Checkbox label="IC" onChange={() => handleCheckboxChange('chf')} checked={inputs.chf} />
+                   <Checkbox label="AVC" onChange={() => handleCheckboxChange('cvd')} checked={inputs.cvd} />
+                   <Checkbox label="DRC" onChange={() => handleCheckboxChange('renal')} checked={inputs.renal} />
+               </div>
+
+               <h4 className="font-bold text-xs uppercase text-slate-500 mt-2">Exame Físico</h4>
+               <div className="grid grid-cols-2 gap-4">
+                    <div className="col-span-2"><Checkbox label="Alteração Mental?" onChange={() => handleCheckboxChange('mental')} checked={inputs.mental} /></div>
+                    <ScoreInput label="FR"><NumberInput onChange={(e)=>handleInputChange('rr', e.target.value)} value={inputs.rr} placeholder="irpm" /></ScoreInput>
+                    <ScoreInput label="PAS"><NumberInput onChange={(e)=>handleInputChange('sbp', e.target.value)} value={inputs.sbp} placeholder="mmHg" /></ScoreInput>
+                    <ScoreInput label="Temp"><NumberInput step="0.1" onChange={(e)=>handleInputChange('temp', e.target.value)} value={inputs.temp} placeholder="ºC" /></ScoreInput>
+                    <ScoreInput label="FC"><NumberInput onChange={(e)=>handleInputChange('pulse', e.target.value)} value={inputs.pulse} placeholder="bpm" /></ScoreInput>
+               </div>
+
+               <h4 className="font-bold text-xs uppercase text-slate-500 mt-2">Laboratório (Marcar se alterado)</h4>
+               <div className="grid grid-cols-2 gap-2">
+                    <Checkbox label="pH < 7.35" onChange={() => handleCheckboxChange('ph')} checked={inputs.ph} />
+                    <Checkbox label="Ureia ≥ 30" onChange={() => handleCheckboxChange('bun')} checked={inputs.bun} />
+                    <Checkbox label="Na < 130" onChange={() => handleCheckboxChange('sodium')} checked={inputs.sodium} />
+                    <Checkbox label="Glic ≥ 250" onChange={() => handleCheckboxChange('glucose')} checked={inputs.glucose} />
+                    <Checkbox label="Ht < 30" onChange={() => handleCheckboxChange('hct')} checked={inputs.hct} />
+                    <Checkbox label="PaO2 < 60" onChange={() => handleCheckboxChange('po2')} checked={inputs.po2} />
+                    <Checkbox label="Derrame Pleural" onChange={() => handleCheckboxChange('pleural')} checked={inputs.pleural} />
+               </div>
+            </div>
+      );
+
+      case 'apache': return (
+            <div className="space-y-4">
+               <div className="grid grid-cols-2 gap-4">
+                   <ScoreInput label="Idade"><NumberInput onChange={(e)=>handleInputChange('age', e.target.value)} value={inputs.age} placeholder="Anos" /></ScoreInput>
+                   <ScoreInput label="Temp (ºC)"><NumberInput step="0.1" onChange={(e)=>handleInputChange('temp', e.target.value)} value={inputs.temp} placeholder="Ex: 37" /></ScoreInput>
+                   <ScoreInput label="PAM (mmHg)"><NumberInput onChange={(e)=>handleInputChange('map', e.target.value)} value={inputs.map} placeholder="Ex: 90" /></ScoreInput>
+                   <ScoreInput label="FC (bpm)"><NumberInput onChange={(e)=>handleInputChange('hr', e.target.value)} value={inputs.hr} placeholder="Ex: 80" /></ScoreInput>
+                   <ScoreInput label="Glasgow"><NumberInput max="15" onChange={(e)=>handleInputChange('glasgow', e.target.value)} value={inputs.glasgow} placeholder="3-15" /></ScoreInput>
+                   <ScoreInput label="Creatinina"><NumberInput step="0.1" onChange={(e)=>handleInputChange('creat', e.target.value)} value={inputs.creat} placeholder="mg/dL" /></ScoreInput>
+               </div>
+               <div className="space-y-2 pt-2">
+                   <Checkbox label="Insuficiência Renal Aguda?" onChange={() => handleCheckboxChange('arf')} checked={inputs.arf} />
+                   <Checkbox label="Doença Crônica Grave / Imuno?" onChange={() => handleCheckboxChange('severe_organ')} checked={inputs.severe_organ} />
+               </div>
+            </div>
+      );
 
       default: return <div className="text-center p-8 text-sm opacity-50">Selecione uma ferramenta na lista ao lado.</div>;
     }
