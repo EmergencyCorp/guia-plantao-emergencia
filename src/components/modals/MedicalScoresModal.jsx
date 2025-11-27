@@ -1,8 +1,10 @@
 // Arquivo: src/components/modals/MedicalScoresModal.jsx
 import React, { useState, useEffect } from 'react';
+// CORREÇÃO: Adicionado 'Search' na importação abaixo
 import { 
   X, Calculator, ChevronRight, Activity, AlertTriangle, 
-  Brain, HeartPulse, Wind, AlertOctagon, Thermometer, Baby, Beaker, Check
+  Brain, HeartPulse, Wind, AlertOctagon, Thermometer, Baby, Beaker, Check,
+  Search 
 } from 'lucide-react';
 
 // --- CONFIGURAÇÃO DOS SCORES ---
@@ -81,7 +83,7 @@ export default function MedicalScoresModal({ isOpen, onClose, isDarkMode }) {
       }
   };
 
-  // --- COMPONENTES DE UI (Agora com feedback visual correto) ---
+  // --- COMPONENTES DE UI ---
   const ScoreInput = ({ label, children }) => (
     <div className="mb-4">
         <label className={`block text-xs font-bold uppercase mb-2 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>{label}</label>
@@ -94,7 +96,7 @@ export default function MedicalScoresModal({ isOpen, onClose, isDarkMode }) {
         <select 
             className={`w-full p-3 rounded-xl appearance-none outline-none border transition-all font-medium ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white focus:border-blue-500' : 'bg-gray-50 border-gray-200 text-gray-800 focus:border-blue-500'}`}
             onChange={onChange}
-            value={value !== undefined && value !== null ? value : ''} // Força valor controlado
+            value={value !== undefined && value !== null ? value : ''} 
         >
             {options.map((opt, i) => <option key={i} value={opt.val}>{opt.label}</option>)}
         </select>
@@ -108,7 +110,7 @@ export default function MedicalScoresModal({ isOpen, onClose, isDarkMode }) {
         placeholder={placeholder} 
         step={step}
         max={max}
-        value={value !== undefined && value !== null ? value : ''} // Força valor controlado
+        value={value !== undefined && value !== null ? value : ''} 
         className={`w-full p-3 rounded-xl outline-none border transition-all font-medium ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white focus:border-blue-500' : 'bg-gray-50 border-gray-200 text-gray-800 focus:border-blue-500'}`}
         onChange={onChange}
     />
