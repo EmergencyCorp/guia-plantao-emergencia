@@ -1,6 +1,6 @@
 // Arquivo: src/components/modals/MedicalScoresModal.jsx
 import React, { useState, useEffect } from 'react';
-// CORREÇÃO: Adicionado 'Search' na importação abaixo
+// CORREÇÃO: Adicionado 'Search'
 import { X, Calculator, ChevronRight, Activity, CheckCircle2, Search } from 'lucide-react';
 
 // --- CONFIGURAÇÃO DOS SCORES ---

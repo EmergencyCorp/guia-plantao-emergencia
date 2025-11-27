@@ -1,12 +1,11 @@
-// Arquivo: src/App.jsx
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Activity, AlertCircle, Search, Loader2, BookOpen, Stethoscope, 
   AlertTriangle, ArrowRight, X, User, CheckCircle2, Siren, ShieldAlert, 
   LogOut, History, Cloud, CloudOff, HeartPulse, Microscope, Image as ImageIcon, 
   Wind, Droplet, Skull, Printer, Calculator, Star, Utensils, Zap, Camera, 
-  BedDouble, ClipboardList, Edit, LayoutGrid, ChevronDown, FileText, Droplets,
-  Pill, HelpCircle
+  BedDouble, ClipboardList, Pencil, LayoutGrid, ChevronDown, FileText, Droplets,
+  Pill, CircleHelp // CORREÇÃO: Ícones atualizados (Edit->Pencil, HelpCircle->CircleHelp)
 } from 'lucide-react';
 
 // --- CONFIG & COMPONENTS ---
@@ -24,7 +23,7 @@ import NotepadModal from './components/modals/NotepadModal';
 import FavoritesModal from './components/modals/FavoritesModal';
 import HelpModal from './components/modals/HelpModal';
 import MedicalScoresModal from './components/modals/MedicalScoresModal';
-import QuickPrescriptionsModal from './components/modals/QuickPrescriptionsModal'; // <--- NOVO IMPORT
+import QuickPrescriptionsModal from './components/modals/QuickPrescriptionsModal';
 
 // --- FIREBASE IMPORTS ---
 import { signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
@@ -98,7 +97,7 @@ function EmergencyGuideAppContent() {
   const [showBedsideModal, setShowBedsideModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showScoresModal, setShowScoresModal] = useState(false);
-  const [showQuickPrescriptions, setShowQuickPrescriptions] = useState(false); // <--- NOVO ESTADO
+  const [showQuickPrescriptions, setShowQuickPrescriptions] = useState(false);
 
   // Specific Data States
   const [userNotes, setUserNotes] = useState('');
@@ -501,14 +500,14 @@ function EmergencyGuideAppContent() {
                       <button onClick={() => { setShowCalculatorModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-rose-300 hover:bg-slate-800' : 'text-rose-700 hover:bg-rose-50'}`}><Calculator size={16} /> Calc. Infusão</button>
                       <div className={`h-px my-1 ${isDarkMode ? 'bg-slate-800' : 'bg-gray-100'}`}></div>
                       <button onClick={() => { setShowFavoritesModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-yellow-400 hover:bg-slate-800' : 'text-yellow-600 hover:bg-yellow-50'}`}><Star size={16} /> Favoritos</button>
-                      <button onClick={() => { setShowNotepad(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-gray-50'}`}><Edit size={16} /> Meu Caderno</button>
+                      <button onClick={() => { setShowNotepad(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-gray-50'}`}><Pencil size={16} /> Meu Caderno</button>
                     </div>
                   </div>
                 )}
              </div>
              
              {/* BOTÃO DE AJUDA */}
-             <button aria-label="Ajuda" onClick={() => setShowHelpModal(true)} className={`p-2 rounded-full ${isDarkMode ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-500 hover:bg-gray-100'}`}><HelpCircle size={20} /></button>
+             <button aria-label="Ajuda" onClick={() => setShowHelpModal(true)} className={`p-2 rounded-full ${isDarkMode ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-500 hover:bg-gray-100'}`}><CircleHelp size={20} /></button>
              
              <button aria-label="Sair" onClick={handleLogout} className={`p-2 rounded-full ${isDarkMode ? 'text-red-400 hover:bg-red-900/30' : 'text-red-400 hover:bg-red-50'}`}><LogOut size={20} /></button>
           </div>
@@ -682,7 +681,7 @@ function EmergencyGuideAppContent() {
       <PrescriptionModal isOpen={showPrescriptionModal} onClose={() => setShowPrescriptionModal(false)} currentUser={currentUser} selectedPrescriptionItems={selectedPrescriptionItems} />
       <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} isDarkMode={isDarkMode} />
       <MedicalScoresModal isOpen={showScoresModal} onClose={() => setShowScoresModal(false)} isDarkMode={isDarkMode} />
-      <QuickPrescriptionsModal isOpen={showQuickPrescriptions} onClose={() => setShowQuickPrescriptions(false)} isDarkMode={isDarkMode} /> {/* <--- RENDERIZADO AQUI */}
+      <QuickPrescriptionsModal isOpen={showQuickPrescriptions} onClose={() => setShowQuickPrescriptions(false)} isDarkMode={isDarkMode} />
       
       <ImageAnalysisModal 
         isOpen={showImageModal} onClose={() => setShowImageModal(false)} isDarkMode={isDarkMode}

@@ -1,6 +1,7 @@
 // Arquivo: src/components/modals/HelpModal.jsx
 import React from 'react';
-import { X, Search, Camera, ClipboardList, Calculator, Star, Edit, HelpCircle } from 'lucide-react';
+// CORREÇÃO: HelpCircle -> CircleHelp
+import { X, Search, Camera, ClipboardList, Calculator, Star, Edit, CircleHelp } from 'lucide-react';
 
 export default function HelpModal({ isOpen, onClose, isDarkMode }) {
   if (!isOpen) return null;
@@ -23,7 +24,8 @@ export default function HelpModal({ isOpen, onClose, isDarkMode }) {
         
         <div className={`p-4 border-b flex justify-between items-center ${isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-white border-gray-200'}`}>
           <h3 className={`font-bold flex items-center gap-2 ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>
-            <HelpCircle size={20} className="text-blue-500"/> Central de Ajuda
+            {/* CORREÇÃO: CircleHelp */}
+            <CircleHelp size={20} className="text-blue-500"/> Central de Ajuda
           </h3>
           <button onClick={onClose} className={`p-2 rounded-full transition-colors ${isDarkMode ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-gray-100 text-slate-500'}`}>
             <X size={20}/>
