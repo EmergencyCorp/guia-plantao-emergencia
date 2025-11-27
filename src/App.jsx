@@ -35,6 +35,16 @@ import { doc, setDoc, getDoc, collection, query as firestoreQuery, where, orderB
 
 const appId = (typeof __app_id !== 'undefined') ? __app_id : 'emergency-guide-app';
 
+// --- FUNÇÃO AUXILIAR (MOVIDA PARA FORA DO COMPONENTE PARA EVITAR ERROS) ---
+const getVitalIcon = (text) => {
+  const t = text.toLowerCase();
+  if (t.includes('fc') || t.includes('bpm')) return <HeartPulse size={16} className="text-rose-500" />;
+  if (t.includes('pa') || t.includes('mmhg') || t.includes('pam')) return <Activity size={16} className="text-blue-500" />;
+  if (t.includes('sat') || t.includes('o2')) return <Droplet size={16} className="text-cyan-500" />;
+  if (t.includes('fr') || t.includes('resp')) return <Wind size={16} className="text-teal-500" />;
+  return <Activity size={16} className="text-slate-400" />;
+};
+
 // --- ERROR BOUNDARY ---
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -56,8 +66,10 @@ function EmergencyGuideAppContent() {
   const [authLoading, setAuthLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [isCloudConnected, setIsCloudConnected] = useState(false);
-  const [approvalStatus, setApprovalStatus] = useState(null);
+  const [approvalStatus, setApprovalStatus] = useState(null); // 'pending', 'approved', 'rejected', null
   const [configStatus, setConfigStatus] = useState('verificando');
+  
+  // Estado para usuário do Google que precisa completar cadastro
   const [pendingGoogleUser, setPendingGoogleUser] = useState(null);
 
   // App States
@@ -97,11 +109,27 @@ function EmergencyGuideAppContent() {
   const [isCurrentConductFavorite, setIsCurrentConductFavorite] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // --- HELPER FUNCTIONS (MOVIDAS PARA CIMA PARA EVITAR ERRO DE REFERÊNCIA) ---
-  const showError = (msg) => { setErrorMsg(msg); setTimeout(() => setErrorMsg(''), 4000); };
-  const getConductDocId = (query, room) => `${query.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}_${room}`;
+  // --- INIT ---
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme_preference');
+    if (savedTheme === 'dark') setIsDarkMode(true);
+    if (localStorage.getItem('terms_accepted_v1') === 'true') setHasAcceptedTerms(true);
+    
+    if (firebaseConfig && firebaseConfig.apiKey) {
+        setIsCloudConnected(true);
+        setConfigStatus('ok');
+    } else {
+        setConfigStatus('missing');
+    }
+  }, []);
 
-  // --- DATA SYNC FUNCTIONS (MOVIDAS PARA CIMA) ---
+  const toggleTheme = () => {
+    const newMode = !isDarkMode;
+    setIsDarkMode(newMode);
+    localStorage.setItem('theme_preference', newMode ? 'dark' : 'light');
+  };
+
+  // --- DATA SYNC ---
   const loadHistory = async (uid) => {
     if (!db) return;
     try {
@@ -139,27 +167,7 @@ function EmergencyGuideAppContent() {
     });
   };
 
-  // --- EFFECTS ---
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme_preference');
-    if (savedTheme === 'dark') setIsDarkMode(true);
-    if (localStorage.getItem('terms_accepted_v1') === 'true') setHasAcceptedTerms(true);
-    
-    if (firebaseConfig && firebaseConfig.apiKey) {
-        setIsCloudConnected(true);
-        setConfigStatus('ok');
-    } else {
-        setConfigStatus('missing');
-    }
-  }, []);
-
-  const toggleTheme = () => {
-    const newMode = !isDarkMode;
-    setIsDarkMode(newMode);
-    localStorage.setItem('theme_preference', newMode ? 'dark' : 'light');
-  };
-
-  // --- AUTH LISTENER (AGORA AS FUNÇÕES JÁ EXISTEM) ---
+  // --- AUTH LISTENER ---
   useEffect(() => {
     if (!auth) return;
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -173,7 +181,6 @@ function EmergencyGuideAppContent() {
             if (userData.status === 'approved') {
               setCurrentUser({ ...userData, uid: user.uid, email: user.email });
               setApprovalStatus('approved');
-              // Funções chamadas aqui agora são seguras
               loadHistory(user.uid);
               fetchNotesFromCloud(user.uid);
             } else {
@@ -277,6 +284,11 @@ function EmergencyGuideAppContent() {
 
   const handleNoteChange = (e) => setUserNotes(e.target.value);
 
+  // --- HELPERS ---
+  const showError = (msg) => { setErrorMsg(msg); setTimeout(() => setErrorMsg(''), 4000); };
+  const getConductDocId = (query, room) => `${query.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}_${room}`;
+
+  // --- CORE LOGIC ---
   const toggleFavorite = async () => {
     if (!currentUser || !conduct) { showError("Necessário estar online."); return; }
     const newStatus = !isCurrentConductFavorite;
@@ -387,6 +399,7 @@ function EmergencyGuideAppContent() {
 
     const docId = getConductDocId(searchQuery, targetRoom);
     
+    // Check Cache
     if (currentUser && db) {
       try {
         const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', docId);
