@@ -48,6 +48,7 @@ class ErrorBoundary extends React.Component {
 }
 
 function EmergencyGuideAppContent() {
+  // --- STATE MANAGEMENT ---
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
@@ -55,6 +56,9 @@ function EmergencyGuideAppContent() {
   const [loginError, setLoginError] = useState('');
   const [isCloudConnected, setIsCloudConnected] = useState(false);
   const [approvalStatus, setApprovalStatus] = useState(null); // 'pending', 'approved', 'rejected', null
+  
+  // CORREÇÃO: Estado configStatus adicionado aqui
+  const [configStatus, setConfigStatus] = useState('verificando');
 
   // App States
   const [activeRoom, setActiveRoom] = useState('verde');
@@ -79,6 +83,7 @@ function EmergencyGuideAppContent() {
   const [showQuickPrescriptions, setShowQuickPrescriptions] = useState(false);
   const [showPhysicalExam, setShowPhysicalExam] = useState(false);
 
+  // Specific Data States
   const [userNotes, setUserNotes] = useState('');
   const [selectedPrescriptionItems, setSelectedPrescriptionItems] = useState([]);
   const [selectedImage, setSelectedImage] = useState(null); 
@@ -97,7 +102,14 @@ function EmergencyGuideAppContent() {
     const savedTheme = localStorage.getItem('theme_preference');
     if (savedTheme === 'dark') setIsDarkMode(true);
     if (localStorage.getItem('terms_accepted_v1') === 'true') setHasAcceptedTerms(true);
-    if (firebaseConfig && firebaseConfig.apiKey) setIsCloudConnected(true);
+    
+    // Verificação de configuração
+    if (firebaseConfig && firebaseConfig.apiKey) {
+        setIsCloudConnected(true);
+        setConfigStatus('ok');
+    } else {
+        setConfigStatus('missing');
+    }
   }, []);
 
   const toggleTheme = () => {
@@ -256,46 +268,19 @@ function EmergencyGuideAppContent() {
       setShowFavoritesModal(false); setIsCurrentConductFavorite(true);
   };
 
-  const generateConduct = async (overrideRoom = null) => {
-    if (!searchQuery.trim()) { showError('Digite uma condição clínica.'); return; }
-    const targetRoom = overrideRoom || activeRoom;
-    setLoading(true); setConduct(null); setErrorMsg(''); setIsCurrentConductFavorite(false);
-    if (overrideRoom) setActiveRoom(overrideRoom);
-
-    const docId = getConductDocId(searchQuery, targetRoom);
-    
-    // Check Cache
-    if (currentUser && db) {
-      try {
-        const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', docId);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setConduct(data.conductData); setIsCurrentConductFavorite(data.isFavorite || false);
-          setLoading(false); saveToHistory(searchQuery, targetRoom);
-          return;
-        }
-      } catch (e) {}
-    }
-
+  const manageCacheLimit = async (username) => {
+    if (!db) return;
     try {
-      const response = await fetch('/api/generate', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ searchQuery, activeRoom: targetRoom })
-      });
-      if (!response.ok) throw new Error('Erro IA.');
-      const parsedConduct = await response.json();
-      setConduct(parsedConduct);
-      
-      if (currentUser && db) {
-        const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', docId);
-        await setDoc(docRef, { query: searchQuery, room: targetRoom, conductData: parsedConduct, isFavorite: false, lastAccessed: new Date().toISOString() });
+      const conductsRef = collection(db, 'artifacts', appId, 'users', username, 'conducts');
+      const q = firestoreQuery(conductsRef, where("isFavorite", "==", false), orderBy("lastAccessed", "desc"));
+      const snapshot = await getDocs(q);
+      if (snapshot.size > 10) {
+        const deletePromises = snapshot.docs.slice(10).map(d => deleteDoc(d.ref));
+        await Promise.all(deletePromises);
       }
-      saveToHistory(searchQuery, targetRoom);
-    } catch (error) { showError("Erro ao gerar conduta."); } finally { setLoading(false); }
+    } catch (error) { console.error("Cache clean error:", error); }
   };
 
-  // --- OTHER HANDLERS ---
   const togglePrescriptionItem = (med) => {
     if (activeRoom !== 'verde' || !med.receita) return;
     setSelectedPrescriptionItems(prev => {
@@ -361,6 +346,45 @@ function EmergencyGuideAppContent() {
     } catch (error) { showError("Erro ao processar."); } finally { setIsGeneratingBedside(false); }
   };
 
+  const generateConduct = async (overrideRoom = null) => {
+    if (!searchQuery.trim()) { showError('Digite uma condição clínica.'); return; }
+    const targetRoom = overrideRoom || activeRoom;
+    setLoading(true); setConduct(null); setErrorMsg(''); setIsCurrentConductFavorite(false);
+    if (overrideRoom) setActiveRoom(overrideRoom);
+
+    const docId = getConductDocId(searchQuery, targetRoom);
+    
+    // Check Cache
+    if (currentUser && db) {
+      try {
+        const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', docId);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setConduct(data.conductData); setIsCurrentConductFavorite(data.isFavorite || false);
+          setLoading(false); saveToHistory(searchQuery, targetRoom);
+          return;
+        }
+      } catch (e) {}
+    }
+
+    try {
+      const response = await fetch('/api/generate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ searchQuery, activeRoom: targetRoom })
+      });
+      if (!response.ok) throw new Error('Erro IA.');
+      const parsedConduct = await response.json();
+      setConduct(parsedConduct);
+      
+      if (currentUser && db) {
+        const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', docId);
+        await setDoc(docRef, { query: searchQuery, room: targetRoom, conductData: parsedConduct, isFavorite: false, lastAccessed: new Date().toISOString() });
+      }
+      saveToHistory(searchQuery, targetRoom);
+    } catch (error) { showError("Erro ao gerar conduta."); } finally { setLoading(false); }
+  };
+
   const roomConfig = {
     verde: { name: 'Sala Verde', color: 'emerald', accent: isDarkMode ? 'bg-emerald-600' : 'bg-emerald-500', border: isDarkMode ? 'border-emerald-700' : 'border-emerald-500', text: isDarkMode ? 'text-emerald-300' : 'text-emerald-800', light: isDarkMode ? 'bg-emerald-900/30' : 'bg-emerald-50', icon: <Stethoscope className="w-5 h-5" />, description: 'Ambulatorial / Baixa Complexidade' },
     amarela: { name: 'Sala Amarela', color: 'amber', accent: isDarkMode ? 'bg-amber-600' : 'bg-amber-500', border: isDarkMode ? 'border-amber-700' : 'border-amber-500', text: isDarkMode ? 'text-amber-300' : 'text-amber-800', light: isDarkMode ? 'bg-amber-900/30' : 'bg-amber-50', icon: <BedDouble className="w-5 h-5" />, description: 'Observação / Média Complexidade' },
@@ -403,7 +427,7 @@ function EmergencyGuideAppContent() {
              <div className="hidden sm:flex flex-col items-end mr-2"><span className={`text-xs font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{currentUser.name}</span><span className="text-[10px] text-slate-400 uppercase">Médico(a)</span></div>
              <ThemeToggle isDarkMode={isDarkMode} toggleTheme={toggleTheme} />
              <div className="relative">
-                <button onClick={() => setShowToolsMenu(!showToolsMenu)} className={`px-3 py-2 rounded-lg flex items-center gap-2 transition-colors font-bold text-sm ${isDarkMode ? 'bg-blue-900/30 text-blue-300 hover:bg-blue-900/50' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}>
+                <button aria-label="Ferramentas" onClick={() => setShowToolsMenu(!showToolsMenu)} className={`px-3 py-2 rounded-lg flex items-center gap-2 transition-colors font-bold text-sm ${isDarkMode ? 'bg-blue-900/30 text-blue-300 hover:bg-blue-900/50' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}>
                   <LayoutGrid size={18} /><span className="hidden sm:inline">Ferramentas</span><ChevronDown size={14} className={`transition-transform ${showToolsMenu ? 'rotate-180' : ''}`} />
                 </button>
                 {showToolsMenu && (
