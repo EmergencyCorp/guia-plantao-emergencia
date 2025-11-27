@@ -1,3 +1,4 @@
+// Arquivo: src/App.jsx
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Activity, AlertCircle, Search, Clock, Pill, FileText, Loader2, BookOpen, 
@@ -6,278 +7,23 @@ import {
   ShieldAlert, LogOut, Lock, Shield, History, LogIn, KeyRound, Edit, Save, Cloud, CloudOff, Settings, Info,
   HeartPulse, Microscope, Image as ImageIcon, FileDigit, ScanLine, Wind, Droplet, Timer, Skull, Printer, FilePlus, Calculator,
   Tablets, Syringe as SyringeIcon, Droplets, Pipette, Star, Trash2, SprayCan, CalendarDays, Utensils, Zap, Camera, Upload, Eye,
-  Sun, Moon, BedDouble, ClipboardList, UserCheck, Calculator as CalcIcon, HelpCircle, LayoutGrid, ChevronDown
+  BedDouble, ClipboardList, UserCheck, Calculator as CalcIcon, HelpCircle, LayoutGrid, ChevronDown
 } from 'lucide-react';
 
-// --- FIREBASE IMPORTS ---
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+// --- IMPORTS DOS NOVOS ARQUIVOS FRAGMENTADOS ---
+// Ajuste o caminho '../' ou './' conforme onde você salvou os arquivos
+import { auth, db, firebaseConfig } from './firebaseClient'; 
+import ThemeToggle from './components/ThemeToggle'; // ou './ThemeToggle' se estiver na mesma pasta
+
+// --- FIREBASE AUTH IMPORTS ---
+import { signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { 
-  getFirestore, 
-  doc, 
-  setDoc, 
-  getDoc, 
-  collection, 
-  query as firestoreQuery, 
-  where, 
-  orderBy, 
-  limit, 
-  getDocs, 
-  deleteDoc,
-  onSnapshot
+  doc, setDoc, getDoc, collection, query as firestoreQuery, 
+  where, orderBy, limit, getDocs, deleteDoc, onSnapshot 
 } from 'firebase/firestore';
-
-// --- LÓGICA DE CONFIGURAÇÃO DO FIREBASE ---
-const getFirebaseConfig = () => {
-  try {
-    if (import.meta.env && import.meta.env.VITE_FIREBASE_API_KEY) {
-      return {
-        apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-        authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-        projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-        storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-        messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-        appId: import.meta.env.VITE_FIREBASE_APP_ID
-      };
-    }
-    if (typeof __firebase_config !== 'undefined') {
-      return JSON.parse(__firebase_config);
-    }
-  } catch (e) {
-    console.error("Erro config firebase:", e);
-  }
-  return null;
-};
-
-const firebaseConfig = getFirebaseConfig();
-let app, auth, db;
-
-if (firebaseConfig && firebaseConfig.apiKey) {
-  try {
-    app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    db = getFirestore(app);
-  } catch (e) {
-    console.error("Erro init firebase:", e);
-  }
-}
 
 const appId = (typeof __app_id !== 'undefined') ? __app_id : 'emergency-guide-app';
 const initialToken = (typeof __initial_auth_token !== 'undefined') ? __initial_auth_token : null;
-
-// --- DEFINIÇÃO DOS SCORES MÉDICOS ---
-const MEDICAL_SCORES = {
-  chadsvasc: {
-    name: "CHA₂DS₂-VASc",
-    desc: "Risco de AVC em Fibrilação Atrial",
-    items: [
-      { id: 'c', label: 'Insuficiência Cardíaca / Disfunção VE', points: 1, type: 'bool' },
-      { id: 'h', label: 'Hipertensão', points: 1, type: 'bool' },
-      { id: 'a2', label: 'Idade ≥ 75 anos', points: 2, type: 'bool' },
-      { id: 'd', label: 'Diabetes Mellitus', points: 1, type: 'bool' },
-      { id: 's2', label: 'AVC / AIT / Tromboembolismo prévio', points: 2, type: 'bool' },
-      { id: 'v', label: 'Doença Vascular (IAM, DAP, Placa Aórtica)', points: 1, type: 'bool' },
-      { id: 'a', label: 'Idade 65-74 anos', points: 1, type: 'bool' },
-      { id: 'sc', label: 'Sexo Feminino', points: 1, type: 'bool' },
-    ],
-    getResult: (points) => {
-      let risk = points === 0 ? "Baixo" : points === 1 ? "Moderado" : "Alto";
-      return { points, risk, conduta: points >= 2 ? "Indicação formal de Anticoagulação Oral." : points === 1 ? "Considerar Anticoagulação." : "Sem indicação de anticoagulação (exceto se cardioversão)." };
-    }
-  },
-  curb65: {
-    name: "CURB-65",
-    desc: "Gravidade da Pneumonia Adquirida na Comunidade",
-    items: [
-      { id: 'c', label: 'Confusão Mental', points: 1, type: 'bool' },
-      { id: 'u', label: 'Ureia > 50 mg/dL (ou BUN > 19)', points: 1, type: 'bool' },
-      { id: 'r', label: 'Frequência Respiratória ≥ 30 irpm', points: 1, type: 'bool' },
-      { id: 'b', label: 'PAS < 90 ou PAD ≤ 60 mmHg', points: 1, type: 'bool' },
-      { id: '65', label: 'Idade ≥ 65 anos', points: 1, type: 'bool' },
-    ],
-    getResult: (points) => {
-      let risk = points <= 1 ? "Baixo Risco (Mortalidade < 1.5%)" : points === 2 ? "Risco Moderado (Mortalidade ~9%)" : "Alto Risco (Mortalidade > 22%)";
-      let local = points <= 1 ? "Ambulatorial" : points === 2 ? "Internação (Enfermaria)" : "Internação (Considerar UTI)";
-      return { points, risk, conduta: `Local sugerido: ${local}` };
-    }
-  },
-  glasgow: {
-    name: "Escala de Coma de Glasgow",
-    desc: "Avaliação do Nível de Consciência",
-    items: [
-      { 
-        id: 'eye', label: 'Abertura Ocular', type: 'select', 
-        options: [
-          { val: 4, text: 'Espontânea (4)' }, { val: 3, text: 'Ao comando verbal (3)' }, 
-          { val: 2, text: 'À dor (2)' }, { val: 1, text: 'Ausente (1)' }
-        ] 
-      },
-      { 
-        id: 'verbal', label: 'Resposta Verbal', type: 'select', 
-        options: [
-          { val: 5, text: 'Orientado (5)' }, { val: 4, text: 'Confuso (4)' }, 
-          { val: 3, text: 'Palavras inapropriadas (3)' }, { val: 2, text: 'Sons ininteligíveis (2)' }, { val: 1, text: 'Ausente (1)' }
-        ] 
-      },
-      { 
-        id: 'motor', label: 'Resposta Motora', type: 'select', 
-        options: [
-          { val: 6, text: 'Obedece comandos (6)' }, { val: 5, text: 'Localiza dor (5)' }, 
-          { val: 4, text: 'Flexão normal/Retirada (4)' }, { val: 3, text: 'Flexão anormal/Decorticação (3)' }, 
-          { val: 2, text: 'Extensão/Descerebração (2)' }, { val: 1, text: 'Ausente (1)' }
-        ] 
-      }
-    ],
-    getResult: (points) => {
-      let trauma = points <= 8 ? "Trauma Grave (Necessidade de IOT)" : points <= 12 ? "Trauma Moderado" : "Trauma Leve";
-      return { points, risk: trauma, conduta: points <= 8 ? "Proteger via aérea (Intubação)." : "Monitorar evolução neurológica." };
-    }
-  },
-  wellstep: {
-    name: "Wells para TEP",
-    desc: "Probabilidade Pré-Teste de Embolia Pulmonar",
-    items: [
-      { id: '1', label: 'Sinais/Sintomas de TVP', points: 3, type: 'bool' },
-      { id: '2', label: 'TEP é o diagnóstico mais provável', points: 3, type: 'bool' },
-      { id: '3', label: 'FC > 100 bpm', points: 1.5, type: 'bool' },
-      { id: '4', label: 'Imobilização ou Cirurgia < 4 sem', points: 1.5, type: 'bool' },
-      { id: '5', label: 'História prévia de TVP/TEP', points: 1.5, type: 'bool' },
-      { id: '6', label: 'Hemoptise', points: 1, type: 'bool' },
-      { id: '7', label: 'Malignidade ativa', points: 1, type: 'bool' },
-    ],
-    getResult: (points) => {
-      let prob = points > 6 ? "Alta Probabilidade" : points >= 2 ? "Moderada Probabilidade" : "Baixa Probabilidade";
-      let conduta = points > 4 ? "TEP Provável -> Angio-TC de Tórax" : "TEP Improvável -> D-Dímero";
-      return { points, risk: prob, conduta };
-    }
-  },
-  wellstvp: {
-    name: "Wells para TVP",
-    desc: "Probabilidade de Trombose Venosa Profunda",
-    items: [
-      { id: '1', label: 'Câncer ativo', points: 1, type: 'bool' },
-      { id: '2', label: 'Paralisia, paresia ou imobilização recente de MMII', points: 1, type: 'bool' },
-      { id: '3', label: 'Acamado > 3 dias ou cirurgia grande < 12 sem', points: 1, type: 'bool' },
-      { id: '4', label: 'Dor localizada no trajeto venoso profundo', points: 1, type: 'bool' },
-      { id: '5', label: 'Edema de todo o membro', points: 1, type: 'bool' },
-      { id: '6', label: 'Edema de panturrilha > 3cm (comp. lado assint.)', points: 1, type: 'bool' },
-      { id: '7', label: 'Edema depressível (cacifo) no lado sintomático', points: 1, type: 'bool' },
-      { id: '8', label: 'Veias colaterais superficiais (não varicosas)', points: 1, type: 'bool' },
-      { id: '9', label: 'Diagnóstico alternativo mais provável que TVP', points: -2, type: 'bool' },
-    ],
-    getResult: (points) => {
-      let prob = points >= 3 ? "Alta Probabilidade (TVP Provável)" : points >= 1 ? "Moderada" : "Baixa Probabilidade (TVP Improvável)";
-      let conduta = points >= 2 ? "Solicitar USG Doppler Venoso" : "Solicitar D-Dímero (se disponível) ou USG seriado";
-      return { points, risk: prob, conduta };
-    }
-  },
-  childpugh: {
-    name: "Child-Pugh",
-    desc: "Prognóstico na Cirrose Hepática",
-    items: [
-      { id: 'bili', label: 'Bilirrubina Total', type: 'select', options: [{val:1, text:'< 2'}, {val:2, text:'2 - 3'}, {val:3, text:'> 3'}] },
-      { id: 'alb', label: 'Albumina', type: 'select', options: [{val:1, text:'> 3.5'}, {val:2, text:'2.8 - 3.5'}, {val:3, text:'< 2.8'}] },
-      { id: 'inr', label: 'INR', type: 'select', options: [{val:1, text:'< 1.7'}, {val:2, text:'1.7 - 2.3'}, {val:3, text:'> 2.3'}] },
-      { id: 'asc', label: 'Ascite', type: 'select', options: [{val:1, text:'Ausente'}, {val:2, text:'Leve'}, {val:3, text:'Moderada/Grave'}] },
-      { id: 'enc', label: 'Encefalopatia', type: 'select', options: [{val:1, text:'Ausente'}, {val:2, text:'Grau 1-2 (Controlada)'}, {val:3, text:'Grau 3-4 (Refratária)'}] },
-    ],
-    getResult: (points) => {
-      let classe = points < 7 ? "Classe A" : points < 10 ? "Classe B" : "Classe C";
-      let surv = points < 7 ? "100% em 1 ano" : points < 10 ? "80% em 1 ano" : "45% em 1 ano";
-      return { points, risk: classe, conduta: `Sobrevida estimada: ${surv}` };
-    }
-  },
-  grace: {
-    name: "GRACE Score (Admissão)",
-    desc: "Mortalidade intra-hospitalar em SCA (Estimativa por Pontos)",
-    items: [
-      { id: 'age', label: 'Idade', type: 'select', options: [{val:0, text:'<40'}, {val:18, text:'40-49'}, {val:36, text:'50-59'}, {val:55, text:'60-69'}, {val:73, text:'70-79'}, {val:91, text:'≥80'}] },
-      { id: 'hr', label: 'Frequência Cardíaca', type: 'select', options: [{val:0, text:'<50'}, {val:3, text:'50-69'}, {val:9, text:'70-89'}, {val:15, text:'90-109'}, {val:24, text:'110-149'}, {val:38, text:'150-199'}, {val:46, text:'>200'}] },
-      { id: 'sbp', label: 'PA Sistólica', type: 'select', options: [{val:58, text:'<80'}, {val:53, text:'80-99'}, {val:43, text:'100-119'}, {val:34, text:'120-139'}, {val:24, text:'140-159'}, {val:10, text:'160-199'}, {val:0, text:'>200'}] },
-      { id: 'creat', label: 'Creatinina', type: 'select', options: [{val:1, text:'0-0.39'}, {val:4, text:'0.4-0.79'}, {val:7, text:'0.8-1.19'}, {val:10, text:'1.2-1.59'}, {val:13, text:'1.6-1.99'}, {val:21, text:'2.0-3.99'}, {val:28, text:'>4.0'}] },
-      { id: 'killip', label: 'Classe Killip', type: 'select', options: [{val:0, text:'I (Sem IC)'}, {val:20, text:'II (Estertores/B3)'}, {val:39, text:'III (Edema Agudo)'}, {val:59, text:'IV (Choque)'}] },
-      { id: 'arr', label: 'Parada Cardíaca na Admissão', points: 39, type: 'bool' },
-      { id: 'dev', label: 'Desvio ST', points: 28, type: 'bool' },
-      { id: 'enz', label: 'Enzimas Cardíacas Elevadas', points: 14, type: 'bool' },
-    ],
-    getResult: (points) => {
-      let risk = points <= 108 ? "Baixo (<1% morte intra-hosp)" : points <= 140 ? "Intermediário (1-3% morte)" : "Alto (>3% morte)";
-      return { points, risk, conduta: "Alto Risco: Estratégia Invasiva Precoce (<24h)." };
-    }
-  },
-  nihss: {
-    name: "NIHSS Compacto",
-    desc: "Gravidade do AVC Isquêmico",
-    items: [
-      { id: '1a', label: '1a. Nível de Consciência', type: 'select', options: [{val:0, text:'Alerta'}, {val:1, text:'Sonolento'}, {val:2, text:'Estupor'}, {val:3, text:'Coma'}] },
-      { id: '1b', label: '1b. Perguntas (Idade/Mês)', type: 'select', options: [{val:0, text:'Ambas corretas'}, {val:1, text:'Uma correta'}, {val:2, text:'Nenhuma'}] },
-      { id: '1c', label: '1c. Comandos (Olhos/Mão)', type: 'select', options: [{val:0, text:'Ambos corretos'}, {val:1, text:'Um correto'}, {val:2, text:'Nenhum'}] },
-      { id: '2', label: '2. Mov. Ocular Horizontal', type: 'select', options: [{val:0, text:'Normal'}, {val:1, text:'Parcial'}, {val:2, text:'Desvio Forçado'}] },
-      { id: '3', label: '3. Campos Visuais', type: 'select', options: [{val:0, text:'Normal'}, {val:1, text:'Hemianopsia Parcial'}, {val:2, text:'Hemianopsia Completa'}, {val:3, text:'Cegueira Bilateral'}] },
-      { id: '4', label: '4. Paralisia Facial', type: 'select', options: [{val:0, text:'Normal'}, {val:1, text:'Paresia Leve'}, {val:2, text:'Parcial Inferior'}, {val:3, text:'Completa (Sup/Inf)'}] },
-      { id: '5', label: '5/6. Motor (Braços/Pernas - Soma)', type: 'select', options: [{val:0, text:'Sem queda'}, {val:1, text:'Queda leve'}, {val:2, text:'Algum esforço contra gravidade'}, {val:3, text:'Sem esforço contra gravidade'}, {val:4, text:'Sem movimento'}] },
-      { id: '7', label: '7. Ataxia de Membros', type: 'select', options: [{val:0, text:'Ausente'}, {val:1, text:'Presente em 1 membro'}, {val:2, text:'Presente em 2 membros'}] },
-      { id: '8', label: '8. Sensibilidade', type: 'select', options: [{val:0, text:'Normal'}, {val:1, text:'Hipoestesia leve'}, {val:2, text:'Hipoestesia grave/Anestesia'}] },
-      { id: '9', label: '9. Linguagem', type: 'select', options: [{val:0, text:'Normal'}, {val:1, text:'Afasia leve'}, {val:2, text:'Afasia grave'}, {val:3, text:'Mudo/Global'}] },
-      { id: '10', label: '10. Disartria', type: 'select', options: [{val:0, text:'Normal'}, {val:1, text:'Leve'}, {val:2, text:'Grave/Ininteligível'}] },
-      { id: '11', label: '11. Extinção/Desatenção', type: 'select', options: [{val:0, text:'Normal'}, {val:1, text:'Parcial'}, {val:2, text:'Completa'}] },
-    ],
-    getResult: (points) => {
-      let sev = points === 0 ? "Normal" : points <= 4 ? "AVC Leve" : points <= 15 ? "AVC Moderado" : points <= 20 ? "AVC Moderado-Grave" : "AVC Grave";
-      return { points, risk: sev, conduta: points > 25 ? "Contraindicação relativa para trombólise (risco alto de sangramento)." : "Avaliar elegibilidade para Trombólise/Trombectomia." };
-    }
-  },
-  heart: {
-    name: "HEART Score",
-    desc: "Risco de eventos cardíacos maiores (MACE) em 6 semanas",
-    items: [
-      { id: 'h', label: 'História', type: 'select', options: [{val:0, text:'Levemente suspeita'}, {val:1, text:'Moderadamente suspeita'}, {val:2, text:'Altamente suspeita'}] },
-      { id: 'e', label: 'ECG', type: 'select', options: [{val:0, text:'Normal'}, {val:1, text:'Repolarização inespecífica'}, {val:2, text:'Infra de ST significativo'}] },
-      { id: 'a', label: 'Idade', type: 'select', options: [{val:0, text:'< 45 anos'}, {val:1, text:'45-65 anos'}, {val:2, text:'> 65 anos'}] },
-      { id: 'r', label: 'Fatores de Risco', type: 'select', options: [{val:0, text:'Nenhum'}, {val:1, text:'1-2 Fatores'}, {val:2, text:'≥3 Fatores ou Doença Aterosclerótica'}] },
-      { id: 't', label: 'Troponina', type: 'select', options: [{val:0, text:'≤ Limite Normal'}, {val:1, text:'1-3x Limite Normal'}, {val:2, text:'>3x Limite Normal'}] },
-    ],
-    getResult: (points) => {
-      let risk = points <= 3 ? "Baixo (0.9-1.7% MACE)" : points <= 6 ? "Moderado (12-16% MACE)" : "Alto (50-65% MACE)";
-      let conduta = points <= 3 ? "Considerar alta precoce." : points <= 6 ? "Observação e troponina seriada." : "Internação e estratégia invasiva precoce.";
-      return { points, risk, conduta };
-    }
-  },
-  sofa: {
-    name: "SOFA Score",
-    desc: "Avaliação de Falência de Órgãos (Sepse)",
-    items: [
-      { id: 'resp', label: 'Respiração (PaO2/FiO2)', type: 'select', options: [{val:0, text:'> 400'}, {val:1, text:'< 400'}, {val:2, text:'< 300'}, {val:3, text:'< 200 (com suporte)'}, {val:4, text:'< 100 (com suporte)'}] },
-      { id: 'coag', label: 'Coagulação (Plaquetas)', type: 'select', options: [{val:0, text:'> 150.000'}, {val:1, text:'< 150.000'}, {val:2, text:'< 100.000'}, {val:3, text:'< 50.000'}, {val:4, text:'< 20.000'}] },
-      { id: 'liver', label: 'Fígado (Bilirrubina)', type: 'select', options: [{val:0, text:'< 1.2'}, {val:1, text:'1.2 - 1.9'}, {val:2, text:'2.0 - 5.9'}, {val:3, text:'6.0 - 11.9'}, {val:4, text:'> 12.0'}] },
-      { id: 'cardio', label: 'Cardiovascular (Hipotensão)', type: 'select', options: [{val:0, text:'Sem hipotensão'}, {val:1, text:'PAM < 70 mmHg'}, {val:2, text:'Dopamina ≤ 5'}, {val:3, text:'Dopa > 5 ou Norepi ≤ 0.1'}, {val:4, text:'Dopa > 15 ou Norepi > 0.1'}] },
-      { id: 'cns', label: 'SNC (Glasgow)', type: 'select', options: [{val:0, text:'15'}, {val:1, text:'13 - 14'}, {val:2, text:'10 - 12'}, {val:3, text:'6 - 9'}, {val:4, text:'< 6'}] },
-      { id: 'renal', label: 'Renal (Creatinina)', type: 'select', options: [{val:0, text:'< 1.2'}, {val:1, text:'1.2 - 1.9'}, {val:2, text:'2.0 - 3.4'}, {val:3, text:'3.5 - 4.9'}, {val:4, text:'> 5.0'}] },
-    ],
-    getResult: (points) => {
-      let risk = `Mortalidade estimada: ${points < 9 ? "< 33%" : points < 12 ? "50%" : "> 95%"}`;
-      return { points, risk, conduta: points >= 2 ? "Disfunção orgânica significativa (Sepse se infecção)." : "Monitorar evolução." };
-    }
-  }
-};
-
-// Componente Toggle Switch para Dark Mode
-const ThemeToggle = ({ isDarkMode, toggleTheme }) => (
-  <button 
-    onClick={toggleTheme}
-    className={`relative inline-flex items-center h-8 rounded-full w-16 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${isDarkMode ? 'bg-slate-700' : 'bg-blue-200'}`}
-    title={isDarkMode ? "Mudar para Modo Claro" : "Mudar para Modo Escuro"}
-  >
-    <span className="sr-only">Trocar Tema</span>
-    <span
-      className={`${
-        isDarkMode ? 'translate-x-9 bg-slate-800' : 'translate-x-1 bg-white'
-      } inline-block w-6 h-6 transform rounded-full transition-transform shadow-md flex items-center justify-center`}
-    >
-      {isDarkMode ? <Moon size={14} className="text-blue-300" /> : <Sun size={14} className="text-yellow-500" />}
-    </span>
-  </button>
-);
 
 export default function EmergencyGuideApp() {
   // --- ESTADO DE TEMA (DARK MODE) ---
@@ -300,7 +46,7 @@ export default function EmergencyGuideApp() {
   const [usernameInput, setUsernameInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [loginError, setLoginError] = useState('');
-  
+   
   const [firebaseUser, setFirebaseUser] = useState(null); 
   const [isCloudConnected, setIsCloudConnected] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -333,11 +79,6 @@ export default function EmergencyGuideApp() {
   });
   const [calcResult, setCalcResult] = useState('---');
 
-  // --- ESTADOS DA CALCULADORA MÉDICA (SCORES) ---
-  const [showMedicalCalcModal, setShowMedicalCalcModal] = useState(false);
-  const [selectedScore, setSelectedScore] = useState('chadsvasc');
-  const [scoreValues, setScoreValues] = useState({});
-
   // --- ESTADOS DA ANÁLISE DE IMAGEM (IA VISION) ---
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null); 
@@ -352,9 +93,6 @@ export default function EmergencyGuideApp() {
   const [bedsideResult, setBedsideResult] = useState(null);
   const [isGeneratingBedside, setIsGeneratingBedside] = useState(false);
 
-  // --- ESTADOS DE AJUDA ---
-  const [showHelpModal, setShowHelpModal] = useState(false);
-  
   // --- ESTADOS DO MENU UNIFICADO ---
   const [showToolsMenu, setShowToolsMenu] = useState(false);
   const menuRef = useRef(null);
@@ -409,30 +147,6 @@ export default function EmergencyGuideApp() {
       } catch (e) {}
     }
   }, []);
-
-  // --- INICIALIZAÇÃO DOS SCORES (CORREÇÃO DO BUG) ---
-  const initializeScoreValues = (key) => {
-    const score = MEDICAL_SCORES[key];
-    const initial = {};
-    score.items.forEach(i => {
-       // Define valor padrão: 0 para bool, ou o valor da 1ª opção para selects
-       if(i.type === 'select') initial[i.id] = i.options[0].val;
-       else initial[i.id] = 0;
-    });
-    setScoreValues(initial);
-  };
-
-  useEffect(() => {
-    if (showMedicalCalcModal) {
-       // Ao abrir o modal, reinicia com os valores padrão do score selecionado
-       initializeScoreValues(selectedScore);
-    }
-  }, [showMedicalCalcModal]);
-
-  const handleSelectScore = (key) => {
-      setSelectedScore(key);
-      initializeScoreValues(key);
-  };
 
   useEffect(() => {
     if (currentUser && isCloudConnected) {
@@ -587,29 +301,6 @@ export default function EmergencyGuideApp() {
     setCalcInputs(prev => ({ ...prev, [field]: value }));
   };
 
-  // --- LÓGICA DE CÁLCULO DE SCORES MÉDICOS ---
-  const handleScoreChange = (id, value, type, points) => {
-    setScoreValues(prev => ({
-      ...prev,
-      [id]: type === 'bool' ? (prev[id] ? 0 : points) : parseFloat(value)
-    }));
-  };
-
-  const calculateScoreResult = () => {
-    if (!MEDICAL_SCORES[selectedScore]) return null;
-    const scoreDef = MEDICAL_SCORES[selectedScore];
-    let total = 0;
-    scoreDef.items.forEach(item => {
-      // Se o valor não estiver no state (undefined), usa o valor padrão (0 para bool, 1ª opção para select)
-      let val = scoreValues[item.id];
-      if (val === undefined) {
-         val = item.type === 'select' ? item.options[0].val : 0;
-      }
-      total += val;
-    });
-    return scoreDef.getResult(total);
-  };
-
   const loadHistory = (username) => {
     try {
       const history = localStorage.getItem(`history_${username}`);
@@ -617,7 +308,7 @@ export default function EmergencyGuideApp() {
       else setRecentSearches([]);
     } catch (e) { setRecentSearches([]); }
   };
-  
+   
   const loadLocalHistory = (username) => {
       try {
         const history = localStorage.getItem(`history_${username}`);
@@ -650,7 +341,7 @@ export default function EmergencyGuideApp() {
       const updated = [newEntry, ...hist].slice(0, 10); 
       setRecentSearches(updated);
       localStorage.setItem(`history_${currentUser.username}`, JSON.stringify(updated));
-  
+   
       if (db && auth?.currentUser) {
         try {
           const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', currentUser.username);
@@ -843,7 +534,7 @@ export default function EmergencyGuideApp() {
       showError("Erro ao atualizar favorito.");
     }
   };
-  
+   
   const removeFavoriteFromList = async (docId) => {
       if (!currentUser || !isCloudConnected) return;
       try {
@@ -1131,7 +822,7 @@ export default function EmergencyGuideApp() {
         description: 'Emergência / Risco de Vida' 
     }
   };
-  
+   
   // Categorias para Sala Vermelha
   const RED_ROOM_CATEGORIES = [
     'Dieta', 
@@ -1205,7 +896,7 @@ export default function EmergencyGuideApp() {
           <div className="flex items-center gap-3">
              <div className="hidden sm:flex flex-col items-end mr-2"><span className={`text-xs font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{currentUser.name}</span><span className="text-[10px] text-slate-400 uppercase">{currentUser.role}</span></div>
              
-             {/* TOGGLE DARK MODE */}
+             {/* TOGGLE DARK MODE AGORA É COMPONENTE */}
              <ThemeToggle isDarkMode={isDarkMode} toggleTheme={toggleTheme} />
 
              {/* BOTÃO UNIFICADO DE FERRAMENTAS */}
@@ -1229,9 +920,7 @@ export default function EmergencyGuideApp() {
                       <button onClick={() => { setShowBedsideModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-indigo-300 hover:bg-slate-800' : 'text-indigo-700 hover:bg-indigo-50'}`}>
                         <ClipboardList size={16} /> BedSide Guidance
                       </button>
-                      <button onClick={() => { setShowMedicalCalcModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-emerald-300 hover:bg-slate-800' : 'text-emerald-700 hover:bg-emerald-50'}`}>
-                        <FileDigit size={16} /> Scores Médicos
-                      </button>
+                      {/* Item "Scores Médicos" removido conforme solicitado */}
                        <button onClick={() => { setShowCalculatorModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-rose-300 hover:bg-slate-800' : 'text-rose-700 hover:bg-rose-50'}`}>
                         <Calculator size={16} /> Calc. Infusão
                       </button>
@@ -1253,16 +942,9 @@ export default function EmergencyGuideApp() {
       </header>
 
       <main className="flex-grow max-w-6xl mx-auto px-4 py-8 space-y-8 w-full relative" onClick={() => setShowToolsMenu(false)}>
-        {/* BOTÃO FLUTUANTE DE AJUDA */}
-        <button 
-          onClick={() => setShowHelpModal(true)} 
-          className={`fixed bottom-6 right-6 z-40 p-4 rounded-full shadow-xl transition-transform hover:scale-110 ${isDarkMode ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-blue-700 hover:bg-blue-800 text-white'}`}
-          title="Ajuda e Funcionalidades"
-        >
-          <HelpCircle size={24} />
-        </button>
+        {/* BOTÃO FLUTUANTE DE AJUDA removido conforme solicitado */}
 
-        {/* BOTÃO FLUTUANTE DE RECEITA (SÓ SALA VERDE) - Ajustado para não sobrepor ajuda */}
+        {/* BOTÃO FLUTUANTE DE RECEITA (SÓ SALA VERDE) */}
         {activeRoom === 'verde' && selectedPrescriptionItems.length > 0 && (
           <button onClick={() => setShowPrescriptionModal(true)} className="fixed bottom-24 right-6 z-50 bg-blue-600 hover:bg-blue-700 text-white px-6 py-4 rounded-full shadow-xl flex items-center gap-3 font-bold transition-all animate-in slide-in-from-bottom-4"><Printer size={24} /> Gerar Receita ({selectedPrescriptionItems.length})</button>
         )}
@@ -1282,7 +964,7 @@ export default function EmergencyGuideApp() {
             })}
           </div>
 
-          {/* BOTÃO PARA ABRIR CALCULADORA (SALAS GRAVES) - MANTIDO APENAS NA ÁREA DE TRABALHO PRINCIPAL SE DESEJADO, MAS AGORA EXISTE NO MENU */}
+          {/* BOTÃO PARA ABRIR CALCULADORA DE INFUSÃO (SALAS GRAVES) */}
           {(activeRoom === 'vermelha' || activeRoom === 'amarela') && (
              <div className="flex justify-center">
                 <button onClick={() => setShowCalculatorModal(true)} className={`px-6 py-2 rounded-full font-bold text-sm flex items-center gap-2 transition-colors border ${isDarkMode ? 'bg-rose-900/30 text-rose-300 border-rose-800 hover:bg-rose-900/50' : 'bg-rose-100 hover:bg-rose-200 text-rose-800 border-rose-300'}`}>
@@ -1362,28 +1044,28 @@ export default function EmergencyGuideApp() {
                 <div className={`rounded-2xl shadow-sm border overflow-hidden ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
                    <div className={`px-5 py-3 border-b flex items-center gap-2 ${isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-100'}`}><Activity size={18} className="text-slate-500"/><h3 className={`font-bold text-sm uppercase ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>Avaliação Inicial</h3></div>
                    <div className="p-5 space-y-5 text-sm">
-                      {conduct.avaliacao_inicial?.sinais_vitais_alvos && (<div><span className="text-xs font-bold text-slate-400 uppercase block mb-2">Alvos Terapêuticos</span><div className="grid grid-cols-1 gap-2">{conduct.avaliacao_inicial.sinais_vitais_alvos.map((s,i)=>(<div key={i} className={`p-3 rounded-lg border flex items-center gap-3 ${isDarkMode ? 'bg-indigo-900/20 border-indigo-900/50 text-indigo-300' : 'bg-indigo-50 border-indigo-100 text-indigo-900'}`}>{getVitalIcon(s)} <span className="font-bold">{s}</span></div>))}</div></div>)}
-                      <div className="space-y-3">
+                     {conduct.avaliacao_inicial?.sinais_vitais_alvos && (<div><span className="text-xs font-bold text-slate-400 uppercase block mb-2">Alvos Terapêuticos</span><div className="grid grid-cols-1 gap-2">{conduct.avaliacao_inicial.sinais_vitais_alvos.map((s,i)=>(<div key={i} className={`p-3 rounded-lg border flex items-center gap-3 ${isDarkMode ? 'bg-indigo-900/20 border-indigo-900/50 text-indigo-300' : 'bg-indigo-50 border-indigo-100 text-indigo-900'}`}>{getVitalIcon(s)} <span className="font-bold">{s}</span></div>))}</div></div>)}
+                     <div className="space-y-3">
                          <div><span className="text-xs font-bold text-rose-600 uppercase block mb-1">Prioridade 1 (Obrigatórios)</span><ul className="space-y-1">{conduct.avaliacao_inicial?.exames_prioridade1?.map((ex,i)=><li key={i} className={`flex gap-2 items-start font-medium ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}><div className="mt-1.5 w-1.5 h-1.5 bg-rose-500 rounded-full shrink-0"/>{ex}</li>)}</ul></div>
                          <div><span className="text-xs font-bold text-slate-400 uppercase block mb-1">Complementares</span><ul className="space-y-1">{conduct.avaliacao_inicial?.exames_complementares?.map((ex,i)=><li key={i} className="flex gap-2 items-start text-slate-500"><div className="mt-1.5 w-1.5 h-1.5 bg-slate-500 rounded-full shrink-0"/>{ex}</li>)}</ul></div>
-                      </div>
+                     </div>
                    </div>
                 </div>
                 
                 <div className={`rounded-2xl shadow-sm border overflow-hidden ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
                    <div className={`px-5 py-3 border-b flex items-center gap-2 ${isDarkMode ? 'bg-blue-900/20 border-slate-800' : 'bg-blue-50 border-blue-100'}`}><Search size={18} className="text-blue-600"/><h3 className={`font-bold text-sm uppercase ${isDarkMode ? 'text-blue-400' : 'text-blue-900'}`}>Investigação Diagnóstica</h3></div>
                    <div className="p-5 space-y-4 text-sm">
-                      {conduct.achados_exames?.ecg && <div><div className={`flex items-center gap-2 font-bold mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}><HeartPulse size={14} className="text-rose-500"/> ECG</div><p className={`p-2 rounded border ${isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>{conduct.achados_exames.ecg}</p></div>}
-                      {conduct.achados_exames?.laboratorio && <div><div className={`flex items-center gap-2 font-bold mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}><Microscope size={14} className="text-purple-500"/> Laboratório</div><p className={`p-2 rounded border ${isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>{conduct.achados_exames.laboratorio}</p></div>}
-                      {conduct.achados_exames?.imagem && <div><div className={`flex items-center gap-2 font-bold mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}><ImageIcon size={14} className="text-slate-500"/> Imagem</div><p className={`p-2 rounded border ${isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>{conduct.achados_exames.imagem}</p></div>}
+                     {conduct.achados_exames?.ecg && <div><div className={`flex items-center gap-2 font-bold mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}><HeartPulse size={14} className="text-rose-500"/> ECG</div><p className={`p-2 rounded border ${isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>{conduct.achados_exames.ecg}</p></div>}
+                     {conduct.achados_exames?.laboratorio && <div><div className={`flex items-center gap-2 font-bold mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}><Microscope size={14} className="text-purple-500"/> Laboratório</div><p className={`p-2 rounded border ${isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>{conduct.achados_exames.laboratorio}</p></div>}
+                     {conduct.achados_exames?.imagem && <div><div className={`flex items-center gap-2 font-bold mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}><ImageIcon size={14} className="text-slate-500"/> Imagem</div><p className={`p-2 rounded border ${isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>{conduct.achados_exames.imagem}</p></div>}
                    </div>
                 </div>
 
                 <div className={`rounded-2xl shadow-sm border overflow-hidden ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
                    <div className={`px-5 py-3 border-b flex items-center gap-2 ${isDarkMode ? 'bg-indigo-900/20 border-slate-800' : 'bg-indigo-50 border-indigo-100'}`}><FileText size={18} className="text-indigo-600"/><h3 className={`font-bold text-sm uppercase ${isDarkMode ? 'text-indigo-400' : 'text-indigo-900'}`}>Critérios de Desfecho</h3></div>
                    <div className="p-5 space-y-4 text-sm">
-                      <div className={`p-3 rounded-lg border ${isDarkMode ? 'bg-amber-900/20 border-amber-900/50' : 'bg-amber-50 border-amber-100'}`}><span className={`text-xs font-bold uppercase block mb-1 ${isDarkMode ? 'text-amber-400' : 'text-amber-800'}`}>Internação / UTI</span><ul className="space-y-1">{conduct.criterios_internacao?.map((c,i)=><li key={i} className={`flex gap-2 ${isDarkMode ? 'text-amber-200' : 'text-amber-900'}`}><div className="mt-1.5 w-1 h-1 bg-amber-500 rounded-full shrink-0"/>{c}</li>)}</ul></div>
-                      <div className={`p-3 rounded-lg border ${isDarkMode ? 'bg-green-900/20 border-green-900/50' : 'bg-green-50 border-green-100'}`}><span className={`text-xs font-bold uppercase block mb-1 ${isDarkMode ? 'text-green-400' : 'text-green-800'}`}>Critérios de Alta</span><ul className="space-y-1">{conduct.criterios_alta?.map((c,i)=><li key={i} className={`flex gap-2 ${isDarkMode ? 'text-green-200' : 'text-green-900'}`}><div className="mt-1.5 w-1 h-1 bg-green-500 rounded-full shrink-0"/>{c}</li>)}</ul></div>
+                     <div className={`p-3 rounded-lg border ${isDarkMode ? 'bg-amber-900/20 border-amber-900/50' : 'bg-amber-50 border-amber-100'}`}><span className={`text-xs font-bold uppercase block mb-1 ${isDarkMode ? 'text-amber-400' : 'text-amber-800'}`}>Internação / UTI</span><ul className="space-y-1">{conduct.criterios_internacao?.map((c,i)=><li key={i} className={`flex gap-2 ${isDarkMode ? 'text-amber-200' : 'text-amber-900'}`}><div className="mt-1.5 w-1 h-1 bg-amber-500 rounded-full shrink-0"/>{c}</li>)}</ul></div>
+                     <div className={`p-3 rounded-lg border ${isDarkMode ? 'bg-green-900/20 border-green-900/50' : 'bg-green-50 border-green-100'}`}><span className={`text-xs font-bold uppercase block mb-1 ${isDarkMode ? 'text-green-400' : 'text-green-800'}`}>Critérios de Alta</span><ul className="space-y-1">{conduct.criterios_alta?.map((c,i)=><li key={i} className={`flex gap-2 ${isDarkMode ? 'text-green-200' : 'text-green-900'}`}><div className="mt-1.5 w-1 h-1 bg-green-500 rounded-full shrink-0"/>{c}</li>)}</ul></div>
                    </div>
                 </div>
               </div>
@@ -1399,26 +1081,26 @@ export default function EmergencyGuideApp() {
                       // LÓGICA DE AGRUPAMENTO SALAS AMARELA E VERMELHA
                       <div className="space-y-8">
                          {RED_ROOM_CATEGORIES.map((catName) => {
-                            const catItems = conduct.tratamento_medicamentoso?.filter(m => {
-                               const mCat = m.categoria || "Outros";
-                               return mCat.toLowerCase() === catName.toLowerCase() || (catName === "Outros" && !RED_ROOM_CATEGORIES.slice(0,6).some(c => c.toLowerCase() === mCat.toLowerCase()));
-                            });
+                           const catItems = conduct.tratamento_medicamentoso?.filter(m => {
+                              const mCat = m.categoria || "Outros";
+                              return mCat.toLowerCase() === catName.toLowerCase() || (catName === "Outros" && !RED_ROOM_CATEGORIES.slice(0,6).some(c => c.toLowerCase() === mCat.toLowerCase()));
+                           });
 
-                            if (!catItems || catItems.length === 0) return null;
+                           if (!catItems || catItems.length === 0) return null;
 
-                            return (
-                               <div key={catName} className="relative">
-                                  <h4 className={`flex items-center gap-2 font-bold uppercase text-xs mb-3 pl-1 border-b pb-1 ${isDarkMode ? 'text-rose-300 border-rose-800/50' : 'text-rose-800 border-rose-100'}`}>
-                                    {catName === 'Dieta' && <Utensils size={14}/>}
-                                    {catName === 'Hidratação' && <Droplets size={14}/>}
-                                    {catName === 'Drogas Vasoativas' && <Zap size={14}/>}
-                                    {catName}
-                                  </h4>
-                                  <div className="grid gap-4">
-                                    {catItems.map((med, idx) => renderMedicationCard(med, idx))}
-                                  </div>
-                               </div>
-                            );
+                           return (
+                              <div key={catName} className="relative">
+                                 <h4 className={`flex items-center gap-2 font-bold uppercase text-xs mb-3 pl-1 border-b pb-1 ${isDarkMode ? 'text-rose-300 border-rose-800/50' : 'text-rose-800 border-rose-100'}`}>
+                                   {catName === 'Dieta' && <Utensils size={14}/>}
+                                   {catName === 'Hidratação' && <Droplets size={14}/>}
+                                   {catName === 'Drogas Vasoativas' && <Zap size={14}/>}
+                                   {catName}
+                                 </h4>
+                                 <div className="grid gap-4">
+                                   {catItems.map((med, idx) => renderMedicationCard(med, idx))}
+                                 </div>
+                              </div>
+                           );
                          })}
                       </div>
                    )}
@@ -1427,13 +1109,13 @@ export default function EmergencyGuideApp() {
                 <div className={`rounded-2xl border p-6 shadow-sm ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
                    <h3 className={`font-bold mb-5 flex items-center gap-2 ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}><ArrowRight className="text-purple-600"/> Fluxo de Escalonamento</h3>
                    <div className="space-y-6 relative">
-                      <div className={`absolute left-3.5 top-2 bottom-2 w-0.5 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}></div>
-                      {conduct.escalonamento_terapeutico?.map((step, i) => (
-                        <div key={i} className="relative flex gap-4">
-                           <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 z-10 ring-4 ${isDarkMode ? 'ring-slate-900' : 'ring-white'} ${i===0 ? (isDarkMode ? 'bg-purple-900/50 text-purple-300' : 'bg-purple-100 text-purple-700') : i===1 ? (isDarkMode ? 'bg-amber-900/50 text-amber-300' : 'bg-amber-100 text-amber-700') : (isDarkMode ? 'bg-rose-900/50 text-rose-300' : 'bg-rose-100 text-rose-700')}`}>{i+1}</div>
-                           <div className="pt-1"><h4 className="text-xs font-bold uppercase text-slate-400 mb-1">{step.passo}</h4><p className={`leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{step.descricao}</p></div>
-                        </div>
-                      ))}
+                     <div className={`absolute left-3.5 top-2 bottom-2 w-0.5 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}></div>
+                     {conduct.escalonamento_terapeutico?.map((step, i) => (
+                       <div key={i} className="relative flex gap-4">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 z-10 ring-4 ${isDarkMode ? 'ring-slate-900' : 'ring-white'} ${i===0 ? (isDarkMode ? 'bg-purple-900/50 text-purple-300' : 'bg-purple-100 text-purple-700') : i===1 ? (isDarkMode ? 'bg-amber-900/50 text-amber-300' : 'bg-amber-100 text-amber-700') : (isDarkMode ? 'bg-rose-900/50 text-rose-300' : 'bg-rose-100 text-rose-700')}`}>{i+1}</div>
+                          <div className="pt-1"><h4 className="text-xs font-bold uppercase text-slate-400 mb-1">{step.passo}</h4><p className={`leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{step.descricao}</p></div>
+                       </div>
+                     ))}
                    </div>
                 </div>
               </div>
@@ -1543,7 +1225,7 @@ export default function EmergencyGuideApp() {
               <h3 className={`font-bold flex items-center gap-2 ${isDarkMode ? 'text-blue-300' : 'text-white'}`}><Camera size={24} /> IA Vision - Análise de Exames</h3>
               <button onClick={closeImageModal} className={`p-2 rounded-full transition-colors ${isDarkMode ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-blue-700 text-white'}`}><X size={20}/></button>
             </div>
-            
+             
             <div className="p-6 overflow-y-auto flex-1">
               {!imageAnalysisResult ? (
                 <div className="space-y-6">
@@ -1643,7 +1325,7 @@ export default function EmergencyGuideApp() {
               <h3 className={`font-bold flex items-center gap-2 ${isDarkMode ? 'text-indigo-300' : 'text-white'}`}><ClipboardList size={24} /> BedSide - Clinical Guidance</h3>
               <button onClick={() => setShowBedsideModal(false)} className={`p-2 rounded-full transition-colors ${isDarkMode ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-indigo-700 text-white'}`}><X size={20}/></button>
             </div>
-            
+             
             <div className="p-6 overflow-y-auto flex-1 grid md:grid-cols-2 gap-6">
               {/* Coluna da Esquerda: Inputs */}
               <div className="space-y-4">
@@ -1717,176 +1399,22 @@ export default function EmergencyGuideApp() {
                     </div>
 
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                       <div>
-                          <h4 className={`text-xs font-bold uppercase border-b pb-1 mb-2 ${isDarkMode ? 'text-slate-400 border-slate-600' : 'text-slate-600 border-gray-200'}`}>Cuidados Gerais</h4>
-                          <ul className="text-xs space-y-1 list-disc list-inside">
-                             {bedsideResult.cuidados_gerais?.map((c, i) => <li key={i}>{c}</li>)}
-                          </ul>
-                       </div>
-                       <div>
-                          <h4 className={`text-xs font-bold uppercase border-b pb-1 mb-2 ${isDarkMode ? 'text-slate-400 border-slate-600' : 'text-slate-600 border-gray-200'}`}>Orientações</h4>
-                          <ul className="text-xs space-y-1 list-disc list-inside">
-                             {bedsideResult.orientacoes_paciente?.map((o, i) => <li key={i}>{o}</li>)}
-                          </ul>
-                       </div>
+                        <div>
+                           <h4 className={`text-xs font-bold uppercase border-b pb-1 mb-2 ${isDarkMode ? 'text-slate-400 border-slate-600' : 'text-slate-600 border-gray-200'}`}>Cuidados Gerais</h4>
+                           <ul className="text-xs space-y-1 list-disc list-inside">
+                              {bedsideResult.cuidados_gerais?.map((c, i) => <li key={i}>{c}</li>)}
+                           </ul>
+                        </div>
+                        <div>
+                           <h4 className={`text-xs font-bold uppercase border-b pb-1 mb-2 ${isDarkMode ? 'text-slate-400 border-slate-600' : 'text-slate-600 border-gray-200'}`}>Orientações</h4>
+                           <ul className="text-xs space-y-1 list-disc list-inside">
+                              {bedsideResult.orientacoes_paciente?.map((o, i) => <li key={i}>{o}</li>)}
+                           </ul>
+                        </div>
                     </div>
                   </div>
                 )}
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL DE CALCULADORAS MÉDICAS (NOVO) */}
-      {showMedicalCalcModal && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className={`w-full max-w-5xl h-[85vh] rounded-2xl shadow-2xl overflow-hidden flex ${isDarkMode ? 'bg-slate-900 text-slate-100' : 'bg-white'}`}>
-            
-            {/* Sidebar */}
-            <div className={`w-1/3 border-r flex flex-col ${isDarkMode ? 'border-slate-800 bg-slate-900' : 'border-gray-100 bg-gray-50'}`}>
-               <div className={`p-4 border-b flex items-center gap-2 ${isDarkMode ? 'border-slate-800 text-emerald-400' : 'border-gray-200 text-emerald-700'}`}>
-                  <FileDigit size={20} />
-                  <h3 className="font-bold">Calculadoras</h3>
-               </div>
-               <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                  {Object.entries(MEDICAL_SCORES).map(([key, score]) => (
-                     <button
-                        key={key}
-                        onClick={() => handleSelectScore(key)}
-                        className={`w-full text-left p-3 rounded-lg text-sm font-medium transition-all ${selectedScore === key ? (isDarkMode ? 'bg-emerald-900/30 text-emerald-300 border border-emerald-800' : 'bg-emerald-100 text-emerald-800 border border-emerald-200') : (isDarkMode ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-600 hover:bg-gray-200')}`}
-                     >
-                        {score.name}
-                     </button>
-                  ))}
-               </div>
-            </div>
-
-            {/* Main Content */}
-            <div className="w-2/3 flex flex-col">
-               <div className={`p-4 border-b flex justify-between items-center ${isDarkMode ? 'border-slate-800' : 'border-gray-100'}`}>
-                  <div>
-                     <h2 className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{MEDICAL_SCORES[selectedScore].name}</h2>
-                     <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>{MEDICAL_SCORES[selectedScore].desc}</p>
-                  </div>
-                  <button onClick={() => setShowMedicalCalcModal(false)} className={`p-2 rounded-full transition-colors ${isDarkMode ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-gray-100 text-gray-500'}`}><X size={20}/></button>
-               </div>
-               
-               <div className="flex-1 overflow-y-auto p-6">
-                  <div className="space-y-4">
-                     {MEDICAL_SCORES[selectedScore].items.map((item, idx) => (
-                        <div key={idx} className={`p-3 rounded-xl border flex items-center justify-between ${isDarkMode ? 'border-slate-700 bg-slate-800/50' : 'border-gray-200 bg-white'}`}>
-                           <span className={`text-sm font-medium ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>{item.label}</span>
-                           {item.type === 'bool' ? (
-                              <button 
-                                onClick={() => handleScoreChange(item.id, null, 'bool', item.points)}
-                                className={`w-12 h-6 rounded-full transition-colors relative ${scoreValues[item.id] ? 'bg-emerald-500' : (isDarkMode ? 'bg-slate-600' : 'bg-slate-300')}`}
-                              >
-                                 <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${scoreValues[item.id] ? 'left-7' : 'left-1'}`} />
-                              </button>
-                           ) : (
-                              <select 
-                                className={`p-2 rounded-lg text-sm outline-none border ${isDarkMode ? 'bg-slate-900 border-slate-600 text-white' : 'bg-gray-50 border-gray-200 text-slate-800'}`}
-                                onChange={(e) => handleScoreChange(item.id, e.target.value, 'select', 0)}
-                                value={scoreValues[item.id]}
-                              >
-                                 {item.options.map((opt, i) => <option key={i} value={opt.val}>{opt.text}</option>)}
-                              </select>
-                           )}
-                        </div>
-                     ))}
-                  </div>
-               </div>
-
-               {/* Result Footer */}
-               <div className={`p-6 border-t ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
-                  {(() => {
-                     const result = calculateScoreResult();
-                     if (!result) return null;
-                     return (
-                        <div className="flex items-center justify-between">
-                           <div>
-                              <span className={`text-xs uppercase font-bold mb-1 block ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Resultado</span>
-                              <div className="flex items-baseline gap-2">
-                                 <span className={`text-3xl font-bold ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>{result.points}</span>
-                                 <span className={`text-sm font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{result.risk}</span>
-                              </div>
-                           </div>
-                           <div className={`text-right max-w-xs text-xs font-medium px-3 py-2 rounded-lg border ${isDarkMode ? 'bg-slate-900 border-slate-600 text-slate-300' : 'bg-white border-gray-200 text-slate-600'}`}>
-                              {result.conduta}
-                           </div>
-                        </div>
-                     );
-                  })()}
-               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL DE AJUDA */}
-      {showHelpModal && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className={`w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden max-h-[80vh] flex flex-col ${isDarkMode ? 'bg-slate-900 text-slate-100' : 'bg-white'}`}>
-            <div className={`p-6 border-b ${isDarkMode ? 'border-slate-800 bg-slate-900' : 'border-gray-100 bg-slate-50'}`}>
-              <div className="flex justify-between items-center mb-2">
-                <div className="flex items-center gap-3">
-                   <div className={`p-3 rounded-full ${isDarkMode ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-100 text-blue-600'}`}>
-                      <Info size={24} />
-                   </div>
-                   <div>
-                      <h2 className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Ajuda & Funcionalidades</h2>
-                      <p className={`text-sm ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Guia rápido da plataforma</p>
-                   </div>
-                </div>
-                <button onClick={() => setShowHelpModal(false)} className={`p-2 rounded-full transition-colors ${isDarkMode ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-gray-200 text-gray-500'}`}><X size={24}/></button>
-              </div>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-6">
-               <div className="grid md:grid-cols-2 gap-6">
-                  <div className={`p-4 rounded-xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
-                     <h3 className={`font-bold mb-2 flex items-center gap-2 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-700'}`}><Search size={18}/> Busca de Condutas</h3>
-                     <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
-                        Digite qualquer condição clínica (ex: "Sepse", "IAM", "Cetoacidose") na barra principal para receber uma conduta completa baseada em protocolos atualizados, ajustada para a sala selecionada.
-                     </p>
-                  </div>
-
-                  <div className={`p-4 rounded-xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
-                     <h3 className={`font-bold mb-2 flex items-center gap-2 ${isDarkMode ? 'text-blue-400' : 'text-blue-700'}`}><Camera size={18}/> Ferramentas &gt; IA Vision</h3>
-                     <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
-                        Envie fotos de exames (ECG, Raio-X, Tomografia, Lesões de Pele) para receber uma análise instantânea e sugestão diagnóstica pela Inteligência Artificial.
-                     </p>
-                  </div>
-
-                  <div className={`p-4 rounded-xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
-                     <h3 className={`font-bold mb-2 flex items-center gap-2 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-700'}`}><ClipboardList size={18}/> Ferramentas &gt; BedSide</h3>
-                     <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
-                        Ferramenta avançada para casos complexos. Insira a anamnese completa e exames para receber uma discussão de caso detalhada, hipóteses e plano terapêutico personalizado.
-                     </p>
-                  </div>
-
-                  <div className={`p-4 rounded-xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
-                     <h3 className={`font-bold mb-2 flex items-center gap-2 ${isDarkMode ? 'text-rose-400' : 'text-rose-700'}`}><Calculator size={18}/> Ferramentas &gt; Scores & Infusão</h3>
-                     <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
-                        Acesse calculadoras de risco (Scores) como Grace, Wells e Glasgow, além de uma calculadora dedicada para diluição e vazão de drogas vasoativas/sedação.
-                     </p>
-                  </div>
-
-                  <div className={`p-4 rounded-xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
-                     <h3 className={`font-bold mb-2 flex items-center gap-2 ${isDarkMode ? 'text-amber-400' : 'text-amber-700'}`}><BedDouble size={18}/> Salas de Atendimento</h3>
-                     <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
-                        Alterne entre <strong>Verde</strong> (Ambulatorial), <strong>Amarela</strong> (Observação) e <strong>Vermelha</strong> (Emergência) para ajustar a agressividade e o foco da conduta gerada.
-                     </p>
-                  </div>
-
-                  <div className={`p-4 rounded-xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
-                     <h3 className={`font-bold mb-2 flex items-center gap-2 ${isDarkMode ? 'text-purple-400' : 'text-purple-700'}`}><Edit size={18}/> Ferramentas &gt; Caderno & Favoritos</h3>
-                     <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
-                        Salve condutas frequentes nos Favoritos para acesso rápido e use o Caderno para suas anotações de plantão, tudo salvo automaticamente na nuvem.
-                     </p>
-                  </div>
-               </div>
             </div>
           </div>
         </div>
