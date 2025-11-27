@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { X, Search, ChevronRight, ArrowLeft, FileText, Activity, Wind, Brain, Stethoscope, Utensils, Zap, Pill } from 'lucide-react';
 
-// --- BASE DE DADOS DE RECEITAS (EXTRAÍDA DOS PDFS) ---
+// --- BASE DE DADOS DE RECEITAS ---
 const PRESCRIPTIONS_DB = [
   {
     category: 'Cardiologia',
@@ -12,33 +12,33 @@ const PRESCRIPTIONS_DB = [
       {
         name: 'Síndrome Coronariana Aguda (SCA)',
         drugs: [
-          { name: 'AAS', dose: '300mg (3 cp de 100mg)', obs: 'Mastigar. Dose de ataque. [cite_start]Manutenção 100mg/dia. [cite: 13, 2083]', route: 'VO', ref: '' },
-          { name: 'Clopidogrel', dose: '300mg (4 cp de 75mg)', obs: 'Dose de ataque (600mg se for para Angioplastia). [cite_start]Manutenção 75mg/dia. [cite: 13, 2089]', route: 'VO', ref: '' },
-          { name: 'Enoxaparina', dose: '1 mg/kg', obs: 'De 12/12h. [cite_start]Ajustar se ClCr < 30 ou Idade > 75. [cite: 13, 2112]', route: 'SC', ref: '' },
-          [cite_start]{ name: 'Atorvastatina', dose: '40mg', obs: 'Alta potência. [cite: 13, 2104]', route: 'VO', ref: '' },
-          { name: 'Isordil', dose: '5mg', obs: 'Sublingual se dor (máx 3 doses). [cite_start]Evitar se uso de Viagra/Cialis ou Infarto de VD. [cite: 13, 2106]', route: 'SL', ref: '' }
+          { name: 'AAS', dose: '300mg (3 cp de 100mg)', obs: 'Mastigar. Dose de ataque. Manutenção 100mg/dia.', route: 'VO', ref: '' },
+          { name: 'Clopidogrel', dose: '300mg (4 cp de 75mg)', obs: 'Dose de ataque (600mg se for para Angioplastia). Manutenção 75mg/dia.', route: 'VO', ref: '' },
+          { name: 'Enoxaparina', dose: '1 mg/kg', obs: 'De 12/12h. Ajustar se ClCr < 30 ou Idade > 75.', route: 'SC', ref: '' },
+          { name: 'Atorvastatina', dose: '40mg', obs: 'Alta potência. [cite_start]Tomar 1x ao dia.', route: 'VO', ref: '[cite: 13]' },
+          { name: 'Isordil', dose: '5mg', obs: 'Sublingual se dor (máx 3 doses). [cite_start]Evitar se uso de inibidores de fosfodiesterase (Viagra/Cialis) ou Infarto de VD.', route: 'SL', ref: '[cite: 13]' }
         ]
       },
       {
         name: 'Edema Agudo de Pulmão (EAP)',
         drugs: [
-          [cite_start]{ name: 'Furosemida', dose: '20-40mg (1-2 ampolas)', obs: 'Ou 1-2.5x a dose habitual do paciente. [cite: 2146]', route: 'IV', ref: '' },
-          { name: 'Nitroglicerina (Tridil)', dose: 'Início 5mcg/min', obs: 'Se PAS > 90mmHg. [cite_start]Titular a cada 5-10 min. [cite: 2158]', route: 'IV (BIC)', ref: '' },
-          [cite_start]{ name: 'Morfina', dose: '2-4mg', obs: 'Com parcimônia se muita ansiedade/dispneia. [cite: 1356]', route: 'IV', ref: '' }
+          { name: 'Furosemida', dose: '20-40mg (1-2 ampolas)', obs: 'Ou 1-2.5x a dose habitual do paciente.', route: 'IV', ref: '' },
+          { name: 'Nitroglicerina (Tridil)', dose: 'Início 5mcg/min', obs: 'Se PAS > 90mmHg. Titular a cada 5-10 min.', route: 'IV (BIC)', ref: '' },
+          { name: 'Morfina', dose: '2-4mg', obs: 'Com parcimônia se muita ansiedade/dispneia.', route: 'IV', ref: '' }
         ]
       },
       {
         name: 'Fibrilação Atrial (Controle de FC)',
         drugs: [
-          { name: 'Metoprolol', dose: '5mg', obs: 'Fazer em 2 min. [cite_start]Pode repetir a cada 5 min (máx 15mg). [cite: 1268]', route: 'IV', ref: '' },
-          { name: 'Deslanosídeo', dose: '0.4mg (1 ampola)', obs: 'Lentamente. [cite_start]Opção se IC descompensada. [cite: 1274]', route: 'IV', ref: '' }
+          { name: 'Metoprolol', dose: '5mg', obs: 'Fazer em 2 min. Pode repetir a cada 5 min (máx 15mg).', route: 'IV', ref: '' },
+          { name: 'Deslanosídeo', dose: '0.4mg (1 ampola)', obs: 'Lentamente. Opção se IC descompensada.', route: 'IV', ref: '' }
         ]
       },
       {
         name: 'Taquicardia Supraventricular',
         drugs: [
-          [cite_start]{ name: 'Manobra Vagal', dose: '---', obs: 'Primeira linha (Valsalva modificada). [cite: 2006]', route: '---', ref: '' },
-          { name: 'Adenosina', dose: '6mg', obs: 'Bolus rápido + Flush 20ml SF + Elevação membro. [cite_start]Se falha: 12mg. [cite: 2011]', route: 'IV', ref: '' }
+          { name: 'Manobra Vagal', dose: '---', obs: 'Primeira linha (Valsalva modificada).', route: '---', ref: '' },
+          { name: 'Adenosina', dose: '6mg', obs: 'Bolus rápido + Flush 20ml SF + Elevação membro. Se falha: 12mg.', route: 'IV', ref: '' }
         ]
       }
     ]
@@ -51,26 +51,26 @@ const PRESCRIPTIONS_DB = [
       {
         name: 'Crise Asmática',
         drugs: [
-          { name: 'Salbutamol (Aerolin)', dose: '4-10 jatos', obs: 'Via espaçador. [cite_start]Repetir a cada 20 min na 1ª hora. [cite: 2330]', route: 'Inalatório', ref: '' },
-          [cite_start]{ name: 'Ipratrópio (Atrovent)', dose: '40 gotas (500mcg) ou 4 jatos', obs: 'Associar ao beta-agonista na 1ª hora. [cite: 2343]', route: 'NBZ/Inal', ref: '' },
-          [cite_start]{ name: 'Prednisolona', dose: '40-60mg', obs: 'Dose única matinal por 5-7 dias. [cite: 2336]', route: 'VO', ref: '' },
-          [cite_start]{ name: 'Hidrocortisona', dose: '100-500mg', obs: 'Se intolerância oral ou caso grave. [cite: 337]', route: 'IV', ref: '' }
+          { name: 'Salbutamol (Aerolin)', dose: '4-10 jatos', obs: 'Via espaçador. Repetir a cada 20 min na 1ª hora.', route: 'Inalatório', ref: '' },
+          { name: 'Ipratrópio (Atrovent)', dose: '40 gotas (500mcg) ou 4 jatos', obs: 'Associar ao beta-agonista na 1ª hora.', route: 'NBZ/Inal', ref: '' },
+          { name: 'Prednisolona', dose: '40-60mg', obs: 'Dose única matinal por 5-7 dias.', route: 'VO', ref: '' },
+          { name: 'Hidrocortisona', dose: '100-500mg', obs: 'Se intolerância oral ou caso grave.', route: 'IV', ref: '' }
         ]
       },
       {
         name: 'Pneumonia Adquirida na Comunidade (PAC)',
         drugs: [
-          [cite_start]{ name: 'Amoxicilina + Clavulanato', dose: '875/125mg', obs: 'De 12/12h por 7 dias. [cite: 2384]', route: 'VO', ref: '' },
-          [cite_start]{ name: 'Azitromicina', dose: '500mg', obs: '1x ao dia por 5 dias. [cite: 2388]', route: 'VO', ref: '' },
-          [cite_start]{ name: 'Ceftriaxona', dose: '1g - 2g', obs: '1x ao dia (Internação/Sala Amarela). [cite: 1445]', route: 'IV', ref: '' }
+          { name: 'Amoxicilina + Clavulanato', dose: '875/125mg', obs: 'De 12/12h por 7 dias.', route: 'VO', ref: '' },
+          { name: 'Azitromicina', dose: '500mg', obs: '1x ao dia por 5 dias.', route: 'VO', ref: '' },
+          { name: 'Ceftriaxona', dose: '1g - 2g', obs: '1x ao dia (Internação/Sala Amarela).', route: 'IV', ref: '' }
         ]
       },
       {
         name: 'DPOC Exacerbado',
         drugs: [
-          [cite_start]{ name: 'Salbutamol + Ipratrópio', dose: '---', obs: 'Manter broncodilatação frequente. [cite: 1388]', route: 'Inalatório', ref: '' },
-          [cite_start]{ name: 'Prednisona', dose: '40mg', obs: '1x ao dia por 5 dias. [cite: 1396]', route: 'VO', ref: '' },
-          [cite_start]{ name: 'Levofloxacino', dose: '750mg', obs: 'Se indicação de ATB (Escarro purulento, aumento volume, dispneia). [cite: 2366]', route: 'VO', ref: '' }
+          { name: 'Salbutamol + Ipratrópio', dose: '---', obs: 'Manter broncodilatação frequente.', route: 'Inalatório', ref: '' },
+          { name: 'Prednisona', dose: '40mg', obs: '1x ao dia por 5 dias.', route: 'VO', ref: '' },
+          { name: 'Levofloxacino', dose: '750mg', obs: 'Se indicação de ATB (Escarro purulento, aumento volume, dispneia).', route: 'VO', ref: '' }
         ]
       }
     ]
@@ -83,24 +83,24 @@ const PRESCRIPTIONS_DB = [
       {
         name: 'Crise Convulsiva',
         drugs: [
-          { name: 'Diazepam', dose: '10mg', obs: 'Lentamente. [cite_start]Pode repetir após 5 min. [cite: 2229]', route: 'IV', ref: '' },
-          { name: 'Fenitoína', dose: '15-20mg/kg', obs: 'Dose de ataque. [cite_start]Diluir em SF 0.9% (Não usar SG). [cite: 2241]', route: 'IV', ref: '' }
+          { name: 'Diazepam', dose: '10mg', obs: 'Lentamente. Pode repetir após 5 min.', route: 'IV', ref: '' },
+          { name: 'Fenitoína', dose: '15-20mg/kg', obs: 'Dose de ataque. Diluir em SF 0.9% (Não usar SG).', route: 'IV', ref: '' }
         ]
       },
       {
         name: 'Enxaqueca / Cefaleia',
         drugs: [
-          [cite_start]{ name: 'Dipirona', dose: '1g', obs: 'Diluída. [cite: 2182]', route: 'IV', ref: '' },
-          { name: 'Cetoprofeno', dose: '100mg', obs: 'Diluir em 100ml SF. [cite_start]Correr em 20 min. [cite: 2176]', route: 'IV', ref: '' },
-          [cite_start]{ name: 'Dexametasona', dose: '10mg', obs: 'Previne recorrência. [cite: 2178]', route: 'IV/IM', ref: '' },
-          [cite_start]{ name: 'Metoclopramida', dose: '10mg', obs: 'Se náuseas. [cite: 2197]', route: 'IV', ref: '' }
+          { name: 'Dipirona', dose: '1g', obs: 'Diluída.', route: 'IV', ref: '' },
+          { name: 'Cetoprofeno', dose: '100mg', obs: 'Diluir em 100ml SF. Correr em 20 min.', route: 'IV', ref: '' },
+          { name: 'Dexametasona', dose: '10mg', obs: 'Previne recorrência.', route: 'IV/IM', ref: '' },
+          { name: 'Metoclopramida', dose: '10mg', obs: 'Se náuseas.', route: 'IV', ref: '' }
         ]
       },
       {
         name: 'Vertigem Aguda',
         drugs: [
-          [cite_start]{ name: 'Dimenidrato (Dramin)', dose: '50mg', obs: 'Diluir. [cite: 2213]', route: 'IV', ref: '' },
-          [cite_start]{ name: 'Clonazepam', dose: '0.5mg', obs: 'Inibidor vestibular agudo (uso pontual). [cite: 2810]', route: 'VO', ref: '' }
+          { name: 'Dimenidrato (Dramin)', dose: '50mg', obs: 'Diluir.', route: 'IV', ref: '' },
+          { name: 'Clonazepam', dose: '0.5mg', obs: 'Inibidor vestibular agudo (uso pontual).', route: 'VO', ref: '' }
         ]
       }
     ]
@@ -113,28 +113,28 @@ const PRESCRIPTIONS_DB = [
       {
         name: 'Infecção Urinária (Cistite)',
         drugs: [
-          [cite_start]{ name: 'Fosfomicina', dose: '3g (1 envelope)', obs: 'Dose única (preferencialmente à noite). [cite: 2663]', route: 'VO', ref: '' },
-          [cite_start]{ name: 'Nitrofurantoína', dose: '100mg', obs: 'De 6/6h por 5-7 dias. [cite: 2658]', route: 'VO', ref: '' }
+          { name: 'Fosfomicina', dose: '3g (1 envelope)', obs: 'Dose única (preferencialmente à noite).', route: 'VO', ref: '' },
+          { name: 'Nitrofurantoína', dose: '100mg', obs: 'De 6/6h por 5-7 dias.', route: 'VO', ref: '' }
         ]
       },
       {
         name: 'Pielonefrite (Não complicada)',
         drugs: [
-          [cite_start]{ name: 'Ciprofloxacino', dose: '500mg', obs: 'De 12/12h por 7-10 dias. [cite: 2690]', route: 'VO', ref: '' },
-          [cite_start]{ name: 'Ceftriaxona', dose: '1g', obs: '1x ao dia (se internação ou dia-hospital). [cite: 2695]', route: 'IV/IM', ref: '' }
+          { name: 'Ciprofloxacino', dose: '500mg', obs: 'De 12/12h por 7-10 dias.', route: 'VO', ref: '' },
+          { name: 'Ceftriaxona', dose: '1g', obs: '1x ao dia (se internação ou dia-hospital).', route: 'IV/IM', ref: '' }
         ]
       },
       {
         name: 'Faringoamigdalite Bacteriana',
         drugs: [
-          [cite_start]{ name: 'Penicilina Benzatina', dose: '1.200.000 UI', obs: 'Dose única profunda. [cite: 2312]', route: 'IM', ref: '' },
-          [cite_start]{ name: 'Azitromicina', dose: '500mg', obs: '1x ao dia por 5 dias (se alergia). [cite: 2319]', route: 'VO', ref: '' }
+          { name: 'Penicilina Benzatina', dose: '1.200.000 UI', obs: 'Dose única profunda.', route: 'IM', ref: '' },
+          { name: 'Azitromicina', dose: '500mg', obs: '1x ao dia por 5 dias (se alergia).', route: 'VO', ref: '' }
         ]
       },
       {
         name: 'Sífilis (Primária/Secundária)',
         drugs: [
-          { name: 'Penicilina Benzatina', dose: '2.400.000 UI', obs: '1.2MI em cada glúteo. [cite_start]Dose única. [cite: 1823]', route: 'IM', ref: '' }
+          { name: 'Penicilina Benzatina', dose: '2.400.000 UI', obs: '1.2MI em cada glúteo. Dose única.', route: 'IM', ref: '' }
         ]
       }
     ]
@@ -147,17 +147,17 @@ const PRESCRIPTIONS_DB = [
       {
         name: 'Hemorragia Digestiva Alta',
         drugs: [
-          [cite_start]{ name: 'Omeprazol', dose: '40mg (ou 80mg bolus)', obs: 'Seguido de 40mg 12/12h ou BIC. [cite: 2457]', route: 'IV', ref: '' },
-          [cite_start]{ name: 'Ondansetrona', dose: '8mg', obs: 'Controle de náusea. [cite: 2464]', route: 'IV', ref: '' },
-          [cite_start]{ name: 'Terlipressina', dose: '2mg', obs: 'Se suspeita de varizes (bolus). [cite: 2460]', route: 'IV', ref: '' }
+          { name: 'Omeprazol', dose: '40mg (ou 80mg bolus)', obs: 'Seguido de 40mg 12/12h ou BIC.', route: 'IV', ref: '' },
+          { name: 'Ondansetrona', dose: '8mg', obs: 'Controle de náusea.', route: 'IV', ref: '' },
+          { name: 'Terlipressina', dose: '2mg', obs: 'Se suspeita de varizes (bolus).', route: 'IV', ref: '' }
         ]
       },
       {
         name: 'Gastroenterite Aguda',
         drugs: [
-          [cite_start]{ name: 'SRO (Rehidrat)', dose: 'Ad libitum', obs: 'Após cada evacuação líquida. [cite: 1766]', route: 'VO', ref: '' },
-          [cite_start]{ name: 'Ondansetrona', dose: '4-8mg', obs: 'Se vômitos. [cite: 1601]', route: 'IV/VO', ref: '' },
-          [cite_start]{ name: 'Escopolamina (Buscopan)', dose: '20mg', obs: 'Se cólica. [cite: 1451]', route: 'IV/VO', ref: '' }
+          { name: 'SRO (Rehidrat)', dose: 'Ad libitum', obs: 'Após cada evacuação líquida.', route: 'VO', ref: '' },
+          { name: 'Ondansetrona', dose: '4-8mg', obs: 'Se vômitos.', route: 'IV/VO', ref: '' },
+          { name: 'Escopolamina (Buscopan)', dose: '20mg', obs: 'Se cólica.', route: 'IV/VO', ref: '' }
         ]
       }
     ]
@@ -170,16 +170,16 @@ const PRESCRIPTIONS_DB = [
       {
         name: 'Cetoacidose Diabética',
         drugs: [
-          [cite_start]{ name: 'Hidratação (SF 0.9%)', dose: '15-20 ml/kg', obs: 'Na primeira hora. [cite: 2624]', route: 'IV', ref: '' },
-          { name: 'Insulina Regular', dose: '0.1 U/kg/h', obs: 'Bomba de infusão contínua. [cite_start]Só iniciar se K > 3.3. [cite: 2608]', route: 'IV', ref: '' },
-          [cite_start]{ name: 'Reposição de K', dose: '20-30 mEq/L', obs: 'Adicionar ao soro de manutenção se K < 5.2. [cite: 2634]', route: 'IV', ref: '' }
+          { name: 'Hidratação (SF 0.9%)', dose: '15-20 ml/kg', obs: 'Na primeira hora.', route: 'IV', ref: '' },
+          { name: 'Insulina Regular', dose: '0.1 U/kg/h', obs: 'Bomba de infusão contínua. Só iniciar se K > 3.3.', route: 'IV', ref: '' },
+          { name: 'Reposição de K', dose: '20-30 mEq/L', obs: 'Adicionar ao soro de manutenção se K < 5.2.', route: 'IV', ref: '' }
         ]
       },
       {
         name: 'Hipoglicemia Grave',
         drugs: [
-          { name: 'Glicose 50%', dose: '40ml (4 ampolas)', obs: 'Bolus IV. [cite_start]Repetir se necessário. [cite: 145]', route: 'IV', ref: '' },
-          [cite_start]{ name: 'Glucagon', dose: '1mg', obs: 'Se sem acesso venoso. [cite: 407]', route: 'IM', ref: '' }
+          { name: 'Glicose 50%', dose: '40ml (4 ampolas)', obs: 'Bolus IV. Repetir se necessário.', route: 'IV', ref: '' },
+          { name: 'Glucagon', dose: '1mg', obs: 'Se sem acesso venoso.', route: 'IM', ref: '' }
         ]
       }
     ]
@@ -192,21 +192,21 @@ const PRESCRIPTIONS_DB = [
       {
         name: 'Dor Leve',
         drugs: [
-          [cite_start]{ name: 'Dipirona', dose: '500mg-1g', obs: 'Até 6/6h. [cite: 3336]', route: 'VO/IV', ref: '' },
-          [cite_start]{ name: 'Paracetamol', dose: '500-750mg', obs: 'Até 6/6h. [cite: 3337]', route: 'VO', ref: '' }
+          { name: 'Dipirona', dose: '500mg-1g', obs: 'Até 6/6h.', route: 'VO/IV', ref: '' },
+          { name: 'Paracetamol', dose: '500-750mg', obs: 'Até 6/6h.', route: 'VO', ref: '' }
         ]
       },
       {
         name: 'Dor Moderada (Lombalgia/Cólica)',
         drugs: [
-          [cite_start]{ name: 'Cetoprofeno', dose: '100mg', obs: 'Diluído em 100ml SF. [cite: 3352]', route: 'IV', ref: '' },
-          { name: 'Tramadol', dose: '50-100mg', obs: 'Diluído. [cite_start]Pode causar náusea. [cite: 3350]', route: 'IV', ref: '' }
+          { name: 'Cetoprofeno', dose: '100mg', obs: 'Diluído em 100ml SF.', route: 'IV', ref: '' },
+          { name: 'Tramadol', dose: '50-100mg', obs: 'Diluído. Pode causar náusea.', route: 'IV', ref: '' }
         ]
       },
       {
         name: 'Dor Intensa (Cólicas Nefréticas/Trauma)',
         drugs: [
-          { name: 'Morfina', dose: '2-5mg (titular)', obs: 'Diluir para 1mg/ml. [cite_start]Fazer lento. [cite: 3354]', route: 'IV', ref: '' }
+          { name: 'Morfina', dose: '2-5mg (titular)', obs: 'Diluir para 1mg/ml. Fazer lento.', route: 'IV', ref: '' }
         ]
       }
     ]
@@ -294,6 +294,7 @@ export default function QuickPrescriptionsModal({ isOpen, onClose, isDarkMode })
                     <span className="font-bold not-italic">Obs:</span> {drug.obs}
                   </p>
                 )}
+                {drug.ref && <p className="text-[10px] text-right mt-1 opacity-30">{drug.ref}</p>}
               </div>
             ))}
           </div>

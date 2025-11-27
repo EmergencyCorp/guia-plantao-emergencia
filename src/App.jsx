@@ -1,3 +1,4 @@
+// Arquivo: src/App.jsx
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Activity, AlertCircle, Search, Loader2, BookOpen, Stethoscope, 
@@ -5,7 +6,7 @@ import {
   LogOut, History, Cloud, CloudOff, HeartPulse, Microscope, Image as ImageIcon, 
   Wind, Droplet, Skull, Printer, Calculator, Star, Utensils, Zap, Camera, 
   BedDouble, ClipboardList, Pencil, LayoutGrid, ChevronDown, FileText, Droplets,
-  Pill, CircleHelp // CORREÇÃO: Ícones atualizados (Edit->Pencil, HelpCircle->CircleHelp)
+  Pill, CircleHelp
 } from 'lucide-react';
 
 // --- CONFIG & COMPONENTS ---
