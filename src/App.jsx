@@ -22,6 +22,7 @@ import BedsideModal from './components/modals/BedsideModal';
 import PrescriptionModal from './components/modals/PrescriptionModal';
 import NotepadModal from './components/modals/NotepadModal';
 import FavoritesModal from './components/modals/FavoritesModal';
+import HelpModal from './components/modals/HelpModal'; // <--- IMPORTADO AQUI
 
 // --- FIREBASE IMPORTS ---
 import { signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
@@ -93,6 +94,7 @@ function EmergencyGuideAppContent() {
   const [showCalculatorModal, setShowCalculatorModal] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [showBedsideModal, setShowBedsideModal] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false); // <--- NOVO ESTADO
 
   // Specific Data States
   const [userNotes, setUserNotes] = useState('');
@@ -120,7 +122,7 @@ function EmergencyGuideAppContent() {
     return <Activity size={16} className="text-slate-400" />;
   };
 
-  // --- DATA FETCHING FUNCTIONS (CORRIGIDAS) ---
+  // --- DATA FETCHING FUNCTIONS ---
   
   const loadLocalHistory = (username) => {
       try {
@@ -130,7 +132,7 @@ function EmergencyGuideAppContent() {
       } catch (e) { setRecentSearches([]); }
   };
 
-  const loadHistory = (username) => loadLocalHistory(username); // Alias para compatibilidade
+  const loadHistory = (username) => loadLocalHistory(username);
 
   const fetchHistoryFromCloud = async (username) => {
       loadLocalHistory(username);
@@ -146,7 +148,6 @@ function EmergencyGuideAppContent() {
       }
   };
 
-  // --- AQUI ESTAVA O ERRO: FUNÇÃO RESTAURADA ---
   const fetchNotesFromCloud = async (username) => {
     const localNotes = localStorage.getItem(`notes_${username}`);
     if (localNotes) setUserNotes(localNotes);
@@ -235,7 +236,6 @@ function EmergencyGuideAppContent() {
 
   useEffect(() => {
     if (currentUser && isCloudConnected) {
-      // Agora a função existe e pode ser chamada
       fetchNotesFromCloud(currentUser.username);
       fetchHistoryFromCloud(currentUser.username);
       const unsubFavs = subscribeToFavorites(currentUser.username);
@@ -501,7 +501,10 @@ function EmergencyGuideAppContent() {
                   </div>
                 )}
              </div>
-             <button aria-label="Ajuda" className={`p-2 rounded-full ${isDarkMode ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-500 hover:bg-gray-100'}`}><HelpCircle size={20} /></button>
+             
+             {/* BOTÃO DE AJUDA FUNCIONAL */}
+             <button aria-label="Ajuda" onClick={() => setShowHelpModal(true)} className={`p-2 rounded-full ${isDarkMode ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-500 hover:bg-gray-100'}`}><HelpCircle size={20} /></button>
+             
              <button aria-label="Sair" onClick={handleLogout} className={`p-2 rounded-full ${isDarkMode ? 'text-red-400 hover:bg-red-900/30' : 'text-red-400 hover:bg-red-50'}`}><LogOut size={20} /></button>
           </div>
         </div>
@@ -672,6 +675,7 @@ function EmergencyGuideAppContent() {
       <NotepadModal isOpen={showNotepad} onClose={() => setShowNotepad(false)} isDarkMode={isDarkMode} userNotes={userNotes} handleNoteChange={handleNoteChange} currentUser={currentUser} isCloudConnected={isCloudConnected} isSaving={isSaving} />
       <FavoritesModal isOpen={showFavoritesModal} onClose={() => setShowFavoritesModal(false)} isDarkMode={isDarkMode} favorites={favorites} loadFavoriteConduct={loadFavoriteConduct} removeFavoriteFromList={removeFavoriteFromList} />
       <PrescriptionModal isOpen={showPrescriptionModal} onClose={() => setShowPrescriptionModal(false)} currentUser={currentUser} selectedPrescriptionItems={selectedPrescriptionItems} />
+      <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} isDarkMode={isDarkMode} />
       
       <ImageAnalysisModal 
         isOpen={showImageModal} onClose={() => setShowImageModal(false)} isDarkMode={isDarkMode}
