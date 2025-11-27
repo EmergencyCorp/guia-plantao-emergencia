@@ -5,8 +5,8 @@ import {
   AlertTriangle, ArrowRight, X, User, CheckCircle2, Siren, ShieldAlert, 
   LogOut, History, Cloud, CloudOff, HeartPulse, Microscope, Image as ImageIcon, 
   Wind, Droplet, Skull, Printer, Calculator, Star, Utensils, Zap, Camera, 
-  BedDouble, ClipboardList, Pencil, LayoutGrid, ChevronDown, FileText, Droplets,
-  Pill, HelpCircle, UserCheck // Adicionado UserCheck para o ícone do menu
+  BedDouble, ClipboardList, Edit, LayoutGrid, ChevronDown, FileText, Droplets,
+  Pill, HelpCircle, UserCheck
 } from 'lucide-react';
 
 // --- CONFIG & COMPONENTS ---
@@ -25,7 +25,7 @@ import FavoritesModal from './components/modals/FavoritesModal';
 import HelpModal from './components/modals/HelpModal';
 import MedicalScoresModal from './components/modals/MedicalScoresModal';
 import QuickPrescriptionsModal from './components/modals/QuickPrescriptionsModal';
-import PhysicalExamModal from './components/modals/PhysicalExamModal'; // <--- NOVO IMPORT
+import PhysicalExamModal from './components/modals/PhysicalExamModal';
 
 // --- FIREBASE IMPORTS ---
 import { signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
@@ -100,7 +100,7 @@ function EmergencyGuideAppContent() {
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showScoresModal, setShowScoresModal] = useState(false);
   const [showQuickPrescriptions, setShowQuickPrescriptions] = useState(false);
-  const [showPhysicalExam, setShowPhysicalExam] = useState(false); // <--- NOVO ESTADO
+  const [showPhysicalExam, setShowPhysicalExam] = useState(false);
 
   // Specific Data States
   const [userNotes, setUserNotes] = useState('');
@@ -504,14 +504,13 @@ function EmergencyGuideAppContent() {
                       <div className={`h-px my-1 ${isDarkMode ? 'bg-slate-800' : 'bg-gray-100'}`}></div>
                       <button onClick={() => { setShowFavoritesModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-yellow-400 hover:bg-slate-800' : 'text-yellow-600 hover:bg-yellow-50'}`}><Star size={16} /> Favoritos</button>
                       <button onClick={() => { setShowNotepad(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-gray-50'}`}><Edit size={16} /> Meu Caderno</button>
-                      {/* BOTÃO EXAME FÍSICO ADICIONADO */}
                       <button onClick={() => { setShowPhysicalExam(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-sky-300 hover:bg-slate-800' : 'text-sky-600 hover:bg-sky-50'}`}><UserCheck size={16} /> Exame Físico Padrão</button>
                     </div>
                   </div>
                 )}
              </div>
              
-             {/* BOTÃO DE AJUDA */}
+             {/* BOTÃO DE AJUDA CORRIGIDO */}
              <button aria-label="Ajuda" onClick={() => setShowHelpModal(true)} className={`p-2 rounded-full ${isDarkMode ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-500 hover:bg-gray-100'}`}><HelpCircle size={20} /></button>
              
              <button aria-label="Sair" onClick={handleLogout} className={`p-2 rounded-full ${isDarkMode ? 'text-red-400 hover:bg-red-900/30' : 'text-red-400 hover:bg-red-50'}`}><LogOut size={20} /></button>
