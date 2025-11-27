@@ -1,3 +1,4 @@
+// Arquivo: src/App.jsx
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Activity, AlertCircle, Search, Loader2, BookOpen, Stethoscope, 
@@ -5,7 +6,7 @@ import {
   LogOut, History, Cloud, CloudOff, HeartPulse, Microscope, Image as ImageIcon, 
   Wind, Droplet, Skull, Printer, Calculator, Star, Utensils, Zap, Camera, 
   BedDouble, ClipboardList, Edit, LayoutGrid, ChevronDown, FileText, Droplets,
-  Pill, HelpCircle // Adicionado HelpCircle
+  Pill, HelpCircle // Ícones essenciais
 } from 'lucide-react';
 
 // --- CONFIG & COMPONENTS ---
@@ -29,7 +30,7 @@ import { doc, setDoc, getDoc, collection, query as firestoreQuery, where, orderB
 const appId = (typeof __app_id !== 'undefined') ? __app_id : 'emergency-guide-app';
 const initialToken = (typeof __initial_auth_token !== 'undefined') ? __initial_auth_token : null;
 
-// --- ERROR BOUNDARY PARA EVITAR TELA BRANCA ---
+// --- ERROR BOUNDARY ---
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -42,7 +43,7 @@ class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, errorInfo) {
     this.setState({ error, errorInfo });
-    console.error("Erro capturado pelo ErrorBoundary:", error, errorInfo);
+    console.error("Erro capturado:", error, errorInfo);
   }
 
   render() {
@@ -51,10 +52,8 @@ class ErrorBoundary extends React.Component {
         <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-red-50 text-red-900 font-mono">
           <div className="bg-white p-6 rounded-xl shadow-xl border border-red-200 max-w-2xl w-full">
             <h1 className="text-2xl font-bold mb-4 flex items-center gap-2"><AlertTriangle className="text-red-600"/> Ops! O aplicativo encontrou um erro.</h1>
-            <p className="mb-4 text-sm text-gray-600">Por favor, tire um print desta tela e envie para o suporte.</p>
             <div className="bg-slate-900 text-red-300 p-4 rounded-lg overflow-auto text-xs mb-4">
               <strong>{this.state.error && this.state.error.toString()}</strong>
-              <pre className="mt-2 text-slate-500">{this.state.errorInfo && this.state.errorInfo.componentStack}</pre>
             </div>
             <button onClick={() => window.location.reload()} className="bg-red-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-red-700 transition-colors">Recarregar Página</button>
           </div>
@@ -108,6 +107,88 @@ function EmergencyGuideAppContent() {
   const [isGeneratingBedside, setIsGeneratingBedside] = useState(false);
   const [isCurrentConductFavorite, setIsCurrentConductFavorite] = useState(false);
 
+  // --- HELPER FUNCTIONS ---
+  const showError = (msg) => { setErrorMsg(msg); setTimeout(() => setErrorMsg(''), 4000); };
+  const getConductDocId = (query, room) => `${query.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}_${room}`;
+
+  const getVitalIcon = (text) => {
+    const t = text.toLowerCase();
+    if (t.includes('fc') || t.includes('bpm')) return <HeartPulse size={16} className="text-rose-500" />;
+    if (t.includes('pa') || t.includes('mmhg') || t.includes('pam')) return <Activity size={16} className="text-blue-500" />;
+    if (t.includes('sat') || t.includes('o2')) return <Droplet size={16} className="text-cyan-500" />;
+    if (t.includes('fr') || t.includes('resp')) return <Wind size={16} className="text-teal-500" />;
+    return <Activity size={16} className="text-slate-400" />;
+  };
+
+  // --- DATA FETCHING FUNCTIONS (CORRIGIDAS) ---
+  
+  const loadLocalHistory = (username) => {
+      try {
+        const history = localStorage.getItem(`history_${username}`);
+        if (history) setRecentSearches(JSON.parse(history));
+        else setRecentSearches([]);
+      } catch (e) { setRecentSearches([]); }
+  };
+
+  const loadHistory = (username) => loadLocalHistory(username); // Alias para compatibilidade
+
+  const fetchHistoryFromCloud = async (username) => {
+      loadLocalHistory(username);
+      if (db && auth?.currentUser) {
+        try {
+          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', username);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists() && docSnap.data().searches) {
+              setRecentSearches(docSnap.data().searches);
+              localStorage.setItem(`history_${username}`, JSON.stringify(docSnap.data().searches));
+          }
+        } catch (error) { console.error("Erro sync histórico:", error); }
+      }
+  };
+
+  // --- AQUI ESTAVA O ERRO: FUNÇÃO RESTAURADA ---
+  const fetchNotesFromCloud = async (username) => {
+    const localNotes = localStorage.getItem(`notes_${username}`);
+    if (localNotes) setUserNotes(localNotes);
+
+    if (db && auth?.currentUser) {
+      try {
+        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'notes', username);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists() && docSnap.data().content) {
+          setUserNotes(docSnap.data().content);
+          localStorage.setItem(`notes_${username}`, docSnap.data().content);
+        }
+      } catch (error) { console.error("Erro sync notas:", error); }
+    }
+  };
+
+  const saveToHistory = async (term, room) => {
+      if (!currentUser) return;
+      const newEntry = { query: term, room, timestamp: new Date().toISOString() };
+      const hist = recentSearches.filter(s => s.query.toLowerCase() !== term.toLowerCase());
+      const updated = [newEntry, ...hist].slice(0, 10); 
+      setRecentSearches(updated);
+      localStorage.setItem(`history_${currentUser.username}`, JSON.stringify(updated));
+      if (db && auth?.currentUser) {
+        try {
+          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', currentUser.username);
+          await setDoc(docRef, { searches: updated, lastUpdated: new Date().toISOString(), username: currentUser.username }, { merge: true });
+        } catch (error) { console.error("Erro nuvem:", error); }
+      }
+  };
+
+  const subscribeToFavorites = (username) => {
+      if (!db) return;
+      const favoritesRef = collection(db, 'artifacts', appId, 'users', username, 'conducts');
+      const q = firestoreQuery(favoritesRef, where("isFavorite", "==", true));
+      return onSnapshot(q, (snapshot) => {
+          const favs = [];
+          snapshot.forEach((doc) => favs.push({ id: doc.id, ...doc.data() }));
+          setFavorites(favs);
+      });
+  };
+
   // --- EFFECTS ---
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme_preference');
@@ -154,6 +235,7 @@ function EmergencyGuideAppContent() {
 
   useEffect(() => {
     if (currentUser && isCloudConnected) {
+      // Agora a função existe e pode ser chamada
       fetchNotesFromCloud(currentUser.username);
       fetchHistoryFromCloud(currentUser.username);
       const unsubFavs = subscribeToFavorites(currentUser.username);
@@ -195,20 +277,7 @@ function EmergencyGuideAppContent() {
     return () => clearTimeout(delayDebounceFn);
   }, [userNotes, currentUser]);
 
-  // --- HELPER FUNCTIONS ---
-  const showError = (msg) => { setErrorMsg(msg); setTimeout(() => setErrorMsg(''), 4000); };
-  const getConductDocId = (query, room) => `${query.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}_${room}`;
-
-  const getVitalIcon = (text) => {
-    const t = text.toLowerCase();
-    if (t.includes('fc') || t.includes('bpm')) return <HeartPulse size={16} className="text-rose-500" />;
-    if (t.includes('pa') || t.includes('mmhg') || t.includes('pam')) return <Activity size={16} className="text-blue-500" />;
-    if (t.includes('sat') || t.includes('o2')) return <Droplet size={16} className="text-cyan-500" />;
-    if (t.includes('fr') || t.includes('resp')) return <Wind size={16} className="text-teal-500" />;
-    return <Activity size={16} className="text-slate-400" />;
-  };
-
-  // --- LOGIN & AUTH ---
+  // --- ACTIONS ---
   const handleLogin = async (e) => {
     e.preventDefault(); setLoginError('');
     if (!db || !isCloudConnected) { setLoginError("Sem conexão com o servidor."); return; }
@@ -235,61 +304,6 @@ function EmergencyGuideAppContent() {
     setCurrentUser(null); setConduct(null); setSearchQuery('');
     setRecentSearches([]); setUserNotes(''); setFavorites([]);
     localStorage.removeItem('emergency_app_user');
-  };
-
-  // --- HISTORY & FAVORITES ---
-  const loadHistory = (username) => {
-    try {
-      const history = localStorage.getItem(`history_${username}`);
-      if (history) setRecentSearches(JSON.parse(history));
-    } catch (e) { setRecentSearches([]); }
-  };
-
-  const loadLocalHistory = (username) => {
-      try {
-        const history = localStorage.getItem(`history_${username}`);
-        if (history) setRecentSearches(JSON.parse(history));
-      } catch (e) { setRecentSearches([]); }
-  };
-
-  const fetchHistoryFromCloud = async (username) => {
-      loadLocalHistory(username);
-      if (db && auth?.currentUser) {
-        try {
-          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', username);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists() && docSnap.data().searches) {
-              setRecentSearches(docSnap.data().searches);
-              localStorage.setItem(`history_${username}`, JSON.stringify(docSnap.data().searches));
-          }
-        } catch (error) { console.error("Erro sync histórico:", error); }
-      }
-  };
-
-  const saveToHistory = async (term, room) => {
-      if (!currentUser) return;
-      const newEntry = { query: term, room, timestamp: new Date().toISOString() };
-      const hist = recentSearches.filter(s => s.query.toLowerCase() !== term.toLowerCase());
-      const updated = [newEntry, ...hist].slice(0, 10); 
-      setRecentSearches(updated);
-      localStorage.setItem(`history_${currentUser.username}`, JSON.stringify(updated));
-      if (db && auth?.currentUser) {
-        try {
-          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', currentUser.username);
-          await setDoc(docRef, { searches: updated, lastUpdated: new Date().toISOString(), username: currentUser.username }, { merge: true });
-        } catch (error) { console.error("Erro nuvem:", error); }
-      }
-  };
-
-  const subscribeToFavorites = (username) => {
-      if (!db) return;
-      const favoritesRef = collection(db, 'artifacts', appId, 'users', username, 'conducts');
-      const q = firestoreQuery(favoritesRef, where("isFavorite", "==", true));
-      return onSnapshot(q, (snapshot) => {
-          const favs = [];
-          snapshot.forEach((doc) => favs.push({ id: doc.id, ...doc.data() }));
-          setFavorites(favs);
-      });
   };
 
   const toggleFavorite = async () => {
@@ -333,7 +347,6 @@ function EmergencyGuideAppContent() {
     } catch (error) { console.error("Cache clean error:", error); }
   };
 
-  // --- PRESCRIPTION LOGIC ---
   const togglePrescriptionItem = (med) => {
     if (activeRoom !== 'verde' || !med.receita) return;
     setSelectedPrescriptionItems(prev => {
@@ -358,8 +371,6 @@ function EmergencyGuideAppContent() {
     }
   };
 
-  // --- API / GENERATION LOGIC ---
-  const fetchNote = async (username) => { /* already defined in effect */ };
   const handleNoteChange = (e) => setUserNotes(e.target.value);
 
   const handleImageUpload = (e) => {
@@ -490,9 +501,7 @@ function EmergencyGuideAppContent() {
                   </div>
                 )}
              </div>
-             {/* ÍCONE DE AJUDA RESTAURADO - Mesmo sem função por enquanto, evita crash se referenciado */}
              <button aria-label="Ajuda" className={`p-2 rounded-full ${isDarkMode ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-500 hover:bg-gray-100'}`}><HelpCircle size={20} /></button>
-             
              <button aria-label="Sair" onClick={handleLogout} className={`p-2 rounded-full ${isDarkMode ? 'text-red-400 hover:bg-red-900/30' : 'text-red-400 hover:bg-red-50'}`}><LogOut size={20} /></button>
           </div>
         </div>
