@@ -6,7 +6,7 @@ import {
   LogOut, History, Cloud, CloudOff, HeartPulse, Microscope, Image as ImageIcon, 
   Wind, Droplet, Skull, Printer, Calculator, Star, Utensils, Zap, Camera, 
   BedDouble, ClipboardList, Edit, LayoutGrid, ChevronDown, FileText, Droplets,
-  Pill, HelpCircle, UserCheck, Lock
+  Pill, HelpCircle, UserCheck, Lock, MessageSquare
 } from 'lucide-react';
 
 // --- CONFIG & COMPONENTS ---
@@ -168,12 +168,15 @@ function EmergencyGuideAppContent() {
     } catch (e) {}
   };
 
-  const saveToHistory = async (term, room) => {
+  const saveToHistory = (term, room) => {
+    // Salva sem await para não bloquear a UI se o banco estiver lento
     if (!currentUser || !db) return;
     const newEntry = { query: term, room, timestamp: new Date().toISOString() };
     const updated = [newEntry, ...recentSearches.filter(s => s.query.toLowerCase() !== term.toLowerCase())].slice(0, 10);
     setRecentSearches(updated);
-    try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'history', currentUser.uid), { searches: updated }, { merge: true }); } catch (e) {}
+    
+    // Fire and forget
+    setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'history', currentUser.uid), { searches: updated }, { merge: true }).catch(e => console.warn("Erro history:", e));
   };
 
   const subscribeToFavorites = (uid) => {
@@ -425,60 +428,76 @@ function EmergencyGuideAppContent() {
     } catch (error) { showError("Erro ao processar."); } finally { setIsGeneratingBedside(false); }
   };
 
+  // --- FUNÇÃO GERAR CONDUTA CORRIGIDA ---
   const generateConduct = async (overrideRoom = null) => {
     if (!searchQuery.trim()) { showError('Digite uma condição clínica.'); return; }
     const targetRoom = overrideRoom || activeRoom;
-    setLoading(true); setConduct(null); setErrorMsg(''); setIsCurrentConductFavorite(false);
+    
+    setLoading(true); 
+    setConduct(null); 
+    setErrorMsg(''); 
+    setIsCurrentConductFavorite(false);
+    
     if (overrideRoom) setActiveRoom(overrideRoom);
 
     const docId = getConductDocId(searchQuery, targetRoom);
     
-    // Check Cache
-    if (currentUser && db) {
-      try {
-        const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', docId);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setConduct(data.conductData); setIsCurrentConductFavorite(data.isFavorite || false);
-          setLoading(false); saveToHistory(searchQuery, targetRoom);
-          setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
-          return;
-        }
-      } catch (e) {}
-    }
-
     try {
-      // Timeout de 6 segundos para fallback rápido
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
+        // 1. Tenta Cache (com timeout para não travar se banco estiver lento)
+        if (currentUser && db) {
+            const cachePromise = getDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', docId));
+            // Race: se banco não responder em 2s, desiste do cache e vai pra API
+            const cacheSnap = await Promise.race([
+                cachePromise,
+                new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout Cache")), 2000))
+            ]).catch(() => null);
 
-      const response = await fetch('/api/generate', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ searchQuery, activeRoom: targetRoom }),
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
+            if (cacheSnap && cacheSnap.exists()) {
+                const data = cacheSnap.data();
+                setConduct(data.conductData); 
+                setIsCurrentConductFavorite(data.isFavorite || false);
+                setLoading(false); 
+                saveToHistory(searchQuery, targetRoom); // Salva histórico sem await
+                setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
+                return; // Sai da função
+            }
+        }
 
-      if (!response.ok) throw new Error('Erro IA.');
-      const parsedConduct = await response.json();
-      setConduct(parsedConduct);
-      
-      if (currentUser && db) {
-        const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', docId);
-        await setDoc(docRef, { query: searchQuery, room: targetRoom, conductData: parsedConduct, isFavorite: false, lastAccessed: new Date().toISOString() });
-      }
-      saveToHistory(searchQuery, targetRoom);
+        // 2. Tenta API com Timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
+
+        const response = await fetch('/api/generate', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ searchQuery, activeRoom: targetRoom }),
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+
+        if (!response.ok) throw new Error('Erro IA.');
+        const parsedConduct = await response.json();
+        setConduct(parsedConduct);
+        setLoading(false); // Garante que loading pare aqui
+        
+        // Salva Cache em background (sem await)
+        if (currentUser && db) {
+            setDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', docId), { 
+                query: searchQuery, room: targetRoom, conductData: parsedConduct, isFavorite: false, lastAccessed: new Date().toISOString() 
+            }).catch(e => console.warn("Erro ao salvar cache", e));
+        }
+        saveToHistory(searchQuery, targetRoom);
+
     } catch (error) { 
-        // Fallback ativado!
-        console.warn("Usando conduta simulada:", error);
+        console.warn("Falha na geração (API ou Cache). Usando Mock.", error);
+        // Fallback imediato para Mock
         const mockConduct = getMockConduct(searchQuery, targetRoom);
         setConduct(mockConduct);
+        setLoading(false);
         setErrorMsg("Modo Offline: Conduta simulada.");
         setTimeout(() => setErrorMsg(''), 4000);
     } finally { 
-        setLoading(false); 
+        setLoading(false); // Segurança extra
         setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
     }
   };
@@ -712,7 +731,17 @@ function EmergencyGuideAppContent() {
         )}
       </main>
 
-      {/* Modals */}
+      <footer className={`border-t mt-auto ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
+        <div className="max-w-4xl mx-auto px-4 py-8 text-center">
+          <div className={`border rounded-xl p-4 mb-6 flex flex-col md:flex-row gap-4 items-center text-left ${isDarkMode ? 'bg-amber-900/20 border-amber-900/50' : 'bg-amber-50 border-amber-200'}`}>
+             <ShieldAlert className="text-amber-600 shrink-0 w-8 h-8" />
+             <div><h4 className={`font-bold uppercase text-sm mb-1 ${isDarkMode ? 'text-amber-400' : 'text-amber-900'}`}>Aviso Legal Importante</h4><p className={`text-xs leading-relaxed text-justify ${isDarkMode ? 'text-amber-200/90' : 'text-amber-800/90'}`}>Esta é uma ferramenta de <strong>guia de plantão</strong>. O conteúdo pode conter imprecisões.</p></div>
+          </div>
+          <p className="text-xs text-slate-400">&copy; {new Date().getFullYear()} EmergencyCorp.</p>
+        </div>
+      </footer>
+
+      {/* RENDERIZAÇÃO DOS MODALS VIA COMPONENTES */}
       <InfusionCalculator isOpen={showCalculatorModal} onClose={() => setShowCalculatorModal(false)} isDarkMode={isDarkMode} />
       <NotepadModal isOpen={showNotepad} onClose={() => setShowNotepad(false)} isDarkMode={isDarkMode} userNotes={userNotes} handleNoteChange={handleNoteChange} currentUser={currentUser} isCloudConnected={isCloudConnected} isSaving={isSaving} />
       <FavoritesModal isOpen={showFavoritesModal} onClose={() => setShowFavoritesModal(false)} isDarkMode={isDarkMode} favorites={favorites} loadFavoriteConduct={loadFavoriteConduct} removeFavoriteFromList={removeFavoriteFromList} />
@@ -720,8 +749,20 @@ function EmergencyGuideAppContent() {
       <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} isDarkMode={isDarkMode} />
       <MedicalScoresModal isOpen={showScoresModal} onClose={() => setShowScoresModal(false)} isDarkMode={isDarkMode} />
       <QuickPrescriptionsModal isOpen={showQuickPrescriptions} onClose={() => setShowQuickPrescriptions(false)} isDarkMode={isDarkMode} />
-      <ImageAnalysisModal isOpen={showImageModal} onClose={() => setShowImageModal(false)} isDarkMode={isDarkMode} selectedImage={selectedImage} handleImageUpload={handleImageUpload} imageQuery={imageQuery} setImageQuery={setImageQuery} handleAnalyzeImage={handleAnalyzeImage} isAnalyzingImage={isAnalyzingImage} imageAnalysisResult={imageAnalysisResult} setImageAnalysisResult={setImageAnalysisResult} />
-      <BedsideModal isOpen={showBedsideModal} onClose={() => setShowBedsideModal(false)} isDarkMode={isDarkMode} bedsideAnamnesis={bedsideAnamnesis} setBedsideAnamnesis={setBedsideAnamnesis} bedsideExams={bedsideExams} setBedsideExams={setBedsideExams} generateBedsideConduct={generateBedsideConduct} isGeneratingBedside={isGeneratingBedside} bedsideResult={bedsideResult} />
+      
+      <ImageAnalysisModal 
+        isOpen={showImageModal} onClose={() => setShowImageModal(false)} isDarkMode={isDarkMode}
+        selectedImage={selectedImage} handleImageUpload={handleImageUpload} imageQuery={imageQuery} setImageQuery={setImageQuery}
+        handleAnalyzeImage={handleAnalyzeImage} isAnalyzingImage={isAnalyzingImage} imageAnalysisResult={imageAnalysisResult} setImageAnalysisResult={setImageAnalysisResult}
+      />
+
+      <BedsideModal 
+        isOpen={showBedsideModal} onClose={() => setShowBedsideModal(false)} isDarkMode={isDarkMode}
+        bedsideAnamnesis={bedsideAnamnesis} setBedsideAnamnesis={setBedsideAnamnesis}
+        bedsideExams={bedsideExams} setBedsideExams={setBedsideExams}
+        generateBedsideConduct={generateBedsideConduct} isGeneratingBedside={isGeneratingBedside} bedsideResult={bedsideResult}
+      />
+      
       <PhysicalExamModal isOpen={showPhysicalExam} onClose={() => setShowPhysicalExam(false)} isDarkMode={isDarkMode} />
     </div>
   );
