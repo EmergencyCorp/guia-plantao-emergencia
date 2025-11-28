@@ -30,7 +30,6 @@ import QuickPrescriptionsModal from './components/modals/QuickPrescriptionsModal
 import PhysicalExamModal from './components/modals/PhysicalExamModal';
 import CompleteProfileModal from './components/modals/CompleteProfileModal';
 import FeedbackModal from './components/modals/FeedbackModal';
-// NOVO MODAL
 import RealTimeChatModal from './components/modals/RealTimeChatModal'; 
 
 // --- FIREBASE IMPORTS ---
@@ -133,7 +132,6 @@ function EmergencyGuideAppContent() {
 	const [showQuickPrescriptions, setShowQuickPrescriptions] = useState(false);
 	const [showPhysicalExam, setShowPhysicalExam] = useState(false);
 	const [showFeedbackModal, setShowFeedbackModal] = useState(false);
-    // NOVO ESTADO DE MODAL
     const [showChatModal, setShowChatModal] = useState(false);
 
 
@@ -150,7 +148,6 @@ function EmergencyGuideAppContent() {
 	const [isGeneratingBedside, setIsGeneratingBedside] = useState(false);
 	const [isCurrentConductFavorite, setIsCurrentConductFavorite] = useState(false);
 	const [isSaving, setIsSaving] = useState(false);
-    // NOVO ESTADO DE CHAT
     const [chatHistory, setChatHistory] = useState([]);
     const [isChatLoading, setIsChatLoading] = useState(false);
 
@@ -451,7 +448,6 @@ function EmergencyGuideAppContent() {
 		let foundInCache = false;
 		
 		// 1. TENTATIVA DE CACHE
-        // ... (Lógica de Cache OMITIDA para brevidade) ...
 		if (db) {
 				try {
 						const docRef = doc(db, GLOBAL_CACHE_COLLECTION, docId);
@@ -506,7 +502,6 @@ function EmergencyGuideAppContent() {
 			setConduct(parsedConduct);
 			
 			// 3. TENTA SALVAR NO CACHE
-            // ... (Lógica de Cache OMITIDA para brevidade) ...
 			if (db) {
 					try {
 						const docRef = doc(db, GLOBAL_CACHE_COLLECTION, docId);
@@ -541,17 +536,14 @@ function EmergencyGuideAppContent() {
 		}
 	};
 
-	// --- OUTRAS FUNÇÕES HANDLERS OMITIDAS PARA BREVIDADE ---
-    // ...
-    // ...
-
-    const handleAnalyzeImage = async () => {
-        if (isAccessExpired) {
+	// --- HANDLER QUE ESTAVA FALTANDO/QUEBRANDO O BUILD ---
+	const handleAnalyzeImage = async () => {
+		if (isAccessExpired) {
             showError('Seu acesso expirou. Renove sua assinatura para continuar.');
             return;
         }
-        // ... (resto da lógica de handleAnalyzeImage) ...
-        if (!selectedImage || !imageQuery.trim()) { showError("Selecione imagem e pergunta."); return; }
+
+		if (!selectedImage || !imageQuery.trim()) { showError("Selecione imagem e pergunta."); return; }
 		setIsAnalyzingImage(true); setImageAnalysisResult(null);
 		
 		const startTimestamp = Date.now();
@@ -568,7 +560,6 @@ function EmergencyGuideAppContent() {
 				} catch(e) { console.warn("Erro ao pegar token:", e); }
 			}
 
-			// Chamada real para a Serverless Function com os dados da imagem
 			const response = await fetch('/api/generate', {
 				method: 'POST', 
 				headers: headers,
@@ -588,7 +579,6 @@ function EmergencyGuideAppContent() {
 			}
 
 			const result = await response.json();
-			// A Serverless Function retorna { analysis: "..." }
 			setImageAnalysisResult(result.analysis); 
 	
 		} catch (error) { 
@@ -599,6 +589,19 @@ function EmergencyGuideAppContent() {
 			setIsAnalyzingImage(false); 
 			console.log(`Tempo de Análise de Imagem: ${(Date.now() - startTimestamp) / 1000}s`);
 		}
+	};
+    
+    // HANDLER DE UPLOAD DE IMAGEM (Também restaurado/verificado)
+    const handleImageUpload = (e) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                // Salva a imagem em Base64 com o prefixo MimeType para o generate.js
+                setSelectedImage(reader.result); 
+            };
+            reader.readAsDataURL(file);
+        }
     };
 
 
@@ -607,7 +610,7 @@ function EmergencyGuideAppContent() {
             showError('Seu acesso expirou. Renove sua assinatura para continuar.');
             return;
         }
-        // ... (resto da lógica de generateBedsideConduct) ...
+        // ... (o restante desta função está ok)
         if (!bedsideAnamnesis.trim()) { showError('Preencha a anamnese.'); return; }
 		setIsGeneratingBedside(true); setBedsideResult(null);
 		
@@ -664,6 +667,7 @@ function EmergencyGuideAppContent() {
 			console.log(`Tempo Bedside: ${(Date.now() - startTimestamp) / 1000}s`);
 		}
     };
+
 
 	const toggleFavorite = async () => {
 			if (!conduct || !currentUser) return;
@@ -771,7 +775,7 @@ function EmergencyGuideAppContent() {
 			<header className={`border-b sticky top-0 z-40 shadow-sm ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
 				<div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
 					<div className="flex items-center gap-2 sm:gap-3">
-							<img src={isDarkMode ? "[https://i.ibb.co/d0W4s2yH/logobranco.png](https://i.ibb.co/d0W4s2yH/logobranco.png)" : "[https://i.ibb.co/vCp5pXZP/logopreto.png](https://i.ibb.co/vCp5pXZP/logopreto.png)"} alt="Logo" className="h-8 sm:h-12 w-auto object-contain" />
+							<img src={isDarkMode ? "https://i.ibb.co/d0W4s2yH/logobranco.png" : "https://i.ibb.co/vCp5pXZP/logopreto.png"} alt="Logo" className="h-8 sm:h-12 w-auto object-contain" />
 							<div><h1 className={`text-base sm:text-lg font-bold leading-none ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>Lister Guidance</h1><span className="text-[9px] sm:text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Suporte Médico</span></div>
 					</div>
 					<div className="flex items-center gap-2 sm:gap-3">
@@ -787,7 +791,7 @@ function EmergencyGuideAppContent() {
 								{showToolsMenu && (
 									<div className={`absolute right-0 top-full mt-2 w-64 rounded-xl shadow-xl border overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
 										<div className="p-1 space-y-1">
-                                            {/* NOVO ITEM DE MENU */}
+                                            {/* NOVO ITEM DE MENU: CHAT */}
                                             <button onClick={() => { setShowChatModal(true); setShowToolsMenu(false); setChatHistory([{ role: 'preceptor', text: "Olá Dr(a), sou o Preceptor Sênior da Emergência. Apresente o caso (Anamnese e Sinais Vitais) para iniciarmos a discussão.", timestamp: Date.now() }]); }} className={`w-full text-left px-3 py-3 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-purple-300 hover:bg-slate-800' : 'text-purple-700 hover:bg-purple-50'}`}><MessageCircle size={18} /> Chat Preceptor</button>
                                             
                                             {/* ITENS EXISTENTES */}
