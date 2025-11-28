@@ -516,7 +516,7 @@ function EmergencyGuideAppContent() {
 
 		try {
 			const controller = new AbortController();
-			const timeoutId = setTimeout(() => controller.abort(), 45000); 
+			const timeoutId = setTimeout(() => controller.abort(), 120000); 
 
 			const headers = { 'Content-Type': 'application/json' };
 			if (auth?.currentUser) {
