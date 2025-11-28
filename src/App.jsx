@@ -6,7 +6,7 @@ import {
   LogOut, History, Cloud, CloudOff, HeartPulse, Microscope, Image as ImageIcon, 
   Wind, Droplet, Skull, Printer, Calculator, Star, Utensils, Zap, Camera, 
   BedDouble, ClipboardList, Edit, LayoutGrid, ChevronDown, FileText, Droplets,
-  Pill, HelpCircle, UserCheck, Lock, Timer
+  Pill, HelpCircle, UserCheck, Lock, Timer, Menu
 } from 'lucide-react';
 
 // --- CONFIG & COMPONENTS ---
@@ -34,8 +34,8 @@ import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithP
 import { doc, setDoc, getDoc, collection, query as firestoreQuery, where, orderBy, getDocs, deleteDoc, onSnapshot } from 'firebase/firestore';
 
 const appId = (typeof __app_id !== 'undefined') ? __app_id : 'emergency-guide-app';
-const GLOBAL_CACHE_COLLECTION = 'global_conduct_cache'; // Coleção compartilhada
-const CACHE_LIMIT = 50; // Limite de condutas salvas
+const GLOBAL_CACHE_COLLECTION = 'global_conduct_cache'; 
+const CACHE_LIMIT = 50; 
 
 // --- FUNÇÕES AUXILIARES GLOBAIS ---
 const getVitalIcon = (text) => {
@@ -141,19 +141,16 @@ function EmergencyGuideAppContent() {
   const [isCurrentConductFavorite, setIsCurrentConductFavorite] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // --- HELPER FUNCTION: SHOW ERROR ---
   const showError = (msg) => {
     setErrorMsg(msg);
     setTimeout(() => setErrorMsg(''), 4000);
   };
 
-  // --- TIMER EFFECT ---
   useEffect(() => {
     let interval;
     if (loading) {
       const startTime = Date.now();
       interval = setInterval(() => {
-        // Atualiza o tempo decorrido baseado na diferença real de tempo
         setElapsedTime((Date.now() - startTime) / 1000);
       }, 100);
     } else {
@@ -162,7 +159,6 @@ function EmergencyGuideAppContent() {
     return () => clearInterval(interval);
   }, [loading]);
 
-  // --- INIT ---
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme_preference');
     if (savedTheme === 'dark') setIsDarkMode(true);
@@ -319,7 +315,7 @@ function EmergencyGuideAppContent() {
     await signOut(auth); setCurrentUser(null); setConduct(null); setFavorites([]); setPendingGoogleUser(null); setApprovalStatus(null);
   };
 
-  // --- GERENCIAMENTO DO CACHE GLOBAL (Limpeza) ---
+  // --- GERENCIAMENTO DO CACHE GLOBAL ---
   const manageGlobalCache = async () => {
     if (!db) return;
     try {
@@ -346,10 +342,9 @@ function EmergencyGuideAppContent() {
     setLoading(true); 
     setConduct(null); 
     setErrorMsg(''); 
-    setFinalTime(null); // Reseta o tempo final
+    setFinalTime(null); 
     setIsCurrentConductFavorite(false);
     
-    // Captura o tempo inicial exato
     const startTimestamp = Date.now();
 
     if (overrideRoom) setActiveRoom(overrideRoom);
@@ -370,8 +365,6 @@ function EmergencyGuideAppContent() {
                 saveToHistory(searchQuery, targetRoom);
                 
                 setDoc(docRef, { lastAccessed: new Date().toISOString() }, { merge: true }).catch(e => console.warn("Cache update warning:", e));
-                
-                // Calcula tempo final (Cache é muito rápido, mas vamos medir)
                 setFinalTime(((Date.now() - startTimestamp) / 1000).toFixed(2));
                 
                 setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
@@ -387,7 +380,6 @@ function EmergencyGuideAppContent() {
     // 2. TENTATIVA DE API
     try {
       const controller = new AbortController();
-      // TIMEOUT AUMENTADO PARA 45 SEGUNDOS
       const timeoutId = setTimeout(() => controller.abort(), 45000); 
 
       const headers = { 'Content-Type': 'application/json' };
@@ -412,7 +404,6 @@ function EmergencyGuideAppContent() {
       }
 
       const parsedConduct = await response.json();
-      
       setConduct(parsedConduct);
       
       // 3. TENTA SALVAR NO CACHE
@@ -433,7 +424,6 @@ function EmergencyGuideAppContent() {
       
       saveToHistory(searchQuery, targetRoom);
       
-      // CALCULA O TEMPO FINAL EM SEGUNDOS
       const endTimestamp = Date.now();
       const totalSeconds = ((endTimestamp - startTimestamp) / 1000).toFixed(2);
       setFinalTime(totalSeconds);
@@ -476,7 +466,6 @@ function EmergencyGuideAppContent() {
     } catch (error) { showError("Erro ao processar."); } finally { setIsGeneratingBedside(false); }
   };
 
-  // Funções de Favoritos
   const toggleFavorite = async () => {
       if (!conduct || !currentUser) return;
       try {
@@ -518,7 +507,6 @@ function EmergencyGuideAppContent() {
       }
   };
 
-  // Funções de Prescrição
   const togglePrescriptionItem = (item) => {
       if (selectedPrescriptionItems.some(i => i.farmaco === item.farmaco)) {
           setSelectedPrescriptionItems(prev => prev.filter(i => i.farmaco !== item.farmaco));
@@ -564,34 +552,43 @@ function EmergencyGuideAppContent() {
     );
   }
 
-  // --- MAIN APP RENDER ---
+  // --- MAIN APP RENDER (RESPONSIVO) ---
   return (
     <div className={`min-h-screen flex flex-col font-sans selection:bg-blue-100 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
       <header className={`border-b sticky top-0 z-40 shadow-sm ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-             <img src={isDarkMode ? "https://i.ibb.co/d0W4s2yH/logobranco.png" : "https://i.ibb.co/vCp5pXZP/logopreto.png"} alt="Logo" className="h-12 w-auto object-contain" />
-             <div><h1 className={`text-lg font-bold leading-none ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>Lister Guidance</h1><span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Suporte Médico</span></div>
+          <div className="flex items-center gap-2 sm:gap-3">
+             <img src={isDarkMode ? "https://i.ibb.co/d0W4s2yH/logobranco.png" : "https://i.ibb.co/vCp5pXZP/logopreto.png"} alt="Logo" className="h-8 sm:h-12 w-auto object-contain" />
+             <div><h1 className={`text-base sm:text-lg font-bold leading-none ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>Lister Guidance</h1><span className="text-[9px] sm:text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Suporte Médico</span></div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+             {/* Esconde info de user em telas muito pequenas (mobile) */}
              <div className="hidden sm:flex flex-col items-end mr-2"><span className={`text-xs font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{currentUser.name}</span><span className="text-[10px] text-slate-400 uppercase">Médico(a)</span></div>
              <ThemeToggle isDarkMode={isDarkMode} toggleTheme={toggleTheme} />
              <div className="relative">
-                <button aria-label="Ferramentas" onClick={() => setShowToolsMenu(!showToolsMenu)} className={`px-3 py-2 rounded-lg flex items-center gap-2 transition-colors font-bold text-sm ${isDarkMode ? 'bg-blue-900/30 text-blue-300 hover:bg-blue-900/50' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}>
-                  <LayoutGrid size={18} /><span className="hidden sm:inline">Ferramentas</span><ChevronDown size={14} className={`transition-transform ${showToolsMenu ? 'rotate-180' : ''}`} />
+                <button aria-label="Ferramentas" onClick={() => setShowToolsMenu(!showToolsMenu)} className={`px-2 sm:px-3 py-2 rounded-lg flex items-center gap-2 transition-colors font-bold text-sm ${isDarkMode ? 'bg-blue-900/30 text-blue-300 hover:bg-blue-900/50' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}>
+                  {/* Ícone muda no mobile para Menu hamburguer ou Grid */}
+                  <LayoutGrid size={18} className="hidden sm:block" />
+                  <Menu size={18} className="block sm:hidden" />
+                  <span className="hidden md:inline">Ferramentas</span>
+                  <ChevronDown size={14} className={`hidden sm:block transition-transform ${showToolsMenu ? 'rotate-180' : ''}`} />
                 </button>
                 {showToolsMenu && (
-                  <div className={`absolute right-0 top-full mt-2 w-56 rounded-xl shadow-xl border overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
+                  <div className={`absolute right-0 top-full mt-2 w-64 rounded-xl shadow-xl border overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
                     <div className="p-1 space-y-1">
-                      <button onClick={() => { setShowImageModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-blue-300 hover:bg-slate-800' : 'text-blue-700 hover:bg-blue-50'}`}><Camera size={16} /> IA Vision</button>
-                      <button onClick={() => { setShowBedsideModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-indigo-300 hover:bg-slate-800' : 'text-indigo-700 hover:bg-indigo-50'}`}><ClipboardList size={16} /> BedSide Guidance</button>
-                      <button onClick={() => { setShowQuickPrescriptions(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-teal-300 hover:bg-slate-800' : 'text-teal-700 hover:bg-teal-50'}`}><FileText size={16} /> Acesso Rápido Receitas</button>
-                      <button onClick={() => { setShowScoresModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-emerald-300 hover:bg-slate-800' : 'text-emerald-700 hover:bg-emerald-50'}`}><Activity size={16} /> Scores Médicos</button>
-                      <button onClick={() => { setShowCalculatorModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-rose-300 hover:bg-slate-800' : 'text-rose-700 hover:bg-rose-50'}`}><Calculator size={16} /> Calc. Infusão</button>
+                      <div className="px-3 py-2 sm:hidden border-b mb-1 border-gray-100 dark:border-gray-800 text-center">
+                        <span className="text-xs font-bold block">{currentUser.name}</span>
+                        <span className="text-[10px] text-gray-500">CRM: {currentUser.crm}</span>
+                      </div>
+                      <button onClick={() => { setShowImageModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-3 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-blue-300 hover:bg-slate-800' : 'text-blue-700 hover:bg-blue-50'}`}><Camera size={18} /> IA Vision</button>
+                      <button onClick={() => { setShowBedsideModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-3 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-indigo-300 hover:bg-slate-800' : 'text-indigo-700 hover:bg-indigo-50'}`}><ClipboardList size={18} /> BedSide Guidance</button>
+                      <button onClick={() => { setShowQuickPrescriptions(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-3 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-teal-300 hover:bg-slate-800' : 'text-teal-700 hover:bg-teal-50'}`}><FileText size={18} /> Acesso Rápido Receitas</button>
+                      <button onClick={() => { setShowScoresModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-3 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-emerald-300 hover:bg-slate-800' : 'text-emerald-700 hover:bg-emerald-50'}`}><Activity size={18} /> Scores Médicos</button>
+                      <button onClick={() => { setShowCalculatorModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-3 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-rose-300 hover:bg-slate-800' : 'text-rose-700 hover:bg-rose-50'}`}><Calculator size={18} /> Calc. Infusão</button>
                       <div className={`h-px my-1 ${isDarkMode ? 'bg-slate-800' : 'bg-gray-100'}`}></div>
-                      <button onClick={() => { setShowFavoritesModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-yellow-400 hover:bg-slate-800' : 'text-yellow-600 hover:bg-yellow-50'}`}><Star size={16} /> Favoritos</button>
-                      <button onClick={() => { setShowNotepad(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-gray-50'}`}><Edit size={16} /> Meu Caderno</button>
-                      <button onClick={() => { setShowPhysicalExam(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-sky-300 hover:bg-slate-800' : 'text-sky-600 hover:bg-sky-50'}`}><UserCheck size={16} /> Exame Físico Padrão</button>
+                      <button onClick={() => { setShowFavoritesModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-3 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-yellow-400 hover:bg-slate-800' : 'text-yellow-600 hover:bg-yellow-50'}`}><Star size={18} /> Favoritos</button>
+                      <button onClick={() => { setShowNotepad(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-3 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-gray-50'}`}><Edit size={18} /> Meu Caderno</button>
+                      <button onClick={() => { setShowPhysicalExam(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-3 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-sky-300 hover:bg-slate-800' : 'text-sky-600 hover:bg-sky-50'}`}><UserCheck size={18} /> Exame Físico Padrão</button>
                     </div>
                   </div>
                 )}
@@ -602,37 +599,38 @@ function EmergencyGuideAppContent() {
         </div>
       </header>
 
-      <main className="flex-grow max-w-6xl mx-auto px-4 py-8 space-y-8 w-full relative" onClick={() => setShowToolsMenu(false)}>
+      <main className="flex-grow max-w-6xl mx-auto px-3 sm:px-4 py-6 sm:py-8 space-y-6 sm:space-y-8 w-full relative" onClick={() => setShowToolsMenu(false)}>
         {activeRoom === 'verde' && selectedPrescriptionItems.length > 0 && (
-          <button onClick={() => setShowPrescriptionModal(true)} className="fixed bottom-24 right-6 z-50 bg-blue-600 hover:bg-blue-700 text-white px-6 py-4 rounded-full shadow-xl flex items-center gap-3 font-bold transition-all animate-in slide-in-from-bottom-4"><Printer size={24} /> Gerar Receita ({selectedPrescriptionItems.length})</button>
+          <button onClick={() => setShowPrescriptionModal(true)} className="fixed bottom-20 right-4 sm:bottom-24 sm:right-6 z-50 bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 sm:px-6 sm:py-4 rounded-full shadow-xl flex items-center gap-2 sm:gap-3 font-bold transition-all animate-in slide-in-from-bottom-4"><Printer size={20} /> <span className="text-sm sm:text-base">Receita ({selectedPrescriptionItems.length})</span></button>
         )}
 
-        <div className="space-y-6">
-          <div className="grid md:grid-cols-2 gap-4">
+        <div className="space-y-4 sm:space-y-6">
+          {/* Grid de Salas adaptável: 1 coluna no mobile, 2 no tablet/pc */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
             {Object.entries(roomConfig).map(([key, config]) => {
               const isActive = activeRoom === key;
               return (
-                <button key={key} onClick={() => setActiveRoom(key)} className={`relative flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all ${isActive ? `${isDarkMode ? 'bg-slate-900' : 'bg-white'} ${config.border} shadow-md ring-1 ring-offset-2 ${isDarkMode ? 'ring-offset-slate-950' : ''} ${config.accent.replace('bg-', 'ring-')}` : `border-transparent shadow-sm ${isDarkMode ? 'bg-slate-900 hover:border-slate-700' : 'bg-white hover:border-gray-200'}`}`}>
-                  <div className={`p-3 rounded-xl ${isActive ? `${config.light} ${config.text}` : `${isDarkMode ? 'bg-slate-800 text-slate-500' : 'bg-gray-100 text-gray-400'}`}`}>{config.icon}</div>
-                  <div><h3 className={`font-bold ${isActive ? (isDarkMode ? 'text-slate-100' : 'text-slate-800') : (isDarkMode ? 'text-slate-500' : 'text-slate-500')}`}>{config.name}</h3><p className="text-xs text-slate-400">{config.description}</p></div>
-                  {isActive && <CheckCircle2 className={`ml-auto ${config.text}`} size={20} />}
+                <button key={key} onClick={() => setActiveRoom(key)} className={`relative flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl border-2 text-left transition-all ${isActive ? `${isDarkMode ? 'bg-slate-900' : 'bg-white'} ${config.border} shadow-md ring-1 ring-offset-2 ${isDarkMode ? 'ring-offset-slate-950' : ''} ${config.accent.replace('bg-', 'ring-')}` : `border-transparent shadow-sm ${isDarkMode ? 'bg-slate-900 hover:border-slate-700' : 'bg-white hover:border-gray-200'}`}`}>
+                  <div className={`p-2.5 sm:p-3 rounded-xl ${isActive ? `${config.light} ${config.text}` : `${isDarkMode ? 'bg-slate-800 text-slate-500' : 'bg-gray-100 text-gray-400'}`}`}>{config.icon}</div>
+                  <div><h3 className={`font-bold text-sm sm:text-base ${isActive ? (isDarkMode ? 'text-slate-100' : 'text-slate-800') : (isDarkMode ? 'text-slate-500' : 'text-slate-500')}`}>{config.name}</h3><p className="text-[10px] sm:text-xs text-slate-400">{config.description}</p></div>
+                  {isActive && <CheckCircle2 className={`ml-auto ${config.text}`} size={18} />}
                 </button>
               );
             })}
           </div>
 
           {(activeRoom === 'vermelha' || activeRoom === 'amarela') && (
-             <div className="flex justify-center"><button onClick={() => setShowCalculatorModal(true)} className={`px-6 py-2 rounded-full font-bold text-sm flex items-center gap-2 transition-colors border ${isDarkMode ? 'bg-rose-900/30 text-rose-300 border-rose-800 hover:bg-rose-900/50' : 'bg-rose-100 hover:bg-rose-200 text-rose-800 border-rose-300'}`}><Calculator size={16}/> Calculadora de Infusão</button></div>
+             <div className="flex justify-center"><button onClick={() => setShowCalculatorModal(true)} className={`w-full sm:w-auto justify-center px-6 py-3 sm:py-2 rounded-full font-bold text-sm flex items-center gap-2 transition-colors border ${isDarkMode ? 'bg-rose-900/30 text-rose-300 border-rose-800 hover:bg-rose-900/50' : 'bg-rose-100 hover:bg-rose-200 text-rose-800 border-rose-300'}`}><Calculator size={16}/> Calculadora de Infusão</button></div>
           )}
 
           <div className={`p-2 rounded-2xl shadow-lg border flex items-center gap-2 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-100'}`}>
-            <Search className="ml-3 text-gray-400" size={20} />
-            <input id="search-input" name="search" type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && generateConduct()} placeholder="Digite o quadro clínico (ex: Cetoacidose, IAM...)" className={`flex-1 py-3 bg-transparent outline-none font-medium ${isDarkMode ? 'text-white placeholder-slate-600' : 'text-slate-800'}`} />
-            <button aria-label="Gerar Conduta" onClick={() => generateConduct()} disabled={loading} className={`px-6 py-3 rounded-xl font-bold text-white flex items-center gap-2 transition-all min-w-[130px] justify-center ${loading ? 'bg-slate-600' : 'bg-blue-900 hover:bg-blue-800'}`}>
+            <Search className="ml-3 text-gray-400 shrink-0" size={20} />
+            <input id="search-input" name="search" type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && generateConduct()} placeholder="Qual a condição clínica?" className={`flex-1 py-3 bg-transparent outline-none font-medium min-w-0 ${isDarkMode ? 'text-white placeholder-slate-600' : 'text-slate-800'}`} />
+            <button aria-label="Gerar Conduta" onClick={() => generateConduct()} disabled={loading} className={`px-4 sm:px-6 py-3 rounded-xl font-bold text-white flex items-center gap-2 transition-all shrink-0 ${loading ? 'bg-slate-600' : 'bg-blue-900 hover:bg-blue-800'}`}>
                 {loading ? (
-                    <div className="flex items-center gap-2"><Loader2 className="animate-spin" size={18} /> {elapsedTime.toFixed(1)}s</div>
+                    <div className="flex items-center gap-2"><Loader2 className="animate-spin" size={18} /> <span className="hidden sm:inline">{elapsedTime.toFixed(1)}s</span></div>
                 ) : (
-                    <>Gerar <ArrowRight size={18} /></>
+                    <><span className="hidden sm:inline">Gerar</span> <ArrowRight size={18} /></>
                 )}
             </button>
           </div>
@@ -641,56 +639,57 @@ function EmergencyGuideAppContent() {
           {finalTime && !loading && (
              <div className="flex justify-center -mt-4 animate-in fade-in slide-in-from-top-1">
                  <span className={`text-[10px] font-bold px-3 py-1 rounded-full border flex items-center gap-1 ${isDarkMode ? 'bg-slate-900 border-slate-700 text-slate-400' : 'bg-white border-gray-200 text-slate-500'}`}>
-                    <Timer size={10} /> Tempo de resposta: {finalTime} segundos
+                    <Timer size={10} /> Tempo: {finalTime}s
                  </span>
              </div>
           )}
 
-          {recentSearches.length > 0 && (<div className="flex flex-wrap gap-2 px-1"><div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase mr-2"><History size={14} /> Recentes</div>{recentSearches.map((search, idx) => (<button key={idx} onClick={() => {setActiveRoom(search.room); setSearchQuery(search.query);}} className={`flex items-center gap-2 text-xs px-3 py-1 border rounded-full transition-colors ${isDarkMode ? 'bg-slate-900 border-slate-700 hover:border-blue-500 hover:text-blue-400 text-slate-300' : 'bg-white border-gray-200 hover:border-blue-300 hover:text-blue-700'}`}><div className={`w-2 h-2 rounded-full shrink-0 ${search.room === 'verde' ? 'bg-emerald-500' : search.room === 'amarela' ? 'bg-amber-500' : 'bg-rose-500'}`} />{search.query}</button>))}</div>)}
+          {recentSearches.length > 0 && (<div className="flex flex-wrap gap-2 px-1"><div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase mr-2"><History size={14} /> Recentes</div>{recentSearches.map((search, idx) => (<button key={idx} onClick={() => {setActiveRoom(search.room); setSearchQuery(search.query);}} className={`flex items-center gap-2 text-[10px] sm:text-xs px-2.5 py-1 border rounded-full transition-colors ${isDarkMode ? 'bg-slate-900 border-slate-700 hover:border-blue-500 hover:text-blue-400 text-slate-300' : 'bg-white border-gray-200 hover:border-blue-300 hover:text-blue-700'}`}><div className={`w-1.5 h-1.5 rounded-full shrink-0 ${search.room === 'verde' ? 'bg-emerald-500' : search.room === 'amarela' ? 'bg-amber-500' : 'bg-rose-500'}`} />{search.query}</button>))}</div>)}
           {errorMsg && <div className={`px-4 py-3 rounded-xl border flex items-center gap-3 text-sm font-medium ${isDarkMode ? 'bg-red-900/30 text-red-300 border-red-800' : 'bg-red-50 text-red-700 border-red-200'}`}><AlertCircle size={18} /> {errorMsg}</div>}
         </div>
 
         {conduct && (
-          <div ref={resultsRef} className="animate-in slide-in-from-bottom-4 fade-in duration-500 space-y-6">
+          <div ref={resultsRef} className="animate-in slide-in-from-bottom-4 fade-in duration-500 space-y-6 pb-20">
             {activeRoom === 'verde' && (
-              <div className={`border-l-4 border-amber-500 p-4 rounded-r-xl flex items-center justify-between gap-4 ${isDarkMode ? 'bg-amber-900/20' : 'bg-amber-50'}`}>
+              <div className={`border-l-4 border-amber-500 p-4 rounded-r-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${isDarkMode ? 'bg-amber-900/20' : 'bg-amber-50'}`}>
                 <div className="flex items-center gap-3"><div className={`p-2 rounded-full ${isDarkMode ? 'bg-amber-900/50 text-amber-400' : 'bg-amber-100 text-amber-600'}`}><AlertTriangle size={20} /></div><div><h4 className={`text-sm font-bold ${isDarkMode ? 'text-amber-300' : 'text-amber-900'}`}>Caso mais grave que o esperado?</h4><p className={`text-xs ${isDarkMode ? 'text-amber-400/70' : 'text-amber-700'}`}>Gere uma conduta de média complexidade.</p></div></div>
-                <button onClick={() => generateConduct('amarela')} className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide transition-all shadow-sm hover:shadow-md flex items-center gap-2 ${isDarkMode ? 'bg-amber-600 hover:bg-amber-500 text-white' : 'bg-amber-500 hover:bg-amber-600 text-white'}`}>Transferir p/ Observação <ArrowRight size={14} /></button>
+                <button onClick={() => generateConduct('amarela')} className={`w-full sm:w-auto px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-2 ${isDarkMode ? 'bg-amber-600 hover:bg-amber-500 text-white' : 'bg-amber-500 hover:bg-amber-600 text-white'}`}>Transferir <ArrowRight size={14} /></button>
               </div>
             )}
 
-            <div className="flex justify-between items-start">
+            <div className="flex flex-col sm:flex-row justify-between items-start gap-3">
                <div>
                   <div className="flex flex-wrap gap-2 mb-2"><span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase text-white ${roomConfig[activeRoom].accent.replace('bg-', 'bg-')}`}>{conduct.classificacao}</span>{conduct.estadiamento && <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-800 text-white">{conduct.estadiamento}</span>}</div>
-                  <h2 className={`text-3xl font-bold ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>{conduct.condicao}</h2>
-                  {conduct.guideline_referencia && (<p className="text-xs text-slate-500 mt-1 flex items-center gap-1"><BookOpen size={12} /> Fonte: <span className="font-medium">{conduct.guideline_referencia}</span></p>)}
+                  <h2 className={`text-2xl sm:text-3xl font-bold leading-tight ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>{conduct.condicao}</h2>
+                  {conduct.guideline_referencia && (<p className="text-xs text-slate-500 mt-1 flex items-center gap-1"><BookOpen size={12} /> <span className="truncate max-w-[250px] sm:max-w-none font-medium">{conduct.guideline_referencia}</span></p>)}
                </div>
-               <div className="flex gap-2">
+               <div className="flex gap-2 self-end sm:self-auto">
                  <button onClick={toggleFavorite} className={`p-2 rounded-full transition-colors ${isCurrentConductFavorite ? (isDarkMode ? 'bg-yellow-900/30 text-yellow-400' : 'bg-yellow-100 text-yellow-500') : (isDarkMode ? 'text-slate-600 hover:bg-slate-800 hover:text-yellow-400' : 'text-gray-400 hover:bg-gray-100 hover:text-yellow-400')}`} title="Favoritar"><Star size={24} fill={isCurrentConductFavorite ? "currentColor" : "none"} /></button>
                  <button onClick={() => setConduct(null)} className={`p-2 rounded-full ${isDarkMode ? 'hover:bg-slate-800 text-slate-500' : 'hover:bg-gray-200 text-gray-500'}`}><X size={24}/></button>
                </div>
             </div>
 
-            <div className={`p-6 rounded-2xl shadow-sm border flex gap-4 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
-               <div className={`p-2 rounded-full h-fit ${isDarkMode ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-50 text-blue-600'}`}><User size={24} /></div>
-               <div><h3 className={`font-bold mb-1 ${isDarkMode ? 'text-slate-200' : 'text-slate-900'}`}>Resumo Clínico e Fisiopatologia</h3><p className={`leading-relaxed text-sm ${isDarkMode ? 'text-slate-400' : 'text-slate-700'}`}>{conduct.resumo_clinico}</p></div>
+            <div className={`p-4 sm:p-6 rounded-2xl shadow-sm border flex gap-4 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
+               <div className={`p-2 rounded-full h-fit shrink-0 ${isDarkMode ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-50 text-blue-600'}`}><User size={24} /></div>
+               <div><h3 className={`font-bold mb-1 ${isDarkMode ? 'text-slate-200' : 'text-slate-900'}`}>Resumo Clínico</h3><p className={`leading-relaxed text-sm ${isDarkMode ? 'text-slate-400' : 'text-slate-700'}`}>{conduct.resumo_clinico}</p></div>
             </div>
 
             {conduct.xabcde_trauma && (
-              <div className={`border p-5 rounded-2xl ${isDarkMode ? 'bg-orange-900/20 border-orange-900/50' : 'bg-orange-50 border-orange-200'}`}>
-                <h3 className={`font-bold flex items-center gap-2 mb-3 uppercase tracking-wide ${isDarkMode ? 'text-orange-400' : 'text-orange-900'}`}><Skull size={20}/> Protocolo de Trauma (ATLS - xABCDE)</h3>
+              <div className={`border p-4 sm:p-5 rounded-2xl ${isDarkMode ? 'bg-orange-900/20 border-orange-900/50' : 'bg-orange-50 border-orange-200'}`}>
+                <h3 className={`font-bold flex items-center gap-2 mb-3 uppercase tracking-wide text-sm ${isDarkMode ? 'text-orange-400' : 'text-orange-900'}`}><Skull size={18}/> Protocolo Trauma</h3>
                 <div className="space-y-3">{Object.entries(conduct.xabcde_trauma).map(([key, value]) => (<div key={key} className={`flex gap-3 items-start p-2 rounded border ${isDarkMode ? 'bg-slate-900/60 border-orange-900/30' : 'bg-white/60 border-orange-100'}`}><div className="bg-orange-600 text-white w-6 h-6 rounded flex items-center justify-center font-bold uppercase text-xs shrink-0">{key}</div><p className={`text-sm ${isDarkMode ? 'text-orange-200' : 'text-orange-950'}`}>{value}</p></div>))}</div>
               </div>
             )}
 
             {conduct.criterios_gravidade?.length > 0 && (
-              <div className={`border p-5 rounded-2xl ${isDarkMode ? 'bg-rose-900/20 border-rose-900/50' : 'bg-rose-50 border-rose-100'}`}>
+              <div className={`border p-4 sm:p-5 rounded-2xl ${isDarkMode ? 'bg-rose-900/20 border-rose-900/50' : 'bg-rose-50 border-rose-100'}`}>
                 <h3 className={`font-bold flex items-center gap-2 mb-3 text-sm uppercase ${isDarkMode ? 'text-rose-400' : 'text-rose-800'}`}><AlertTriangle size={18}/> Sinais de Alarme</h3>
-                <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-3">{conduct.criterios_gravidade.map((crit, i) => (<div key={i} className={`p-2.5 rounded-lg border text-sm font-medium flex gap-2 ${isDarkMode ? 'bg-slate-900/80 border-rose-900/30 text-rose-200' : 'bg-white/80 border-rose-100/50 text-rose-900'}`}><div className="mt-1 w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"/>{crit}</div>))}</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">{conduct.criterios_gravidade.map((crit, i) => (<div key={i} className={`p-2.5 rounded-lg border text-sm font-medium flex gap-2 ${isDarkMode ? 'bg-slate-900/80 border-rose-900/30 text-rose-200' : 'bg-white/80 border-rose-100/50 text-rose-900'}`}><div className="mt-1 w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"/>{crit}</div>))}</div>
               </div>
             )}
 
-            <div className="grid lg:grid-cols-12 gap-6 items-start">
+            {/* Grid Principal Adaptável */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
               <div className="lg:col-span-4 space-y-6">
                 <div className={`rounded-2xl shadow-sm border overflow-hidden ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
                    <div className={`px-5 py-3 border-b flex items-center gap-2 ${isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-100'}`}><Activity size={18} className="text-slate-500"/><h3 className={`font-bold text-sm uppercase ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>Avaliação Inicial</h3></div>
@@ -704,7 +703,7 @@ function EmergencyGuideAppContent() {
                 </div>
                 
                 <div className={`rounded-2xl shadow-sm border overflow-hidden ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
-                   <div className={`px-5 py-3 border-b flex items-center gap-2 ${isDarkMode ? 'bg-blue-900/20 border-slate-800' : 'bg-blue-50 border-blue-100'}`}><Search size={18} className="text-blue-600"/><h3 className={`font-bold text-sm uppercase ${isDarkMode ? 'text-blue-400' : 'text-blue-900'}`}>Investigação Diagnóstica</h3></div>
+                   <div className={`px-5 py-3 border-b flex items-center gap-2 ${isDarkMode ? 'bg-blue-900/20 border-slate-800' : 'bg-blue-50 border-blue-100'}`}><Search size={18} className="text-blue-600"/><h3 className={`font-bold text-sm uppercase ${isDarkMode ? 'text-blue-400' : 'text-blue-900'}`}>Investigação</h3></div>
                    <div className="p-5 space-y-4 text-sm">
                      {conduct.achados_exames?.ecg && <div><div className={`flex items-center gap-2 font-bold mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}><HeartPulse size={14} className="text-rose-500"/> ECG</div><p className={`p-2 rounded border ${isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>{conduct.achados_exames.ecg}</p></div>}
                      {conduct.achados_exames?.laboratorio && <div><div className={`flex items-center gap-2 font-bold mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}><Microscope size={14} className="text-purple-500"/> Laboratório</div><p className={`p-2 rounded border ${isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>{conduct.achados_exames.laboratorio}</p></div>}
@@ -713,7 +712,7 @@ function EmergencyGuideAppContent() {
                 </div>
 
                 <div className={`rounded-2xl shadow-sm border overflow-hidden ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
-                   <div className={`px-5 py-3 border-b flex items-center gap-2 ${isDarkMode ? 'bg-indigo-900/20 border-slate-800' : 'bg-indigo-50 border-indigo-100'}`}><FileText size={18} className="text-indigo-600"/><h3 className={`font-bold text-sm uppercase ${isDarkMode ? 'text-indigo-400' : 'text-indigo-900'}`}>Critérios de Desfecho</h3></div>
+                   <div className={`px-5 py-3 border-b flex items-center gap-2 ${isDarkMode ? 'bg-indigo-900/20 border-slate-800' : 'bg-indigo-50 border-indigo-100'}`}><FileText size={18} className="text-indigo-600"/><h3 className={`font-bold text-sm uppercase ${isDarkMode ? 'text-indigo-400' : 'text-indigo-900'}`}>Desfecho</h3></div>
                    <div className="p-5 space-y-4 text-sm">
                      <div className={`p-3 rounded-lg border ${isDarkMode ? 'bg-amber-900/20 border-amber-900/50' : 'bg-amber-50 border-amber-100'}`}><span className={`text-xs font-bold uppercase block mb-1 ${isDarkMode ? 'text-amber-400' : 'text-amber-800'}`}>Internação / UTI</span><ul className="space-y-1">{conduct.criterios_internacao?.map((c,i)=><li key={i} className={`flex gap-2 ${isDarkMode ? 'text-amber-200' : 'text-amber-900'}`}><div className="mt-1.5 w-1 h-1 bg-amber-500 rounded-full shrink-0"/>{c}</li>)}</ul></div>
                      <div className={`p-3 rounded-lg border ${isDarkMode ? 'bg-green-900/20 border-green-900/50' : 'bg-green-50 border-green-100'}`}><span className={`text-xs font-bold uppercase block mb-1 ${isDarkMode ? 'text-green-400' : 'text-green-800'}`}>Critérios de Alta</span><ul className="space-y-1">{conduct.criterios_alta?.map((c,i)=><li key={i} className={`flex gap-2 ${isDarkMode ? 'text-green-200' : 'text-green-900'}`}><div className="mt-1.5 w-1 h-1 bg-green-500 rounded-full shrink-0"/>{c}</li>)}</ul></div>
@@ -757,14 +756,14 @@ function EmergencyGuideAppContent() {
                    )}
                 </div>
 
-                <div className={`rounded-2xl border p-6 shadow-sm ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
+                <div className={`rounded-2xl border p-4 sm:p-6 shadow-sm ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
                    <h3 className={`font-bold mb-5 flex items-center gap-2 ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}><ArrowRight className="text-purple-600"/> Fluxo de Escalonamento</h3>
                    <div className="space-y-6 relative">
                      <div className={`absolute left-3.5 top-2 bottom-2 w-0.5 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}></div>
                      {conduct.escalonamento_terapeutico?.map((step, i) => (
                        <div key={i} className="relative flex gap-4">
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 z-10 ring-4 ${isDarkMode ? 'ring-slate-900' : 'ring-white'} ${i===0 ? (isDarkMode ? 'bg-purple-900/50 text-purple-300' : 'bg-purple-100 text-purple-700') : i===1 ? (isDarkMode ? 'bg-amber-900/50 text-amber-300' : 'bg-amber-100 text-amber-700') : (isDarkMode ? 'bg-rose-900/50 text-rose-300' : 'bg-rose-100 text-rose-700')}`}>{i+1}</div>
-                          <div className="pt-1"><h4 className="text-xs font-bold uppercase text-slate-400 mb-1">{step.passo}</h4><p className={`leading-relaxed ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{step.descricao}</p></div>
+                          <div className="pt-1"><h4 className="text-xs font-bold uppercase text-slate-400 mb-1">{step.passo}</h4><p className={`leading-relaxed text-sm ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{step.descricao}</p></div>
                        </div>
                      ))}
                    </div>
