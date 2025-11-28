@@ -36,6 +36,16 @@ import { doc, setDoc, getDoc, collection, query as firestoreQuery, where, orderB
 
 const appId = (typeof __app_id !== 'undefined') ? __app_id : 'emergency-guide-app';
 
+// --- FUNÇÃO AUXILIAR ---
+const getVitalIcon = (text) => {
+  const t = text.toLowerCase();
+  if (t.includes('fc') || t.includes('bpm')) return <HeartPulse size={16} className="text-rose-500" />;
+  if (t.includes('pa') || t.includes('mmhg') || t.includes('pam')) return <Activity size={16} className="text-blue-500" />;
+  if (t.includes('sat') || t.includes('o2')) return <Droplet size={16} className="text-cyan-500" />;
+  if (t.includes('fr') || t.includes('resp')) return <Wind size={16} className="text-teal-500" />;
+  return <Activity size={16} className="text-slate-400" />;
+};
+
 // --- ERROR BOUNDARY ---
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -57,7 +67,7 @@ function EmergencyGuideAppContent() {
   const [authLoading, setAuthLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [isCloudConnected, setIsCloudConnected] = useState(false);
-  const [approvalStatus, setApprovalStatus] = useState(null);
+  const [approvalStatus, setApprovalStatus] = useState(null); 
   const [configStatus, setConfigStatus] = useState('verificando');
   const [pendingGoogleUser, setPendingGoogleUser] = useState(null);
 
@@ -156,7 +166,6 @@ function EmergencyGuideAppContent() {
     localStorage.setItem('theme_preference', newMode ? 'dark' : 'light');
   };
 
-  // --- AUTH LISTENER ---
   useEffect(() => {
     if (!auth) return;
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -164,6 +173,7 @@ function EmergencyGuideAppContent() {
         try {
           const userDocRef = doc(db, 'artifacts', appId, 'users', user.uid);
           const docSnap = await getDoc(userDocRef);
+          
           if (docSnap.exists()) {
             const userData = docSnap.data();
             if (userData.status === 'approved') {
@@ -181,7 +191,10 @@ function EmergencyGuideAppContent() {
             setCurrentUser(null);
             setApprovalStatus(null);
           }
-        } catch (e) { setLoginError("Erro ao verificar permissões."); }
+        } catch (e) {
+          console.error("Erro ao buscar perfil:", e);
+          setLoginError("Erro ao verificar permissões.");
+        }
       } else {
         setCurrentUser(null);
         setApprovalStatus(null);
@@ -231,8 +244,14 @@ function EmergencyGuideAppContent() {
     setAuthLoading(true); setLoginError('');
     try { await signInWithPopup(auth, googleProvider); } 
     catch (error) { 
-        if (error.code === 'auth/unauthorized-domain') setLoginError("Erro: Domínio não autorizado no Firebase.");
-        else setLoginError("Erro no login: " + error.message); 
+        console.error(error);
+        if (error.code === 'auth/unauthorized-domain') {
+            setLoginError("Erro: Domínio não autorizado no Firebase.");
+        } else if (error.code === 'auth/popup-closed-by-user') {
+            setLoginError("Login cancelado.");
+        } else {
+            setLoginError("Erro no login: " + error.message); 
+        }
     } 
     finally { setAuthLoading(false); }
   };
@@ -250,7 +269,10 @@ function EmergencyGuideAppContent() {
           });
           setPendingGoogleUser(null);
           setApprovalStatus('pending'); 
-      } catch (error) { setLoginError("Erro ao salvar dados do perfil."); }
+      } catch (error) {
+          console.error("Erro ao salvar perfil:", error);
+          setLoginError("Erro ao salvar dados do perfil.");
+      }
   };
 
   const handleLogout = async () => {
@@ -259,60 +281,6 @@ function EmergencyGuideAppContent() {
   };
 
   const handleNoteChange = (e) => setUserNotes(e.target.value);
-
-  // --- CORE LOGIC & HELPERS (MOVIDOS PARA DENTRO PARA SEGURANÇA) ---
-  
-  // Helper de Ícones
-  const getVitalIcon = (text) => {
-    const t = text.toLowerCase();
-    if (t.includes('fc') || t.includes('bpm')) return <HeartPulse size={16} className="text-rose-500" />;
-    if (t.includes('pa') || t.includes('mmhg') || t.includes('pam')) return <Activity size={16} className="text-blue-500" />;
-    if (t.includes('sat') || t.includes('o2')) return <Droplet size={16} className="text-cyan-500" />;
-    if (t.includes('fr') || t.includes('resp')) return <Wind size={16} className="text-teal-500" />;
-    return <Activity size={16} className="text-slate-400" />;
-  };
-
-  // Mock de Contingência
-  const getMockConduct = (query, room) => ({
-      condicao: query ? (query.charAt(0).toUpperCase() + query.slice(1)) : "Conduta Padrão",
-      classificacao: room === 'vermelha' ? "Emergência (Vermelho)" : room === 'amarela' ? "Urgência (Amarelo)" : "Pouco Urgente (Verde)",
-      estadiamento: "Protocolo Institucional",
-      guideline_referencia: "Diretrizes SBC / AMIB / UpToDate 2024",
-      resumo_clinico: `Paciente com quadro sugestivo de ${query}. Necessita de avaliação imediata dos sinais vitais e estabilização hemodinâmica conforme a gravidade.`,
-      criterios_gravidade: ["Instabilidade Hemodinâmica", "Rebaixamento do Nível de Consciência", "Insuficiência Respiratória Aguda", "Sinais de Sepse"],
-      xabcde_trauma: {
-          x: "Controle de hemorragias",
-          a: "Vias aéreas e coluna cervical",
-          b: "Ventilação e oxigenação",
-          c: "Circulação",
-          d: "Neurológico",
-          e: "Exposição"
-      },
-      avaliacao_inicial: {
-          sinais_vitais_alvos: ["SpO2 > 94%", "PAS > 90 mmHg", "FC < 100 bpm", "Temp < 37.8ºC"],
-          exames_prioridade1: ["Hemograma Completo", "PCR / Lactato", "Eletrólitos", "Função Renal", "ECG 12 Derivações"],
-          exames_complementares: ["Raio-X de Tórax", "Troponina (se dor torácica)", "Gasometria Arterial", "Urina I"]
-      },
-      achados_exames: {
-          ecg: "Avaliar isquemia, sobrecarga ou arritmias.",
-          laboratorio: "Corrigir distúrbios hidroeletrolíticos.",
-          imagem: "Avaliar consolidações ou congestão."
-      },
-      tratamento_medicamentoso: [
-          { farmaco: "Oxigênio", dose: "Manter SpO2 alvo", via: "Inalatório", indicacao: "Hipoxemia", categoria: "Suporte" },
-          { farmaco: "Soro Fisiológico 0.9%", dose: "500ml bolus", via: "IV", indicacao: "Expansão se hipotensão", categoria: "Hidratação" },
-          { farmaco: "Dipirona", dose: "1g", via: "IV", indicacao: "Analgesia / Febre", categoria: "Sintomáticos" },
-          { farmaco: "Ondansetrona", dose: "4mg", via: "IV", indicacao: "Náuseas", categoria: "Sintomáticos" },
-          { farmaco: "Omeprazol", dose: "40mg", via: "IV", indicacao: "Proteção Gástrica", categoria: "Profilaxias" }
-      ],
-      escalonamento_terapeutico: [
-          { passo: "1. Estabilização", descricao: "Garantir via aérea permeável e acesso venoso." },
-          { passo: "2. Monitorização", descricao: "Monitorização contínua de sinais vitais." },
-          { passo: "3. Reavaliação", descricao: "Reavaliar resposta às medidas iniciais a cada 30-60 minutos." }
-      ],
-      criterios_internacao: ["Falha na estabilização inicial", "Necessidade de suporte intensivo"],
-      criterios_alta: ["Estabilidade clínica por 6h", "Sinais vitais normais"]
-  });
 
   const toggleFavorite = async () => {
     if (!currentUser || !conduct) { showError("Necessário estar online."); return; }
@@ -437,19 +405,11 @@ function EmergencyGuideAppContent() {
       } catch (e) {}
     }
 
-    // Tenta API com Fallback Robusto
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s Timeout
-
       const response = await fetch('/api/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ searchQuery, activeRoom: targetRoom }),
-        signal: controller.signal
+        body: JSON.stringify({ searchQuery, activeRoom: targetRoom })
       });
-      
-      clearTimeout(timeoutId);
-
       if (!response.ok) throw new Error('Erro IA.');
       const parsedConduct = await response.json();
       setConduct(parsedConduct);
@@ -459,16 +419,7 @@ function EmergencyGuideAppContent() {
         await setDoc(docRef, { query: searchQuery, room: targetRoom, conductData: parsedConduct, isFavorite: false, lastAccessed: new Date().toISOString() });
       }
       saveToHistory(searchQuery, targetRoom);
-    } catch (error) { 
-        console.log("Usando conduta de contingência.");
-        const mockConduct = getMockConduct(searchQuery, targetRoom);
-        setConduct(mockConduct);
-        setErrorMsg("Modo Offline: Conduta simulada.");
-        setTimeout(() => setErrorMsg(''), 4000);
-    } finally { 
-        setLoading(false); 
-        setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
-    }
+    } catch (error) { showError("Erro ao gerar conduta."); } finally { setLoading(false); }
   };
 
   const roomConfig = {
