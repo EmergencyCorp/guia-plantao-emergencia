@@ -1,6 +1,7 @@
 // Arquivo: components/modals/ImageAnalysisModal.jsx
 
-import React from 'react';
+// CORREÇÃO: Adicionando useRef na importação
+import React, { useRef } from 'react';
 import { Camera, X, Upload, Eye, Microscope, Loader2, AlertTriangle } from 'lucide-react';
 
 
@@ -11,7 +12,7 @@ export default function ImageAnalysisModal({
 }) {
 	if (!isOpen) return null;
 
-    // --- CORREÇÃO: Função para forçar o clique no input file
+    // --- CORREÇÃO: Inicializando o useRef para o input de arquivo
     const fileInputRef = useRef(null);
     const triggerFileInput = () => {
         if (fileInputRef.current) {
