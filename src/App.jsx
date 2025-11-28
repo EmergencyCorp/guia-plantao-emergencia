@@ -6,7 +6,7 @@ import {
   LogOut, History, Cloud, CloudOff, HeartPulse, Microscope, Image as ImageIcon, 
   Wind, Droplet, Skull, Printer, Calculator, Star, Utensils, Zap, Camera, 
   BedDouble, ClipboardList, Edit, LayoutGrid, ChevronDown, FileText, Droplets,
-  Pill, HelpCircle, UserCheck, Lock, MessageSquare
+  Pill, HelpCircle, UserCheck, Lock
 } from 'lucide-react';
 
 // --- CONFIG & COMPONENTS ---
@@ -28,7 +28,6 @@ import MedicalScoresModal from './components/modals/MedicalScoresModal';
 import QuickPrescriptionsModal from './components/modals/QuickPrescriptionsModal';
 import PhysicalExamModal from './components/modals/PhysicalExamModal';
 import CompleteProfileModal from './components/modals/CompleteProfileModal';
-import FeedbackModal from './components/modals/FeedbackModal';
 
 // --- FIREBASE IMPORTS ---
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
@@ -36,7 +35,7 @@ import { doc, setDoc, getDoc, collection, query as firestoreQuery, where, orderB
 
 const appId = (typeof __app_id !== 'undefined') ? __app_id : 'emergency-guide-app';
 
-// --- FUNÇÕES AUXILIARES ---
+// --- FUNÇÕES AUXILIARES GLOBAIS ---
 const getVitalIcon = (text) => {
   const t = text.toLowerCase();
   if (t.includes('fc') || t.includes('bpm')) return <HeartPulse size={16} className="text-rose-500" />;
@@ -135,7 +134,6 @@ function EmergencyGuideAppContent() {
   const [showScoresModal, setShowScoresModal] = useState(false);
   const [showQuickPrescriptions, setShowQuickPrescriptions] = useState(false);
   const [showPhysicalExam, setShowPhysicalExam] = useState(false);
-  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 
   // Specific Data States
   const [userNotes, setUserNotes] = useState('');
@@ -435,7 +433,6 @@ function EmergencyGuideAppContent() {
 
     const docId = getConductDocId(searchQuery, targetRoom);
     
-    // 1. Cache Check
     if (currentUser && db) {
       try {
         const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', docId);
@@ -450,10 +447,9 @@ function EmergencyGuideAppContent() {
       } catch (e) {}
     }
 
-    // 2. API Attempt with Fallback
     try {
+      // Timeout de 6 segundos para fallback rápido
       const controller = new AbortController();
-      // Timeout de 6 segundos (ajustável)
       const timeoutId = setTimeout(() => controller.abort(), 6000);
 
       const response = await fetch('/api/generate', {
@@ -474,8 +470,8 @@ function EmergencyGuideAppContent() {
       }
       saveToHistory(searchQuery, targetRoom);
     } catch (error) { 
-        // Fallback se a API falhar ou demorar
-        console.warn("Usando conduta simulada devido a:", error);
+        // Fallback ativado!
+        console.warn("Usando conduta simulada:", error);
         const mockConduct = getMockConduct(searchQuery, targetRoom);
         setConduct(mockConduct);
         setErrorMsg("Modo Offline: Conduta simulada.");
@@ -715,21 +711,6 @@ function EmergencyGuideAppContent() {
         )}
       </main>
 
-      <footer className={`border-t mt-auto ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
-        <div className="max-w-4xl mx-auto px-4 py-8 text-center">
-          <div className="mb-8">
-              <button onClick={() => setShowFeedbackModal(true)} className={`text-sm font-bold flex items-center justify-center gap-2 mx-auto px-4 py-2 rounded-full transition-colors ${isDarkMode ? 'bg-slate-800 text-pink-400 hover:bg-slate-700' : 'bg-white border border-gray-200 text-pink-600 hover:bg-pink-50'}`}>
-                  <MessageSquare size={18} /> Enviar Feedback ou Sugestão
-              </button>
-          </div>
-          <div className={`border rounded-xl p-4 mb-6 flex flex-col md:flex-row gap-4 items-center text-left ${isDarkMode ? 'bg-amber-900/20 border-amber-900/50' : 'bg-amber-50 border-amber-200'}`}>
-             <ShieldAlert className="text-amber-600 shrink-0 w-8 h-8" />
-             <div><h4 className={`font-bold uppercase text-sm mb-1 ${isDarkMode ? 'text-amber-400' : 'text-amber-900'}`}>Aviso Legal Importante</h4><p className={`text-xs leading-relaxed text-justify ${isDarkMode ? 'text-amber-200/90' : 'text-amber-800/90'}`}>Esta é uma ferramenta de <strong>guia de plantão</strong>. O conteúdo pode conter imprecisões.</p></div>
-          </div>
-          <p className="text-xs text-slate-400">&copy; {new Date().getFullYear()} EmergencyCorp.</p>
-        </div>
-      </footer>
-
       {/* RENDERIZAÇÃO DOS MODALS VIA COMPONENTES */}
       <InfusionCalculator isOpen={showCalculatorModal} onClose={() => setShowCalculatorModal(false)} isDarkMode={isDarkMode} />
       <NotepadModal isOpen={showNotepad} onClose={() => setShowNotepad(false)} isDarkMode={isDarkMode} userNotes={userNotes} handleNoteChange={handleNoteChange} currentUser={currentUser} isCloudConnected={isCloudConnected} isSaving={isSaving} />
@@ -738,8 +719,21 @@ function EmergencyGuideAppContent() {
       <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} isDarkMode={isDarkMode} />
       <MedicalScoresModal isOpen={showScoresModal} onClose={() => setShowScoresModal(false)} isDarkMode={isDarkMode} />
       <QuickPrescriptionsModal isOpen={showQuickPrescriptions} onClose={() => setShowQuickPrescriptions(false)} isDarkMode={isDarkMode} />
-      <ImageAnalysisModal isOpen={showImageModal} onClose={() => setShowImageModal(false)} isDarkMode={isDarkMode} selectedImage={selectedImage} handleImageUpload={handleImageUpload} imageQuery={imageQuery} setImageQuery={setImageQuery} handleAnalyzeImage={handleAnalyzeImage} isAnalyzingImage={isAnalyzingImage} imageAnalysisResult={imageAnalysisResult} setImageAnalysisResult={setImageAnalysisResult} />
-      <BedsideModal isOpen={showBedsideModal} onClose={() => setShowBedsideModal(false)} isDarkMode={isDarkMode} bedsideAnamnesis={bedsideAnamnesis} setBedsideAnamnesis={setBedsideAnamnesis} bedsideExams={bedsideExams} setBedsideExams={setBedsideExams} generateBedsideConduct={generateBedsideConduct} isGeneratingBedside={isGeneratingBedside} bedsideResult={bedsideResult} />
+      
+      <ImageAnalysisModal 
+        isOpen={showImageModal} onClose={() => setShowImageModal(false)} isDarkMode={isDarkMode}
+        selectedImage={selectedImage} handleImageUpload={handleImageUpload} imageQuery={imageQuery} setImageQuery={setImageQuery}
+        handleAnalyzeImage={handleAnalyzeImage} isAnalyzingImage={isAnalyzingImage} imageAnalysisResult={imageAnalysisResult} setImageAnalysisResult={setImageAnalysisResult}
+      />
+
+      <BedsideModal 
+        isOpen={showBedsideModal} onClose={() => setShowBedsideModal(false)} isDarkMode={isDarkMode}
+        bedsideAnamnesis={bedsideAnamnesis} setBedsideAnamnesis={setBedsideAnamnesis}
+        bedsideExams={bedsideExams} setBedsideExams={setBedsideExams}
+        generateBedsideConduct={generateBedsideConduct} isGeneratingBedside={isGeneratingBedside} bedsideResult={bedsideResult}
+      />
+      
+      {/* RENDERIZAÇÃO DO MODAL DE EXAME FÍSICO E FEEDBACK */}
       <PhysicalExamModal isOpen={showPhysicalExam} onClose={() => setShowPhysicalExam(false)} isDarkMode={isDarkMode} />
       <FeedbackModal isOpen={showFeedbackModal} onClose={() => setShowFeedbackModal(false)} isDarkMode={isDarkMode} currentUser={currentUser} />
     </div>
