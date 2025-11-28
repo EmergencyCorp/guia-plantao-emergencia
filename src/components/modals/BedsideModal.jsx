@@ -1,21 +1,29 @@
 // Arquivo: components/modals/BedsideModal.jsx
 
 import React, { useState, useRef, useEffect } from 'react';
-import { ClipboardList, X, Loader2, UserCheck, Pill, Mic } from 'lucide-react';
+import { ClipboardList, X, Loader2, UserCheck, Pill, Mic, AlertTriangle } from 'lucide-react';
 
-// Função auxiliar para inicializar o Speech Recognition
+// --- HOOK CUSTOMIZADO PARA RECONHECIMENTO DE FALA ---
 const useSpeechRecognition = (onResult) => {
     const [isListening, setIsListening] = useState(false);
     const recognitionRef = useRef(null);
     const textAreaRef = useRef(null);
+    const [isAPISupported, setIsAPISupported] = useState(false);
 
     useEffect(() => {
-        // Verifica se a API está disponível no navegador
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        // Verifica a compatibilidade (Chrome/Safari/Outros)
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition || window.mozSpeechRecognition || window.msSpeechRecognition;
+        
         if (SpeechRecognition) {
+            setIsAPISupported(true);
             const recognition = new SpeechRecognition();
-            recognition.continuous = true; // Continua a escutar
-            recognition.interimResults = true; // Permite resultados intermediários
+            
+            // Configurações para ditado contínuo e feedback
+            recognition.continuous = true; 
+            recognition.interimResults = true; 
+            
+            // Define o idioma principal para o Português do Brasil, melhorando a precisão
+            recognition.lang = 'pt-BR'; 
 
             recognition.onstart = () => {
                 setIsListening(true);
@@ -28,6 +36,8 @@ const useSpeechRecognition = (onResult) => {
             recognition.onerror = (event) => {
                 console.error('Speech Recognition Error:', event.error);
                 setIsListening(false);
+                // Feedback mais explícito ao usuário
+                alert(`Erro de Microfone: ${event.error === 'not-allowed' ? 'Permissão negada. Verifique as configurações do navegador para acesso ao microfone.' : 'Ocorreu um erro. Tente novamente.'}`);
             };
 
             recognition.onresult = (event) => {
@@ -47,19 +57,18 @@ const useSpeechRecognition = (onResult) => {
 
             recognitionRef.current = recognition;
         } else {
-            console.warn("Speech Recognition API não é suportada neste navegador.");
+            setIsAPISupported(false);
         }
 
         return () => {
-            if (recognitionRef.current) {
+            if (recognitionRef.current && isListening) {
                 recognitionRef.current.stop();
             }
         };
-    }, [onResult]);
+    }, [onResult, isListening]); // Adicionado isListening para evitar loop infinito em alguns casos
 
     const startListening = (targetRef) => {
         if (recognitionRef.current && !isListening) {
-            // Salva o alvo (textarea) para direcionar o texto
             textAreaRef.current = targetRef; 
             recognitionRef.current.start();
         }
@@ -71,10 +80,9 @@ const useSpeechRecognition = (onResult) => {
         }
     };
     
-    // Retorna a referência do textarea alvo (usado pela função onResult)
     const getTargetRef = () => textAreaRef.current;
 
-    return { isListening, startListening, stopListening, getTargetRef, isAPISupported: !!recognitionRef.current };
+    return { isListening, startListening, stopListening, getTargetRef, isAPISupported };
 };
 
 
@@ -86,25 +94,32 @@ export default function BedsideModal({
 
     const anamnesisRef = useRef(null);
     const examsRef = useRef(null);
-    const [activeSpeechField, setActiveSpeechField] = useState(null); // 'anamnesis' ou 'exams'
+    const [activeSpeechField, setActiveSpeechField] = useState(null); 
     const [currentInterimTranscript, setCurrentInterimTranscript] = useState('');
 
-    // Função de callback para processar o resultado da fala
     const handleSpeechResult = (final, interim) => {
         const target = speech.getTargetRef();
         if (!target) return;
 
-        const currentText = target === anamnesisRef.current 
+        // Determina o estado (anamnese ou exames) que está sendo atualizado
+        const currentStateValue = target === anamnesisRef.current 
             ? bedsideAnamnesis 
             : bedsideExams;
+            
+        const setStateFunction = target === anamnesisRef.current
+            ? setBedsideAnamnesis
+            : setBedsideExams;
+
 
         // Anexa o resultado final ao estado principal
         if (final) {
-            const newText = currentText + (currentText.endsWith(' ') || currentText === '' ? '' : ' ') + final;
-            target === anamnesisRef.current ? setBedsideAnamnesis(newText) : setBedsideExams(newText);
+            // Garante um espaço se não for o início do texto
+            const separator = currentStateValue.length > 0 && !currentStateValue.endsWith(' ') ? ' ' : '';
+            const newText = currentStateValue + separator + final;
+            setStateFunction(newText);
             setCurrentInterimTranscript('');
         } else {
-            // Exibe o texto intermediário para feedback
+            // Exibe o texto intermediário (feedback visual)
             setCurrentInterimTranscript(interim);
         }
     };
@@ -115,18 +130,24 @@ export default function BedsideModal({
     // Função para alternar o microfone em um campo específico
     const toggleSpeech = (fieldRef, fieldName) => {
         if (!speech.isAPISupported) {
-            alert("O reconhecimento de fala não é suportado no seu navegador.");
+            alert("O ditado por voz não é suportado ou requer a última versão do Chrome/Edge/Safari (HTTPS obrigatório).");
             return;
         }
         
-        if (speech.isListening) {
-            // Se já estiver escutando, pare.
+        if (speech.isListening && activeSpeechField === fieldName) {
+            // Se já estiver escutando no campo ATUAL, pare.
             speech.stopListening();
             setActiveSpeechField(null);
-        } else {
+        } else if (!speech.isListening) {
             // Se não estiver escutando, comece no campo selecionado.
             speech.startListening(fieldRef);
             setActiveSpeechField(fieldName);
+        } else if (speech.isListening && activeSpeechField !== fieldName) {
+            // Se estiver escutando em outro campo, pare e reinicie no novo.
+            speech.stopListening();
+            setActiveSpeechField(fieldName);
+            // Pequeno delay para reiniciar após parar (necessário em alguns navegadores)
+            setTimeout(() => speech.startListening(fieldRef), 100);
         }
     };
     
@@ -134,17 +155,35 @@ export default function BedsideModal({
     const getFieldContent = (field) => {
         const text = field === 'anamnesis' ? bedsideAnamnesis : bedsideExams;
         if (speech.isListening && activeSpeechField === field) {
-            return text + (currentInterimTranscript ? ` (${currentInterimTranscript})` : '');
+            // Retorna o texto atual + o transcrito intermediário (em cinza, se aplicável)
+            return text + (currentInterimTranscript ? ` ${currentInterimTranscript}` : '');
         }
         return text;
     };
+
+    // Estilo especial para o placeholder/texto intermediário
+    const getTextAreaClasses = (field) => {
+        const baseClasses = `w-full p-3 rounded-xl border focus:ring-2 focus:ring-indigo-500 outline-none text-sm leading-relaxed resize-none ${isDarkMode ? 'bg-slate-800 border-slate-700 placeholder-slate-500' : 'bg-gray-50 border-gray-200'} h-40`;
+        const activeClasses = speech.isListening && activeSpeechField === field 
+            ? `ring-2 ring-red-500 ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`
+            : (isDarkMode ? 'text-slate-200' : 'text-slate-800');
+            
+        // Adiciona classe customizada para o texto intermediário se estiver ativo
+        const interimClass = speech.isListening && activeSpeechField === field && currentInterimTranscript 
+            ? 'interim-speech' // Classe CSS customizada para estilizar o texto intermediário
+            : '';
+            
+        return `${baseClasses} ${activeClasses} ${interimClass} h-40`;
+    }
     
-    // Efeito para garantir que se fechar o modal, a escuta pare
-    useEffect(() => {
-        if (!isOpen && speech.isListening) {
-            speech.stopListening();
-        }
-    }, [isOpen, speech.isListening]);
+    // Adiciona CSS para o texto intermediário (precisa ser adicionado globalmente ou em um arquivo CSS)
+    // Para fins deste exemplo, vou mantê-lo como um lembrete.
+    // Você pode ignorar esta parte se já tiver um arquivo CSS onde adicionar.
+    if (speech.isAPISupported) {
+         // O CSS correto deve ser adicionado globalmente:
+         // textarea.interim-speech::placeholder { color: #ccc; }
+    }
+
 
 	return (
 		<div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
@@ -156,13 +195,22 @@ export default function BedsideModal({
 					
 				<div className="p-6 overflow-y-auto flex-1 grid md:grid-cols-2 gap-6">
 					<div className="space-y-4">
+                        
+                        {/* --- AVISO DE COMPATIBILIDADE --- */}
+                        {!speech.isAPISupported && (
+                            <div className={`border p-3 rounded-lg flex gap-3 items-start text-sm ${isDarkMode ? 'bg-yellow-900/20 border-yellow-800/30 text-yellow-200' : 'bg-yellow-50 border-yellow-100 text-yellow-800'}`}>
+                                <AlertTriangle className="shrink-0 w-5 h-5 mt-0.5" />
+                                <p>O ditado por voz pode não ser suportado neste dispositivo/navegador. Tente usar o Chrome ou Edge em uma conexão HTTPS.</p>
+                            </div>
+                        )}
+                        
                         {/* --- ANAMNESE --- */}
 						<div>
 							<label className={`text-xs font-bold uppercase mb-1 block ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>Anamnese Completa</label>
                             <div className="relative">
                                 <textarea 
                                     ref={anamnesisRef}
-                                    className={`w-full h-40 p-3 rounded-xl border focus:ring-2 focus:ring-indigo-500 outline-none text-sm leading-relaxed resize-none ${isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-200 placeholder-slate-500' : 'bg-gray-50 border-gray-200 text-slate-800'} ${speech.isListening && activeSpeechField === 'anamnesis' ? 'ring-2 ring-red-500' : ''}`} 
+                                    className={getTextAreaClasses('anamnesis').replace('h-40', '') + ' h-40'} // Garante altura
                                     placeholder="Descreva a história clínica..." 
                                     value={getFieldContent('anamnesis')} 
                                     onChange={(e) => setBedsideAnamnesis(e.target.value)} 
@@ -170,7 +218,7 @@ export default function BedsideModal({
                                 <button 
                                     onClick={() => toggleSpeech(anamnesisRef.current, 'anamnesis')}
                                     className={`absolute right-3 bottom-3 p-2 rounded-full transition-colors ${speech.isListening && activeSpeechField === 'anamnesis' ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-indigo-600 text-white hover:bg-indigo-700'} ${speech.isListening && activeSpeechField !== 'anamnesis' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                    disabled={speech.isListening && activeSpeechField !== 'anamnesis'}
+                                    disabled={speech.isListening && activeSpeechField !== 'anamnesis' || !speech.isAPISupported}
                                 >
                                     {speech.isListening && activeSpeechField === 'anamnesis' ? <Loader2 size={18} className="animate-spin" /> : <Mic size={18} />}
                                 </button>
@@ -183,7 +231,7 @@ export default function BedsideModal({
                             <div className="relative">
 							    <textarea 
                                     ref={examsRef}
-                                    className={`w-full h-32 p-3 rounded-xl border focus:ring-2 focus:ring-indigo-500 outline-none text-sm leading-relaxed resize-none ${isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-200 placeholder-slate-500' : 'bg-gray-50 border-gray-200 text-slate-800'} ${speech.isListening && activeSpeechField === 'exams' ? 'ring-2 ring-red-500' : ''}`} 
+                                    className={getTextAreaClasses('exams').replace('h-40', '') + ' h-32'} // Garante altura
                                     placeholder="PA, FC, exames..." 
                                     value={getFieldContent('exams')} 
                                     onChange={(e) => setBedsideExams(e.target.value)} 
@@ -191,7 +239,7 @@ export default function BedsideModal({
                                 <button 
                                     onClick={() => toggleSpeech(examsRef.current, 'exams')}
                                     className={`absolute right-3 bottom-3 p-2 rounded-full transition-colors ${speech.isListening && activeSpeechField === 'exams' ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-indigo-600 text-white hover:bg-indigo-700'} ${speech.isListening && activeSpeechField !== 'exams' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                    disabled={speech.isListening && activeSpeechField !== 'exams'}
+                                    disabled={speech.isListening && activeSpeechField !== 'exams' || !speech.isAPISupported}
                                 >
                                     {speech.isListening && activeSpeechField === 'exams' ? <Loader2 size={18} className="animate-spin" /> : <Mic size={18} />}
                                 </button>
