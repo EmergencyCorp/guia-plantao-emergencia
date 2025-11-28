@@ -591,7 +591,7 @@ function EmergencyGuideAppContent() {
 		}
 	};
     
-    // HANDLER DE UPLOAD DE IMAGEM (Também restaurado/verificado)
+    // HANDLER DE UPLOAD DE IMAGEM (Restaurado e corrigido)
     const handleImageUpload = (e) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
@@ -791,8 +791,8 @@ function EmergencyGuideAppContent() {
 								{showToolsMenu && (
 									<div className={`absolute right-0 top-full mt-2 w-64 rounded-xl shadow-xl border overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
 										<div className="p-1 space-y-1">
-                                            {/* NOVO ITEM DE MENU: CHAT */}
-                                            <button onClick={() => { setShowChatModal(true); setShowToolsMenu(false); setChatHistory([{ role: 'preceptor', text: "Olá Dr(a), sou o Preceptor Sênior da Emergência. Apresente o caso (Anamnese e Sinais Vitais) para iniciarmos a discussão.", timestamp: Date.now() }]); }} className={`w-full text-left px-3 py-3 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-purple-300 hover:bg-slate-800' : 'text-purple-700 hover:bg-purple-50'}`}><MessageCircle size={18} /> Chat Preceptor</button>
+                                            {/* ALTERADO: Nome e ícone */}
+                                            <button onClick={() => { setShowChatModal(true); setShowToolsMenu(false); setChatHistory([{ role: 'preceptor', text: "Olá Dr(a), sou o Preceptor Sênior da Emergência. Apresente o caso (Anamnese e Sinais Vitais) para iniciarmos a discussão.", timestamp: Date.now() }]); }} className={`w-full text-left px-3 py-3 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-purple-300 hover:bg-slate-800' : 'text-purple-700 hover:bg-purple-50'}`}><UserCheck size={18} /> Chat com Dr. SilIA</button>
                                             
                                             {/* ITENS EXISTENTES */}
 											<div className="px-3 py-2 sm:hidden border-b mb-1 border-gray-100 dark:border-gray-800 text-center">
