@@ -6,7 +6,7 @@ import {
   LogOut, History, Cloud, CloudOff, HeartPulse, Microscope, Image as ImageIcon, 
   Wind, Droplet, Skull, Printer, Calculator, Star, Utensils, Zap, Camera, 
   BedDouble, ClipboardList, Edit, LayoutGrid, ChevronDown, FileText, Droplets,
-  Pill, HelpCircle, UserCheck, Lock
+  Pill, HelpCircle, UserCheck, Lock, Timer
 } from 'lucide-react';
 
 // --- CONFIG & COMPONENTS ---
@@ -109,6 +109,10 @@ function EmergencyGuideAppContent() {
   const [favorites, setFavorites] = useState([]);
   const [errorMsg, setErrorMsg] = useState('');
   const resultsRef = useRef(null);
+  
+  // Timer States
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const [finalTime, setFinalTime] = useState(null);
 
   // Modals States
   const [showToolsMenu, setShowToolsMenu] = useState(false);
@@ -142,6 +146,21 @@ function EmergencyGuideAppContent() {
     setErrorMsg(msg);
     setTimeout(() => setErrorMsg(''), 4000);
   };
+
+  // --- TIMER EFFECT ---
+  useEffect(() => {
+    let interval;
+    if (loading) {
+      const startTime = Date.now();
+      interval = setInterval(() => {
+        // Atualiza o tempo decorrido baseado na diferença real de tempo
+        setElapsedTime((Date.now() - startTime) / 1000);
+      }, 100);
+    } else {
+      setElapsedTime(0);
+    }
+    return () => clearInterval(interval);
+  }, [loading]);
 
   // --- INIT ---
   useEffect(() => {
@@ -319,7 +338,7 @@ function EmergencyGuideAppContent() {
     }
   };
 
-  // --- GERAR CONDUTA CORRIGIDA (CACHE SAFE & API SEPARADA) ---
+  // --- GERAR CONDUTA ---
   const generateConduct = async (overrideRoom = null) => {
     if (!searchQuery.trim()) { showError('Digite uma condição clínica.'); return; }
     const targetRoom = overrideRoom || activeRoom;
@@ -327,15 +346,18 @@ function EmergencyGuideAppContent() {
     setLoading(true); 
     setConduct(null); 
     setErrorMsg(''); 
+    setFinalTime(null); // Reseta o tempo final
     setIsCurrentConductFavorite(false);
     
+    // Captura o tempo inicial exato
+    const startTimestamp = Date.now();
+
     if (overrideRoom) setActiveRoom(overrideRoom);
 
     const docId = getConductDocId(searchQuery, targetRoom);
     let foundInCache = false;
     
-    // 1. TENTATIVA DE CACHE (BLINDADA)
-    // Se falhar (ex: erro de permissão do firebase), ignoramos e seguimos para a API.
+    // 1. TENTATIVA DE CACHE
     if (db) {
         try {
             const docRef = doc(db, GLOBAL_CACHE_COLLECTION, docId);
@@ -347,26 +369,27 @@ function EmergencyGuideAppContent() {
                 setLoading(false);
                 saveToHistory(searchQuery, targetRoom);
                 
-                // Atualiza data de acesso sem esperar promessa
                 setDoc(docRef, { lastAccessed: new Date().toISOString() }, { merge: true }).catch(e => console.warn("Cache update warning:", e));
+                
+                // Calcula tempo final (Cache é muito rápido, mas vamos medir)
+                setFinalTime(((Date.now() - startTimestamp) / 1000).toFixed(2));
                 
                 setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
                 foundInCache = true;
             }
         } catch (cacheError) {
-            console.warn("Cache inacessível (Possível restrição de permissão):", cacheError);
-            // NÃO jogamos erro aqui, apenas ignoramos o cache
+            console.warn("Cache inacessível:", cacheError);
         }
     }
 
     if (foundInCache) return;
 
-    // 2. TENTATIVA DE API (Só executa se não achou no cache)
+    // 2. TENTATIVA DE API
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 20000); // Aumentei timeout para 20s
+      // TIMEOUT AUMENTADO PARA 45 SEGUNDOS
+      const timeoutId = setTimeout(() => controller.abort(), 45000); 
 
-      // Prepara Headers (incluindo token se disponível)
       const headers = { 'Content-Type': 'application/json' };
       if (auth?.currentUser) {
           try {
@@ -392,7 +415,7 @@ function EmergencyGuideAppContent() {
       
       setConduct(parsedConduct);
       
-      // 3. TENTA SALVAR NO CACHE (SE TIVER PERMISSÃO)
+      // 3. TENTA SALVAR NO CACHE
       if (db) {
           try {
             const docRef = doc(db, GLOBAL_CACHE_COLLECTION, docId);
@@ -404,18 +427,23 @@ function EmergencyGuideAppContent() {
             });
             manageGlobalCache();
           } catch (saveError) {
-              console.warn("Erro ao salvar cache (Possível restrição de permissão):", saveError);
+              console.warn("Erro ao salvar cache:", saveError);
           }
       }
       
       saveToHistory(searchQuery, targetRoom);
+      
+      // CALCULA O TEMPO FINAL EM SEGUNDOS
+      const endTimestamp = Date.now();
+      const totalSeconds = ((endTimestamp - startTimestamp) / 1000).toFixed(2);
+      setFinalTime(totalSeconds);
 
     } catch (error) { 
-       // Fallback real - Só entra aqui se a API falhar
        console.error("Erro Fatal na Geração:", error);
        const mockConduct = getMockConduct(searchQuery, targetRoom);
        setConduct(mockConduct);
-       setErrorMsg("Erro de conexão com IA. Exibindo protocolo de contingência.");
+       setErrorMsg("Erro de conexão/Timeout. Exibindo protocolo de contingência.");
+       setFinalTime(((Date.now() - startTimestamp) / 1000).toFixed(2));
        setTimeout(() => setErrorMsg(''), 4000);
     } finally { 
        setLoading(false); 
@@ -600,8 +628,23 @@ function EmergencyGuideAppContent() {
           <div className={`p-2 rounded-2xl shadow-lg border flex items-center gap-2 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-100'}`}>
             <Search className="ml-3 text-gray-400" size={20} />
             <input id="search-input" name="search" type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && generateConduct()} placeholder="Digite o quadro clínico (ex: Cetoacidose, IAM...)" className={`flex-1 py-3 bg-transparent outline-none font-medium ${isDarkMode ? 'text-white placeholder-slate-600' : 'text-slate-800'}`} />
-            <button aria-label="Gerar Conduta" onClick={() => generateConduct()} disabled={loading} className={`px-6 py-3 rounded-xl font-bold text-white flex items-center gap-2 transition-all ${loading ? 'bg-slate-600' : 'bg-blue-900 hover:bg-blue-800'}`}>{loading ? <Loader2 className="animate-spin" /> : <>Gerar <ArrowRight size={18} /></>}</button>
+            <button aria-label="Gerar Conduta" onClick={() => generateConduct()} disabled={loading} className={`px-6 py-3 rounded-xl font-bold text-white flex items-center gap-2 transition-all min-w-[130px] justify-center ${loading ? 'bg-slate-600' : 'bg-blue-900 hover:bg-blue-800'}`}>
+                {loading ? (
+                    <div className="flex items-center gap-2"><Loader2 className="animate-spin" size={18} /> {elapsedTime.toFixed(1)}s</div>
+                ) : (
+                    <>Gerar <ArrowRight size={18} /></>
+                )}
+            </button>
           </div>
+          
+          {/* EXIBIÇÃO DO TEMPO FINAL */}
+          {finalTime && !loading && (
+             <div className="flex justify-center -mt-4 animate-in fade-in slide-in-from-top-1">
+                 <span className={`text-[10px] font-bold px-3 py-1 rounded-full border flex items-center gap-1 ${isDarkMode ? 'bg-slate-900 border-slate-700 text-slate-400' : 'bg-white border-gray-200 text-slate-500'}`}>
+                    <Timer size={10} /> Tempo de resposta: {finalTime} segundos
+                 </span>
+             </div>
+          )}
 
           {recentSearches.length > 0 && (<div className="flex flex-wrap gap-2 px-1"><div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase mr-2"><History size={14} /> Recentes</div>{recentSearches.map((search, idx) => (<button key={idx} onClick={() => {setActiveRoom(search.room); setSearchQuery(search.query);}} className={`flex items-center gap-2 text-xs px-3 py-1 border rounded-full transition-colors ${isDarkMode ? 'bg-slate-900 border-slate-700 hover:border-blue-500 hover:text-blue-400 text-slate-300' : 'bg-white border-gray-200 hover:border-blue-300 hover:text-blue-700'}`}><div className={`w-2 h-2 rounded-full shrink-0 ${search.room === 'verde' ? 'bg-emerald-500' : search.room === 'amarela' ? 'bg-amber-500' : 'bg-rose-500'}`} />{search.query}</button>))}</div>)}
           {errorMsg && <div className={`px-4 py-3 rounded-xl border flex items-center gap-3 text-sm font-medium ${isDarkMode ? 'bg-red-900/30 text-red-300 border-red-800' : 'bg-red-50 text-red-700 border-red-200'}`}><AlertCircle size={18} /> {errorMsg}</div>}
