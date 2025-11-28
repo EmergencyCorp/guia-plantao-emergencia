@@ -6,7 +6,7 @@ import {
   LogOut, History, Cloud, CloudOff, HeartPulse, Microscope, Image as ImageIcon, 
   Wind, Droplet, Skull, Printer, Calculator, Star, Utensils, Zap, Camera, 
   BedDouble, ClipboardList, Edit, LayoutGrid, ChevronDown, FileText, Droplets,
-  Pill, HelpCircle, UserCheck, Lock
+  Pill, HelpCircle, UserCheck, Lock, MessageSquare
 } from 'lucide-react';
 
 // --- CONFIG & COMPONENTS ---
@@ -51,55 +51,41 @@ const getConductDocId = (query, room) => {
 
 // --- MOCKS DE CONTINGÊNCIA (CASO A API FALHE) ---
 const getMockConduct = (query, room) => ({
-    condicao: query ? (query.charAt(0).toUpperCase() + query.slice(1)) : "Conduta Padrão",
-    classificacao: room === 'vermelha' ? "Emergência (Vermelho)" : room === 'amarela' ? "Urgência (Amarelo)" : "Pouco Urgente (Verde)",
-    estadiamento: "Protocolo Institucional",
+    condicao: query.charAt(0).toUpperCase() + query.slice(1),
+    classificacao: "Protocolo de Contingência",
+    estadiamento: "Suporte Inicial",
     guideline_referencia: "Diretrizes Gerais de Suporte à Vida",
-    resumo_clinico: `Paciente com quadro sugestivo de ${query}. Necessita de avaliação imediata dos sinais vitais, estabilização hemodinâmica conforme a gravidade e estratificação de risco. A conduta abaixo é sugerida baseada em protocolos padrão de suporte à vida.`,
-    criterios_gravidade: ["Instabilidade Hemodinâmica", "Rebaixamento do Nível de Consciência", "Insuficiência Respiratória Aguda", "Sinais de Sepse"],
-    xabcde_trauma: {
-        x: "Controle de hemorragias exsanguinantes",
-        a: "Vias aéreas e proteção da coluna cervical",
-        b: "Ventilação e oxigenação",
-        c: "Circulação e controle de hemorragias",
-        d: "Disfunção neurológica",
-        e: "Exposição e controle do ambiente"
-    },
+    resumo_clinico: "O servidor não respondeu a tempo. Esta é uma conduta de segurança gerada automaticamente.",
+    criterios_gravidade: ["Instabilidade", "Rebaixamento", "Insuficiência Respiratória"],
     avaliacao_inicial: {
-        sinais_vitais_alvos: ["SpO2 > 94%", "PAS > 90 mmHg", "FC < 100 bpm", "Temp < 37.8ºC"],
-        exames_prioridade1: ["Hemograma Completo", "PCR / Lactato", "Eletrólitos (Na, K, Mg)", "Função Renal (Cr, Ur)", "ECG 12 Derivações"],
-        exames_complementares: ["Raio-X de Tórax", "Troponina (se dor torácica)", "Gasometria Arterial", "Urina I"]
+        sinais_vitais_alvos: ["SpO2 > 94%", "PAS > 90 mmHg", "FC < 100 bpm"],
+        exames_prioridade1: ["Hemograma", "Eletrólitos", "Função Renal", "ECG"],
+        exames_complementares: ["Raio-X", "Lactato"]
     },
-    achados_exames: {
-        ecg: "Avaliar isquemia, sobrecarga ou arritmias.",
-        laboratorio: "Corrigir distúrbios hidroeletrolíticos e acidobásicos.",
-        imagem: "Avaliar consolidações, congestão ou pneumotórax."
-    },
+    achados_exames: { ecg: "Avaliar ritmo/isquemia", laboratorio: "Corrigir distúrbios", imagem: "Avaliar congestão" },
     tratamento_medicamentoso: [
-        { farmaco: "Oxigênio", dose: "Manter SpO2 alvo", via: "Inalatório", indicacao: "Hipoxemia", categoria: "Suporte" },
-        { farmaco: "Soro Fisiológico 0.9%", dose: "500ml bolus", via: "IV", indicacao: "Expansão se hipotensão", categoria: "Hidratação" },
-        { farmaco: "Dipirona", dose: "1g", via: "IV", indicacao: "Analgesia / Febre", categoria: "Sintomáticos" },
-        { farmaco: "Ondansetrona", dose: "4mg", via: "IV", indicacao: "Náuseas", categoria: "Sintomáticos" },
-        { farmaco: "Omeprazol", dose: "40mg", via: "IV", indicacao: "Proteção Gástrica", categoria: "Profilaxias" }
+        { farmaco: "Oxigênio", dose: "Manter SpO2 alvo", via: "Inalatório", indicacao: "Hipoxemia" },
+        { farmaco: "Acesso Venoso", dose: "Calibre 18G", via: "IV", indicacao: "Acesso" },
+        { farmaco: "Soro Fisiológico", dose: "500ml bolus", via: "IV", indicacao: "Expansão" }
     ],
-    escalonamento_terapeutico: [
-        { passo: "1. Estabilização", descricao: "Garantir via aérea permeável e acesso venoso calibroso." },
-        { passo: "2. Monitorização", descricao: "Monitorização contínua de sinais vitais e débito urinário." },
-        { passo: "3. Reavaliação", descricao: "Reavaliar resposta às medidas iniciais a cada 30-60 minutos." }
-    ],
-    criterios_internacao: ["Falha na estabilização inicial na sala de emergência", "Necessidade de suporte intensivo", "Piora clínica progressiva"],
-    criterios_alta: ["Estabilidade clínica por 6h", "Sinais vitais dentro da normalidade", "Controle adequado da dor/sintomas"]
+    escalonamento_terapeutico: [{ passo: "1. Estabilização", descricao: "Garantir via aérea e circulação." }],
+    criterios_internacao: ["Falha na estabilização"],
+    criterios_alta: ["Estabilidade clínica por 6h"]
 });
+
+const getMockBedside = () => ({
+    hypotheses: ["Hipótese Diagnóstica Principal", "Diagnóstico Diferencial 1", "Diagnóstico Diferencial 2"],
+    conduct: "Conduta sugerida (Modo Offline):\n1. Estabilização inicial (MOV).\n2. Monitorização contínua.\n3. Exames laboratoriais de rotina.\n4. Considerar antibioticoterapia empírica se sinais de infecção.\n5. Reavaliação em 1 hora."
+});
+
+const getMockImageAnalysis = () => "Análise Simulada (Offline): A imagem apresenta características que devem ser correlacionadas com a clínica do paciente. Não foi possível conectar ao servidor de IA para uma análise detalhada no momento.";
 
 // --- ERROR BOUNDARY ---
 class ErrorBoundary extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
+  constructor(props) { super(props); this.state = { hasError: false, error: null }; }
   static getDerivedStateFromError(error) { return { hasError: true, error }; }
   render() {
-    if (this.state.hasError) return <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center text-red-600 bg-red-50"><h1 className="text-2xl font-bold">Ops! Erro crítico.</h1><p className="mt-2 text-sm">{this.state.error?.toString()}</p><button onClick={()=>window.location.reload()} className="mt-6 bg-red-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-red-700">Recarregar Aplicação</button></div>;
+    if (this.state.hasError) return <div className="p-8 text-center"><h1>Erro no App</h1><button onClick={()=>window.location.reload()} className="bg-blue-600 text-white px-4 py-2 rounded mt-4">Recarregar</button></div>;
     return this.props.children; 
   }
 }
@@ -138,6 +124,7 @@ function EmergencyGuideAppContent() {
   const [showScoresModal, setShowScoresModal] = useState(false);
   const [showQuickPrescriptions, setShowQuickPrescriptions] = useState(false);
   const [showPhysicalExam, setShowPhysicalExam] = useState(false);
+  // const [showFeedbackModal, setShowFeedbackModal] = useState(false); // Removido conforme pedido
 
   // Feature Data States
   const [userNotes, setUserNotes] = useState('');
@@ -310,20 +297,15 @@ function EmergencyGuideAppContent() {
   const generateConduct = async (overrideRoom = null) => {
     if (!searchQuery.trim()) { showError('Digite uma condição clínica.'); return; }
     const targetRoom = overrideRoom || activeRoom;
-    
-    setLoading(true); 
-    setConduct(null); 
-    setErrorMsg(''); 
-    setIsCurrentConductFavorite(false);
-    
+    setLoading(true); setConduct(null); setErrorMsg(''); setIsCurrentConductFavorite(false);
     if (overrideRoom) setActiveRoom(overrideRoom);
 
     const docId = getConductDocId(searchQuery, targetRoom);
     
+    // Tenta API com Fallback
     try {
-      // API com Timeout e Fallback
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
 
       const response = await fetch('/api/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -337,44 +319,96 @@ function EmergencyGuideAppContent() {
       const parsedConduct = await response.json();
       setConduct(parsedConduct);
       
-      // Salva Cache em background
+      // Cache (async)
       if (currentUser && db) {
         setDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', docId), 
         { query: searchQuery, room: targetRoom, conductData: parsedConduct, isFavorite: false, lastAccessed: new Date().toISOString() })
-        .catch(e => console.warn("Cache write fail", e));
+        .catch(e => console.warn(e));
       }
-      
       saveToHistory(searchQuery, targetRoom);
 
     } catch (error) { 
-       console.warn("Usando Fallback:", error);
+       console.warn("Usando Fallback (Erro na API):", error);
        const mockConduct = getMockConduct(searchQuery, targetRoom);
        setConduct(mockConduct);
        setErrorMsg("Modo Offline: Conduta gerada localmente.");
-       setTimeout(() => setErrorMsg(''), 4000);
     } finally { 
        setLoading(false); 
        setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
     }
   };
 
-  // --- OTHER HANDLERS ---
-  const handleAnalyzeImage = async () => {
-    if (!selectedImage || !imageQuery.trim()) { showError("Selecione imagem e pergunta."); return; }
-    setIsAnalyzingImage(true); setImageAnalysisResult(null);
-    try {
-      await new Promise(r => setTimeout(r, 1500));
-      setImageAnalysisResult("Simulação: A análise de imagem requer um backend Python configurado. (Esta é uma resposta placeholder)");
-    } catch (error) { showError("Falha na análise."); } finally { setIsAnalyzingImage(false); }
-  };
-
+  // --- BEDSIDE CONDUCT (CORRIGIDO: API + FALLBACK) ---
   const generateBedsideConduct = async () => {
     if (!bedsideAnamnesis.trim()) { showError('Preencha a anamnese.'); return; }
     setIsGeneratingBedside(true); setBedsideResult(null);
+    
     try {
-      await new Promise(r => setTimeout(r, 1500));
-      setBedsideResult({ hypotheses: ["Hipótese Principal", "Diagnóstico Diferencial"], conduct: "Conduta sugerida baseada na anamnese (Simulação)..." });
-    } catch (error) { showError("Erro ao processar."); } finally { setIsGeneratingBedside(false); }
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s timeout
+
+        const response = await fetch('/api/generate', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                mode: 'bedside', 
+                anamnesis: bedsideAnamnesis, 
+                exams: bedsideExams 
+            }),
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+
+        if (!response.ok) throw new Error('Bedside API Error');
+        const data = await response.json();
+        setBedsideResult(data);
+
+    } catch (error) {
+        console.warn("Usando Fallback Bedside:", error);
+        const mockData = getMockBedside();
+        setBedsideResult(mockData);
+        showError("Modo Offline: Análise simulada.");
+    } finally {
+        setIsGeneratingBedside(false);
+    }
+  };
+
+  // --- IMAGE ANALYSIS (CORRIGIDO: API + FALLBACK) ---
+  const handleAnalyzeImage = async () => {
+    if (!selectedImage || !imageQuery.trim()) { showError("Selecione imagem e pergunta."); return; }
+    setIsAnalyzingImage(true); setImageAnalysisResult(null);
+    
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+        const response = await fetch('/api/generate', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                image: selectedImage, 
+                prompt: imageQuery 
+            }),
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+
+        if (!response.ok) throw new Error('Vision API Error');
+        const data = await response.json();
+        let finalResult = data.analysis;
+        if (typeof finalResult === 'string' && finalResult.trim().startsWith('{')) {
+            try { const p = JSON.parse(finalResult); finalResult = p.analise_ecg || p.analysis || p; } catch(e){}
+        }
+        setImageAnalysisResult(finalResult);
+
+    } catch (error) {
+        console.warn("Usando Fallback Vision:", error);
+        const mockData = getMockImageAnalysis();
+        setImageAnalysisResult(mockData);
+        showError("Modo Offline: Análise simulada.");
+    } finally { 
+        setIsAnalyzingImage(false); 
+    }
   };
   
   const toggleFavorite = async () => {
@@ -670,6 +704,7 @@ function EmergencyGuideAppContent() {
       <ImageAnalysisModal isOpen={showImageModal} onClose={() => setShowImageModal(false)} isDarkMode={isDarkMode} selectedImage={selectedImage} handleImageUpload={handleImageUpload} imageQuery={imageQuery} setImageQuery={setImageQuery} handleAnalyzeImage={handleAnalyzeImage} isAnalyzingImage={isAnalyzingImage} imageAnalysisResult={imageAnalysisResult} setImageAnalysisResult={setImageAnalysisResult} />
       <BedsideModal isOpen={showBedsideModal} onClose={() => setShowBedsideModal(false)} isDarkMode={isDarkMode} bedsideAnamnesis={bedsideAnamnesis} setBedsideAnamnesis={setBedsideAnamnesis} bedsideExams={bedsideExams} setBedsideExams={setBedsideExams} generateBedsideConduct={generateBedsideConduct} isGeneratingBedside={isGeneratingBedside} bedsideResult={bedsideResult} />
       <PhysicalExamModal isOpen={showPhysicalExam} onClose={() => setShowPhysicalExam(false)} isDarkMode={isDarkMode} />
+      {/* REMOVIDO: Feedback Modal */}
     </div>
   );
 }
