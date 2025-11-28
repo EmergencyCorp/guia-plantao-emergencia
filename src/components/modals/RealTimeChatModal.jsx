@@ -4,24 +4,23 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Send, User, MessageCircle, ClipboardList, Loader2, Mic, UserCheck } from 'lucide-react';
 import ReactMarkdown from 'react-markdown'; 
 
-// --- HOOK CUSTOMIZADO PARA RECONHECIMENTO DE FALA (CÓPIA SEGURA) ---
+// --- HOOK CUSTOMIZADO PARA RECONHECIMENTO DE FALA (COM INTERIM RESULTS) ---
 const useSpeechRecognition = (onResult) => {
     const [isListening, setIsListening] = useState(false);
     const recognitionRef = useRef(null);
     const [isAPISupported, setIsAPISupported] = useState(false);
-    
-    // Flag interna para controle de escopo (corrige erros de referência no iOS/Cleanup)
     const [hasBeenStarted, setHasBeenStarted] = useState(false);
 
     useEffect(() => {
+        // Suporte para diversos navegadores
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition || window.mozSpeechRecognition || window.msSpeechRecognition;
         
         if (SpeechRecognition) {
             setIsAPISupported(true);
             const recognition = new SpeechRecognition();
             
-            recognition.continuous = false; // Usamos false no chat, pois o input é pequeno
-            recognition.interimResults = false; 
+            recognition.continuous = true; // Necessário para capturar mais de uma palavra
+            recognition.interimResults = true; // CRUCIAL: Habilita resultados em tempo real
             recognition.lang = 'pt-BR'; 
 
             recognition.onstart = () => {
@@ -43,10 +42,20 @@ const useSpeechRecognition = (onResult) => {
             };
 
             recognition.onresult = (event) => {
-                if (event.results.length > 0) {
-                    const finalTranscript = event.results[0][0].transcript;
-                    onResult(finalTranscript.trim());
+                let currentInterim = '';
+                let finalTranscript = '';
+                
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) {
+                        finalTranscript += transcript;
+                    } else {
+                        currentInterim += transcript;
+                    }
                 }
+                
+                // Chamamos o onResult com o texto final E o texto intermitente
+                onResult(finalTranscript.trim(), currentInterim.trim());
             };
 
             recognitionRef.current = recognition;
@@ -91,33 +100,49 @@ export default function RealTimeChatModal({
 
     const [inputText, setInputText] = useState('');
     const messagesEndRef = useRef(null);
+    const [speakingInterim, setSpeakingInterim] = useState(''); // Estado para o feedback de voz
 
     // Callback para o input de voz
-    const handleVoiceResult = (transcript) => {
-        if (transcript) {
-            setInputText(transcript);
-            // Se o ditado terminar, envie a mensagem imediatamente para uma experiência ágil
-            sendMessage(transcript);
-            setInputText('');
+    const handleVoiceResult = (finalTranscript, interimTranscript) => {
+        if (finalTranscript) {
+            // Se houver texto final, define como input e envia
+            setInputText(finalTranscript);
+            setSpeakingInterim('');
+            sendMessage(finalTranscript); 
+        } else {
+            // Se houver apenas resultado intermitente (usuário falando), atualiza o feedback
+            setSpeakingInterim(interimTranscript);
         }
     };
     
     const speech = useSpeechRecognition(handleVoiceResult);
+
+    // CRUCIAL: Define o valor exibido no input (intermitente ou digitado)
+    const displayValue = speech.isListening ? speakingInterim : inputText;
 
     // Rola automaticamente para a última mensagem
     useEffect(() => {
         if (messagesEndRef.current) {
             messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
         }
-    }, [chatHistory]);
+    }, [chatHistory, speakingInterim]); 
 
     const handleSend = (e) => {
         e.preventDefault();
-        const text = inputText.trim();
+        const text = displayValue.trim();
         if (text && !isLoading) {
+            // Para a escuta antes de enviar o texto
+            if(speech.isListening) speech.stopListening();
+            
             sendMessage(text);
             setInputText('');
+            setSpeakingInterim('');
         }
+    };
+    
+    const handleInputChange = (e) => {
+        // Permite a digitação normal
+        setInputText(e.target.value);
     };
     
     const handleClose = () => {
@@ -127,17 +152,19 @@ export default function RealTimeChatModal({
     };
     
     const toggleSpeechInput = () => {
+        if (!speech.isAPISupported) {
+            alert("O ditado por voz pode não ser suportado neste navegador (requer Chrome/Safari/Edge atualizados em ambiente seguro).");
+            return;
+        }
+
         if (speech.isListening) {
+            // Se o usuário parar a escuta, o onend dispara o onResult final
             speech.stopListening();
         } else {
-            // Se o campo de texto tiver conteúdo, envie-o antes de iniciar a escuta
-            if (inputText.trim()) {
-                handleSend(new Event('submit')); // Simula o envio
-                // Pequeno delay para começar a escuta após o envio
-                setTimeout(() => speech.startListening(), 100);
-            } else {
-                speech.startListening();
-            }
+            // Limpa o input (pois o texto capturado será anexado no final) e inicia.
+            setInputText(''); 
+            setSpeakingInterim('');
+            speech.startListening();
         }
     };
 
@@ -165,7 +192,6 @@ export default function RealTimeChatModal({
                                 {/* AVATAR E NOME */}
                                 <div className="flex items-center gap-2 mb-1">
                                     <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${message.role === 'user' ? (isDarkMode ? 'bg-white text-indigo-700' : 'bg-indigo-100 text-indigo-700') : 'bg-purple-700 text-white'}`}>
-                                        {/* Ícone customizado de Preceptor Sênior (Dr. SilIA) */}
                                         {message.role === 'preceptor' ? <UserCheck size={16} /> : <User size={16} />}
                                     </div>
                                     <div className={`font-bold text-xs ${message.role === 'preceptor' ? 'text-purple-400' : 'text-white/80'}`}>
@@ -173,7 +199,7 @@ export default function RealTimeChatModal({
                                     </div>
                                 </div>
                                 
-                                {/* CONTEÚDO */}
+                                {/* CONTEÚDO com quebra automática (via ReactMarkdown) */}
                                 <div className={`prose max-w-none ${isDarkMode && message.role === 'preceptor' ? 'prose-invert' : ''} text-sm`}>
                                     <ReactMarkdown>{message.text}</ReactMarkdown>
                                 </div>
@@ -214,16 +240,16 @@ export default function RealTimeChatModal({
                         
                         <input
                             type="text"
-                            value={inputText}
-                            onChange={(e) => setInputText(e.target.value)}
-                            placeholder={speech.isListening ? "Fale agora..." : (isFirstMessage ? "Apresente o caso clínico..." : "Sua resposta ou pergunta...")}
+                            value={displayValue} // Usa o valor para feedback em tempo real
+                            onChange={handleInputChange} // Permite digitação normal
+                            placeholder={speech.isListening ? speakingInterim || "Fale agora..." : (isFirstMessage ? "Apresente o caso clínico..." : "Sua resposta ou pergunta...")}
                             className={`flex-1 p-3 rounded-full border outline-none transition-colors ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500 focus:border-purple-500' : 'bg-white border-gray-300 text-slate-800 focus:border-purple-500'}`}
-                            disabled={isLoading || speech.isListening}
+                            disabled={isLoading}
                         />
                         <button
                             type="submit"
-                            disabled={!inputText.trim() || isLoading || speech.isListening}
-                            className={`p-3 rounded-full transition-colors ${!inputText.trim() || isLoading || speech.isListening ? 'bg-slate-400 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700 text-white'}`}
+                            disabled={!displayValue.trim() || isLoading}
+                            className={`p-3 rounded-full transition-colors ${!displayValue.trim() || isLoading ? 'bg-slate-400 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700 text-white'}`}
                             aria-label="Enviar mensagem"
                         >
                             <Send size={20} />
