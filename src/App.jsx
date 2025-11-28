@@ -655,6 +655,24 @@ function EmergencyGuideAppContent() {
               </div>
             )}
 
+            {/* --- BLOCO NOVO: TRANSFERÊNCIA AMARELA -> VERMELHA --- */}
+            {activeRoom === 'amarela' && (
+              <div className={`border-l-4 border-rose-500 p-4 rounded-r-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${isDarkMode ? 'bg-rose-900/20' : 'bg-rose-50'}`}>
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-full ${isDarkMode ? 'bg-rose-900/50 text-rose-400' : 'bg-rose-100 text-rose-600'}`}>
+                    <Siren size={20} />
+                  </div>
+                  <div>
+                    <h4 className={`text-sm font-bold ${isDarkMode ? 'text-rose-300' : 'text-rose-900'}`}>Paciente Instável / Grave?</h4>
+                    <p className={`text-xs ${isDarkMode ? 'text-rose-400/70' : 'text-rose-700'}`}>Gere conduta de emergência (Sala Vermelha).</p>
+                  </div>
+                </div>
+                <button onClick={() => generateConduct('vermelha')} className={`w-full sm:w-auto px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-2 ${isDarkMode ? 'bg-rose-600 hover:bg-rose-500 text-white' : 'bg-rose-500 hover:bg-rose-600 text-white'}`}>
+                  Transferir p/ Emergência <ArrowRight size={14} />
+                </button>
+              </div>
+            )}
+
             <div className="flex flex-col sm:flex-row justify-between items-start gap-3">
                <div>
                   <div className="flex flex-wrap gap-2 mb-2"><span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase text-white ${roomConfig[activeRoom].accent.replace('bg-', 'bg-')}`}>{conduct.classificacao}</span>{conduct.estadiamento && <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-800 text-white">{conduct.estadiamento}</span>}</div>
