@@ -34,7 +34,7 @@ export default async function handler(req, res) {
 // A PARTIR DA LINHA ~37 (LÓGICA DE CHAT EM TEMPO REAL) NO api/generate.js
 
   // --- LÓGICA DE CHAT EM TEMPO REAL ---
-  if (mode === 'chat') {
+if (mode === 'chat') {
     if (!history || history.length === 0) {
         return res.status(400).json({ error: 'Histórico de chat ausente.' });
     }
@@ -53,7 +53,7 @@ export default async function handler(req, res) {
     
     // Converte o histórico simples [role: text] para o formato 'contents' do Gemini
     const contents = history.map(msg => ({
-        // O role 'preceptor' deve ser mapeado para 'model' para o histórico
+        // O role 'preceptor' (que é a IA no frontend) deve ser mapeado para 'model' para o backend do Gemini
         role: msg.role === 'user' ? 'user' : 'model', 
         parts: [{ text: msg.text }]
     }));
@@ -63,7 +63,7 @@ export default async function handler(req, res) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                contents: contents, // Envia APENAS o histórico de mensagens
+                contents: contents, 
                 // CORREÇÃO: Usar generationConfig para systemInstruction
                 generationConfig: {
                    systemInstruction: systemInstruction,
@@ -72,8 +72,10 @@ export default async function handler(req, res) {
         });
 
         if (!response.ok) {
+            // Se houver um erro, capture o texto para debug (o que causou a mensagem de erro)
             const errText = await response.text();
-            throw new Error(`Erro API Chat: ${response.status} - ${errText}`);
+            console.error("ERRO DETALHADO DA API CHAT:", errText); 
+            throw new Error(`Erro na API Gemini (${response.status})`);
         }
 
         const data = await response.json();
@@ -83,12 +85,12 @@ export default async function handler(req, res) {
         return;
 
     } catch (error) {
-        console.error("Erro Chat:", error);
+        console.error("Erro Chat (Catch):", error);
         res.status(500).json({ error: "Erro ao processar mensagem do chat.", details: error.message });
         return;
     }
   }
-
+  
   // ... o restante do arquivo (lógicas bedside, image, e padrão) permanece inalterado.
 
 
