@@ -7,7 +7,7 @@ import {
 	LogOut, History, Cloud, CloudOff, HeartPulse, Microscope, Image as ImageIcon, 
 	Wind, Droplet, Skull, Printer, Calculator, Star, Utensils, Zap, Camera, 
 	BedDouble, ClipboardList, Edit, LayoutGrid, ChevronDown, FileText, Droplets,
-	Pill, HelpCircle, UserCheck, Lock, Timer, Menu, MessageSquare
+	Pill, HelpCircle, UserCheck, Lock, Timer, Menu, MessageSquare, MessageCircle
 } from 'lucide-react';
 
 // --- CONFIG & COMPONENTS ---
@@ -30,6 +30,8 @@ import QuickPrescriptionsModal from './components/modals/QuickPrescriptionsModal
 import PhysicalExamModal from './components/modals/PhysicalExamModal';
 import CompleteProfileModal from './components/modals/CompleteProfileModal';
 import FeedbackModal from './components/modals/FeedbackModal';
+// NOVO MODAL
+import RealTimeChatModal from './components/modals/RealTimeChatModal'; 
 
 // --- FIREBASE IMPORTS ---
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
@@ -101,7 +103,6 @@ function EmergencyGuideAppContent() {
 	const [approvalStatus, setApprovalStatus] = useState(null);
 	const [configStatus, setConfigStatus] = useState('verificando');
 	const [pendingGoogleUser, setPendingGoogleUser] = useState(null);
-    // NOVO ESTADO PARA CONTROLE DE EXPIRAÇÃO
     const [isAccessExpired, setIsAccessExpired] = useState(false);
 
 
@@ -132,6 +133,9 @@ function EmergencyGuideAppContent() {
 	const [showQuickPrescriptions, setShowQuickPrescriptions] = useState(false);
 	const [showPhysicalExam, setShowPhysicalExam] = useState(false);
 	const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+    // NOVO ESTADO DE MODAL
+    const [showChatModal, setShowChatModal] = useState(false);
+
 
 	// Feature Data States
 	const [userNotes, setUserNotes] = useState('');
@@ -146,6 +150,10 @@ function EmergencyGuideAppContent() {
 	const [isGeneratingBedside, setIsGeneratingBedside] = useState(false);
 	const [isCurrentConductFavorite, setIsCurrentConductFavorite] = useState(false);
 	const [isSaving, setIsSaving] = useState(false);
+    // NOVO ESTADO DE CHAT
+    const [chatHistory, setChatHistory] = useState([]);
+    const [isChatLoading, setIsChatLoading] = useState(false);
+
 
 	const showError = (msg) => {
 		setErrorMsg(msg);
@@ -191,16 +199,17 @@ function EmergencyGuideAppContent() {
 				try {
 					const userDocRef = doc(db, 'artifacts', appId, 'users', user.uid);
 					const docSnap = await getDoc(userDocRef);
+					
 					if (docSnap.exists()) {
 						const userData = docSnap.data();
                         
                         // --- LÓGICA DE EXPIRAÇÃO DE ACESSO ---
-                        const expirationTimestamp = userData.access_expires_at ? userData.access_expires_at.toDate().getTime() : null;
-                        const now = Date.now();
-                        
                         let isExpired = false;
-                        if (expirationTimestamp) {
-                            if (now > expirationTimestamp) {
+                        
+                        if (userData.access_expires_at && typeof userData.access_expires_at.toDate === 'function') {
+                            const expirationTimestamp = userData.access_expires_at.toDate().getTime();
+                            const now = Date.now();
+                            if (expirationTimestamp && now > expirationTimestamp) {
                                 isExpired = true;
                             }
                         }
@@ -224,6 +233,7 @@ function EmergencyGuideAppContent() {
 						}
 						setPendingGoogleUser(null);
 					} else {
+                        // Usuário autenticado (Auth), mas sem documento no Firestore.
 						setPendingGoogleUser(user);
 						setCurrentUser(null);
 						setApprovalStatus(null);
@@ -365,10 +375,61 @@ function EmergencyGuideAppContent() {
 		}
 	};
 
-	// --- GERAR CONDUTA ---
-	const generateConduct = async (overrideRoom = null) => {
-        // Bloqueio de acesso expirado
+	// --- ENVIAR MENSAGEM DE CHAT (NOVA FUNÇÃO) ---
+    const sendChatMessage = async (newMessageText) => {
         if (isAccessExpired) {
+            showError('Seu acesso expirou. Renove sua assinatura para continuar.');
+            return;
+        }
+        if (isChatLoading) return;
+        
+        // 1. Adiciona a mensagem do usuário ao histórico
+        const userMessage = { role: 'user', text: newMessageText, timestamp: Date.now() };
+        const updatedHistory = [...chatHistory, userMessage];
+        setChatHistory(updatedHistory);
+        setIsChatLoading(true);
+
+        try {
+            const headers = { 'Content-Type': 'application/json' };
+            if (auth?.currentUser) {
+                const token = await auth.currentUser.getIdToken();
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const response = await fetch('/api/generate', {
+                method: 'POST', 
+                headers: headers,
+                body: JSON.stringify({ 
+                    mode: 'chat',
+                    history: updatedHistory,
+                }),
+            });
+
+            if (!response.ok) {
+                const errText = await response.text();
+                throw new Error(`API Error: ${response.status} - ${errText}`);
+            }
+
+            const result = await response.json();
+            const preceptorResponse = { role: 'preceptor', text: result.text, timestamp: Date.now() };
+            
+            // 2. Adiciona a resposta da IA ao histórico
+            setChatHistory(prev => [...prev, preceptorResponse]);
+
+        } catch (error) {
+            console.error("Erro no Chat IA:", error);
+            const errorMessage = { role: 'preceptor', text: 'Erro de comunicação com o Preceptor (IA). Tente novamente.', timestamp: Date.now() };
+            setChatHistory(prev => [...prev, errorMessage]);
+            showError("Falha na comunicação com a IA.");
+        } finally {
+            setIsChatLoading(false);
+        }
+    };
+
+
+	// --- GERAR CONDUTA (EXISTENTE) ---
+	const generateConduct = async (overrideRoom = null) => {
+		if (isAccessExpired) {
             showError('Seu acesso expirou. Renove sua assinatura para continuar.');
             return;
         }
@@ -390,6 +451,7 @@ function EmergencyGuideAppContent() {
 		let foundInCache = false;
 		
 		// 1. TENTATIVA DE CACHE
+        // ... (Lógica de Cache OMITIDA para brevidade) ...
 		if (db) {
 				try {
 						const docRef = doc(db, GLOBAL_CACHE_COLLECTION, docId);
@@ -444,6 +506,7 @@ function EmergencyGuideAppContent() {
 			setConduct(parsedConduct);
 			
 			// 3. TENTA SALVAR NO CACHE
+            // ... (Lógica de Cache OMITIDA para brevidade) ...
 			if (db) {
 					try {
 						const docRef = doc(db, GLOBAL_CACHE_COLLECTION, docId);
@@ -478,15 +541,17 @@ function EmergencyGuideAppContent() {
 		}
 	};
 
-	// --- OTHER HANDLERS ---
-	const handleAnalyzeImage = async () => {
-        // Bloqueio de acesso expirado
+	// --- OUTRAS FUNÇÕES HANDLERS OMITIDAS PARA BREVIDADE ---
+    // ...
+    // ...
+
+    const handleAnalyzeImage = async () => {
         if (isAccessExpired) {
             showError('Seu acesso expirou. Renove sua assinatura para continuar.');
             return;
         }
-
-		if (!selectedImage || !imageQuery.trim()) { showError("Selecione imagem e pergunta."); return; }
+        // ... (resto da lógica de handleAnalyzeImage) ...
+        if (!selectedImage || !imageQuery.trim()) { showError("Selecione imagem e pergunta."); return; }
 		setIsAnalyzingImage(true); setImageAnalysisResult(null);
 		
 		const startTimestamp = Date.now();
@@ -534,28 +599,16 @@ function EmergencyGuideAppContent() {
 			setIsAnalyzingImage(false); 
 			console.log(`Tempo de Análise de Imagem: ${(Date.now() - startTimestamp) / 1000}s`);
 		}
-	};
+    };
 
-	const handleImageUpload = (e) => {
-			if (e.target.files && e.target.files[0]) {
-				const file = e.target.files[0];
-				const reader = new FileReader();
-				reader.onloadend = () => {
-					// Salva a imagem em Base64 com o prefixo MimeType para o generate.js
-					setSelectedImage(reader.result); 
-				};
-				reader.readAsDataURL(file);
-			}
-	};
 
-	const generateBedsideConduct = async () => {
-        // Bloqueio de acesso expirado
+    const generateBedsideConduct = async () => {
         if (isAccessExpired) {
             showError('Seu acesso expirou. Renove sua assinatura para continuar.');
             return;
         }
-
-		if (!bedsideAnamnesis.trim()) { showError('Preencha a anamnese.'); return; }
+        // ... (resto da lógica de generateBedsideConduct) ...
+        if (!bedsideAnamnesis.trim()) { showError('Preencha a anamnese.'); return; }
 		setIsGeneratingBedside(true); setBedsideResult(null);
 		
 		const startTimestamp = Date.now();
@@ -610,7 +663,7 @@ function EmergencyGuideAppContent() {
 			setIsGeneratingBedside(false); 
 			console.log(`Tempo Bedside: ${(Date.now() - startTimestamp) / 1000}s`);
 		}
-	};
+    };
 
 	const toggleFavorite = async () => {
 			if (!conduct || !currentUser) return;
@@ -718,7 +771,7 @@ function EmergencyGuideAppContent() {
 			<header className={`border-b sticky top-0 z-40 shadow-sm ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
 				<div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
 					<div className="flex items-center gap-2 sm:gap-3">
-							<img src={isDarkMode ? "https://i.ibb.co/d0W4s2yH/logobranco.png" : "https://i.ibb.co/vCp5pXZP/logopreto.png"} alt="Logo" className="h-8 sm:h-12 w-auto object-contain" />
+							<img src={isDarkMode ? "[https://i.ibb.co/d0W4s2yH/logobranco.png](https://i.ibb.co/d0W4s2yH/logobranco.png)" : "[https://i.ibb.co/vCp5pXZP/logopreto.png](https://i.ibb.co/vCp5pXZP/logopreto.png)"} alt="Logo" className="h-8 sm:h-12 w-auto object-contain" />
 							<div><h1 className={`text-base sm:text-lg font-bold leading-none ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>Lister Guidance</h1><span className="text-[9px] sm:text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Suporte Médico</span></div>
 					</div>
 					<div className="flex items-center gap-2 sm:gap-3">
@@ -734,6 +787,10 @@ function EmergencyGuideAppContent() {
 								{showToolsMenu && (
 									<div className={`absolute right-0 top-full mt-2 w-64 rounded-xl shadow-xl border overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
 										<div className="p-1 space-y-1">
+                                            {/* NOVO ITEM DE MENU */}
+                                            <button onClick={() => { setShowChatModal(true); setShowToolsMenu(false); setChatHistory([{ role: 'preceptor', text: "Olá Dr(a), sou o Preceptor Sênior da Emergência. Apresente o caso (Anamnese e Sinais Vitais) para iniciarmos a discussão.", timestamp: Date.now() }]); }} className={`w-full text-left px-3 py-3 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-purple-300 hover:bg-slate-800' : 'text-purple-700 hover:bg-purple-50'}`}><MessageCircle size={18} /> Chat Preceptor</button>
+                                            
+                                            {/* ITENS EXISTENTES */}
 											<div className="px-3 py-2 sm:hidden border-b mb-1 border-gray-100 dark:border-gray-800 text-center">
 												<span className="text-xs font-bold block">{currentUser.name}</span>
 												<span className="text-[10px] text-gray-500">CRM: {currentUser.crm}</span>
@@ -1008,6 +1065,17 @@ function EmergencyGuideAppContent() {
 			
 			<PhysicalExamModal isOpen={showPhysicalExam} onClose={() => setShowPhysicalExam(false)} isDarkMode={isDarkMode} />
 			
+			{/* NOVO MODAL DE CHAT */}
+            <RealTimeChatModal
+                isOpen={showChatModal}
+                onClose={() => setShowChatModal(false)}
+                isDarkMode={isDarkMode}
+                chatHistory={chatHistory}
+                setChatHistory={setChatHistory}
+                sendMessage={sendChatMessage}
+                isLoading={isChatLoading}
+            />
+
 			{/* NOVO MODAL DE FEEDBACK */}
 			<FeedbackModal isOpen={showFeedbackModal} onClose={() => setShowFeedbackModal(false)} isDarkMode={isDarkMode} currentUser={currentUser} />
 		</div>

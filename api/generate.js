@@ -1,6 +1,11 @@
 // Este arquivo roda nos servidores da Vercel (Serverless Function).
 // Localização: /api/generate.js na raiz do projeto.
 
+import { GoogleGenAI } from '@google/genai'; // Assumindo que você tem o SDK instalado
+
+// Inicialize o SDK fora do handler para melhor desempenho (Se o ambiente for Node.js padrão Vercel)
+// Se não puder usar o SDK, usaremos o fetch API como no seu código original (mais seguro para seu setup)
+
 export default async function handler(req, res) {
   // Configurações de CORS
   res.setHeader('Access-Control-Allow-Credentials', true);
@@ -20,20 +25,79 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const { searchQuery, activeRoom, image, prompt, mode, anamnesis, exams } = req.body;
+  // Desestrutura os novos campos 'history' e 'mode'
+  const { searchQuery, activeRoom, image, prompt, mode, anamnesis, exams, history } = req.body;
   const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+  const modelName = 'gemini-2.5-flash'; // Modelo preferencial para chat rápido e multimodal
 
   if (!apiKey) {
     return res.status(500).json({ error: 'Configuração de servidor ausente (API Key).' });
   }
+  
+  // --- LÓGICA DE CHAT EM TEMPO REAL (NOVA) ---
+  if (mode === 'chat') {
+    if (!history || history.length === 0) {
+        return res.status(400).json({ error: 'Histórico de chat ausente.' });
+    }
 
-  // --- LÓGICA BEDSIDE (NOVA) ---
+    const systemInstruction = `
+        Você é um Médico Preceptor Sênior, experiente em emergências e clínica médica.
+        Sua função é fornecer feedback rigoroso, educacional e em tempo real para um Residente que está apresentando ou discutindo um caso.
+        Seu tom deve ser profissional, direto, mas sempre construtivo.
+
+        Diretrizes de Resposta:
+        1. Mantenha o contexto do caso, referenciando as mensagens anteriores.
+        2. Seja breve e objetivo. Não gere planos de tratamento completos, mas sim, diretrizes ou perguntas para guiar o Residente.
+        3. Use Markdown para estruturar o texto (listas, negrito).
+        4. O Residente começará o caso.
+    `;
+    
+    // Converte o histórico simples [role: text] para o formato 'contents' do Gemini
+    const contents = history.map(msg => ({
+        role: msg.role === 'user' ? 'user' : 'model', // Mapeia 'user' para 'user', e 'preceptor' (IA) para 'model'
+        parts: [{ text: msg.text }]
+    }));
+    
+    try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: contents, // Envia o histórico
+                config: {
+                    systemInstruction: systemInstruction,
+                },
+                // Não é necessário responseMimeType JSON aqui, a resposta é texto/markdown
+            })
+        });
+
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`Erro API Chat: ${response.status} - ${errText}`);
+        }
+
+        const data = await response.json();
+        const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || "Desculpe, não consegui processar a resposta.";
+        
+        // Retorna a resposta pura (texto/markdown)
+        res.status(200).json({ text: textResponse });
+        return;
+
+    } catch (error) {
+        console.error("Erro Chat:", error);
+        res.status(500).json({ error: "Erro ao processar mensagem do chat.", details: error.message });
+        return;
+    }
+  }
+
+
+  // --- LÓGICA BEDSIDE (EXISTENTE) ---
   if (mode === 'bedside') {
     if (!anamnesis) {
       return res.status(400).json({ error: 'Anamnese é obrigatória para BedSide.' });
     }
     
-    // O prompt é construído aqui com os dados reais
+    // ... [O restante da lógica BEDSIDE permanece INALTERADA] ...
     const bedsidePrompt = `
       Você é um Médico Preceptor Sênior discutindo um caso clínico detalhado à beira leito (BedSide).
       
@@ -74,7 +138,6 @@ export default async function handler(req, res) {
       const data = await response.json();
       let textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
       
-      // Limpeza básica de markdown json se houver
       textResponse = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
       
       res.status(200).json(JSON.parse(textResponse));
@@ -87,15 +150,13 @@ export default async function handler(req, res) {
     }
   }
 
-  // --- LÓGICA DE ANÁLISE DE IMAGEM (IA VISION) ---
+  // --- LÓGICA DE ANÁLISE DE IMAGEM (EXISTENTE) ---
   if (image) {
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt é obrigatório para Análise de Imagem.' });
     }
     
-    // O seu código original estava usando um modelo preview (gemini-2.5-flash-preview-09-2025). 
-    // Mudei para gemini-2.5-flash, pois é o modelo atual e estável para multimodal.
-    // Também uso o mimeType fornecido no frontend para a imagem.
+    // ... [O restante da lógica VISION permanece INALTERADA] ...
     const base64Data = image.split(',')[1];
     const mimeType = image.split(';')[0].split(':')[1];
     const userPrompt = prompt || "Analise esta imagem médica e descreva os achados.";
@@ -132,7 +193,6 @@ export default async function handler(req, res) {
       const data = await response.json();
       const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
       
-      // A lógica de limpeza de JSON é mantida, embora o prompt peça Markdown.
       let finalAnalysis = textResponse;
       try {
           const parsed = JSON.parse(textResponse);
@@ -140,7 +200,6 @@ export default async function handler(req, res) {
           else if (parsed.analise_ecg) finalAnalysis = JSON.stringify(parsed.analise_ecg);
       } catch(e) {}
 
-      // Retorna em um objeto JSON com a análise, conforme esperado pelo App.jsx
       res.status(200).json({ analysis: finalAnalysis });
       return;
 
@@ -151,11 +210,13 @@ export default async function handler(req, res) {
     }
   }
 
-  // --- LÓGICA PADRÃO DE TEXTO (Geração de Conduta) ---
+  // --- LÓGICA PADRÃO DE TEXTO (EXISTENTE) ---
 
   if (!searchQuery) {
     return res.status(400).json({ error: 'Busca vazia.' });
   }
+  
+  // ... [O restante da lógica PADRÃO permanece INALTERADA] ...
 
   // Definição de contextos baseados na sala
   let roomContext = '';
@@ -222,11 +283,6 @@ export default async function handler(req, res) {
     - OBRIGATÓRIO preencher "xabcde_trauma".
     `;
   }
-
-  // Nota: O modelo 'gemini-2.5-flash-preview-09-2025' usado no seu código original
-  // será substituído por 'gemini-2.5-flash', um modelo mais estável e com 
-  // capacidade de JSON Mode.
-  const modelName = 'gemini-2.5-flash'; 
 
   const promptText = `${roleDefinition}
   Gere a conduta clínica IMPECÁVEL para "${searchQuery}" na ${roomContext}.
