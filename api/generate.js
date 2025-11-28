@@ -29,6 +29,11 @@ export default async function handler(req, res) {
 
   // --- LÓGICA BEDSIDE (NOVA) ---
   if (mode === 'bedside') {
+    if (!anamnesis) {
+      return res.status(400).json({ error: 'Anamnese é obrigatória para BedSide.' });
+    }
+    
+    // O prompt é construído aqui com os dados reais
     const bedsidePrompt = `
       Você é um Médico Preceptor Sênior discutindo um caso clínico detalhado à beira leito (BedSide).
       
@@ -55,7 +60,7 @@ export default async function handler(req, res) {
     `;
 
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -84,6 +89,13 @@ export default async function handler(req, res) {
 
   // --- LÓGICA DE ANÁLISE DE IMAGEM (IA VISION) ---
   if (image) {
+    if (!prompt) {
+      return res.status(400).json({ error: 'Prompt é obrigatório para Análise de Imagem.' });
+    }
+    
+    // O seu código original estava usando um modelo preview (gemini-2.5-flash-preview-09-2025). 
+    // Mudei para gemini-2.5-flash, pois é o modelo atual e estável para multimodal.
+    // Também uso o mimeType fornecido no frontend para a imagem.
     const base64Data = image.split(',')[1];
     const mimeType = image.split(';')[0].split(':')[1];
     const userPrompt = prompt || "Analise esta imagem médica e descreva os achados.";
@@ -99,7 +111,7 @@ export default async function handler(req, res) {
     `;
 
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -120,13 +132,15 @@ export default async function handler(req, res) {
       const data = await response.json();
       const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
       
+      // A lógica de limpeza de JSON é mantida, embora o prompt peça Markdown.
       let finalAnalysis = textResponse;
       try {
-         const parsed = JSON.parse(textResponse);
-         if(parsed.analysis) finalAnalysis = parsed.analysis;
-         else if (parsed.analise_ecg) finalAnalysis = JSON.stringify(parsed.analise_ecg);
+          const parsed = JSON.parse(textResponse);
+          if(parsed.analysis) finalAnalysis = parsed.analysis;
+          else if (parsed.analise_ecg) finalAnalysis = JSON.stringify(parsed.analise_ecg);
       } catch(e) {}
 
+      // Retorna em um objeto JSON com a análise, conforme esperado pelo App.jsx
       res.status(200).json({ analysis: finalAnalysis });
       return;
 
@@ -209,6 +223,11 @@ export default async function handler(req, res) {
     `;
   }
 
+  // Nota: O modelo 'gemini-2.5-flash-preview-09-2025' usado no seu código original
+  // será substituído por 'gemini-2.5-flash', um modelo mais estável e com 
+  // capacidade de JSON Mode.
+  const modelName = 'gemini-2.5-flash'; 
+
   const promptText = `${roleDefinition}
   Gere a conduta clínica IMPECÁVEL para "${searchQuery}" na ${roomContext}.
   ${promptExtra}
@@ -225,7 +244,7 @@ export default async function handler(req, res) {
     "classificacao": "${roomContext}",
     "resumo_clinico": "Texto técnico detalhado sobre fisiopatologia e justificativa do nível de atenção...",
     "xabcde_trauma": {
-       "X": "...", "A": "...", "B": "...", "C": "...", "D": "...", "E": "..."
+        "X": "...", "A": "...", "B": "...", "C": "...", "D": "...", "E": "..."
     }, // Preencher APENAS se for trauma, senão null
     "avaliacao_inicial": { 
       "sinais_vitais_alvos": ["PAM ≥ 65mmHg", ...], 
@@ -269,7 +288,7 @@ export default async function handler(req, res) {
   Baseie-se em doses para adulto 70kg (padrão).`;
 
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -287,7 +306,7 @@ export default async function handler(req, res) {
     const data = await response.json();
     const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    let cleanText = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+    let cleanText = textResponse.replace(/```json/g, '').replace(/```/g, '').replace(/```/g, '').trim();
     const firstBrace = cleanText.indexOf('{');
     const lastBrace = cleanText.lastIndexOf('}');
 
