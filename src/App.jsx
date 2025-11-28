@@ -383,7 +383,7 @@ function EmergencyGuideAppContent() {
 		// 2. TENTATIVA DE API
 		try {
 			const controller = new AbortController();
-			const timeoutId = setTimeout(() => controller.abort(), 45000);	
+			const timeoutId = setTimeout(() => controller.abort(), 120000);	
 
 			const headers = { 'Content-Type': 'application/json' };
 			if (auth?.currentUser) {
@@ -775,7 +775,18 @@ function EmergencyGuideAppContent() {
 								<div>
 									<div className="flex flex-wrap gap-2 mb-2"><span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase text-white ${roomConfig[activeRoom].accent.replace('bg-', 'bg-')}`}>{conduct.classificacao}</span>{conduct.estadiamento && <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-800 text-white">{conduct.estadiamento}</span>}</div>
 									<h2 className={`text-2xl sm:text-3xl font-bold leading-tight ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>{conduct.condicao}</h2>
-									{conduct.guideline_referencia && (<p className="text-xs text-slate-500 mt-1 flex items-center gap-1"><BookOpen size={12} /> <span className="truncate max-w-[250px] sm:max-w-none font-medium">{conduct.guideline_referencia}</span></p>)}
+									
+                                    {/* --- CORREÇÃO APLICADA AQUI --- */}
+									{conduct.guideline_referencia && (
+                                        <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                                            <BookOpen size={12} /> 
+                                            <span className="font-medium break-words max-w-full">
+                                                {conduct.guideline_referencia}
+                                            </span>
+                                        </p>
+                                    )}
+                                    {/* --- FIM DA CORREÇÃO --- */}
+                                    
 								</div>
 								<div className="flex gap-2 self-end sm:self-auto">
 									<button onClick={toggleFavorite} className={`p-2 rounded-full transition-colors ${isCurrentConductFavorite ? (isDarkMode ? 'bg-yellow-900/30 text-yellow-400' : 'bg-yellow-100 text-yellow-500') : (isDarkMode ? 'text-slate-600 hover:bg-slate-800 hover:text-yellow-400' : 'text-gray-400 hover:bg-gray-100 hover:text-yellow-400')}`} title="Favoritar"><Star size={24} fill={isCurrentConductFavorite ? "currentColor" : "none"} /></button>
