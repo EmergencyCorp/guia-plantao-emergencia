@@ -1,10 +1,8 @@
 // Arquivo: src/components/modals/MedicalScoresModal.jsx
 import React, { useState, useEffect } from 'react';
-// CORREÇÃO: Adicionado 'Search' na importação abaixo
 import { 
-  X, Calculator, ChevronRight, Activity, AlertTriangle, 
-  Brain, HeartPulse, Wind, AlertOctagon, Thermometer, Baby, Beaker, Check,
-  Search 
+  X, Calculator, ChevronRight, Activity, AlertTriangle, ArrowLeft,
+  Brain, HeartPulse, Wind, AlertOctagon, Thermometer, Baby, Beaker, Check, Search
 } from 'lucide-react';
 
 // --- CONFIGURAÇÃO DOS SCORES ---
@@ -48,13 +46,11 @@ export default function MedicalScoresModal({ isOpen, onClose, isDarkMode }) {
   const [result, setResult] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Reseta inputs ao trocar de score
   useEffect(() => {
     setInputs({});
     setResult(null);
   }, [selectedScore]);
 
-  // Cálculo Reativo
   useEffect(() => {
     if (selectedScore) calculateResult();
   }, [inputs, selectedScore]);
@@ -83,7 +79,7 @@ export default function MedicalScoresModal({ isOpen, onClose, isDarkMode }) {
       }
   };
 
-  // --- COMPONENTES DE UI ---
+  // --- UI COMPONENTS ---
   const ScoreInput = ({ label, children }) => (
     <div className="mb-4">
         <label className={`block text-xs font-bold uppercase mb-2 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>{label}</label>
@@ -126,7 +122,7 @@ export default function MedicalScoresModal({ isOpen, onClose, isDarkMode }) {
     </label>
   );
 
-  // --- LÓGICA DE CÁLCULO ---
+  // --- CALCULATIONS ---
   const calculateResult = () => {
     let score = 0;
     let interpretation = '';
@@ -543,8 +539,8 @@ export default function MedicalScoresModal({ isOpen, onClose, isDarkMode }) {
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
       <div className={`w-full max-w-5xl h-[85vh] rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row ${isDarkMode ? 'bg-slate-900 text-slate-100' : 'bg-white'}`}>
         
-        {/* SIDEBAR */}
-        <div className={`w-full md:w-80 border-r flex flex-col ${isDarkMode ? 'border-slate-800 bg-slate-950' : 'border-gray-100 bg-gray-50'}`}>
+        {/* SIDEBAR (LISTA DE SCORES) */}
+        <div className={`w-full md:w-80 border-r flex flex-col ${isDarkMode ? 'border-slate-800 bg-slate-950' : 'border-gray-100 bg-gray-50'} ${selectedScore ? 'hidden md:flex' : 'flex'}`}>
             <div className="p-5 border-b border-gray-200 dark:border-slate-800">
                 <h3 className="font-bold flex items-center gap-2 mb-4 text-lg"><Activity size={22} className="text-blue-500"/> Scores Médicos</h3>
                 <div className="relative group">
@@ -570,13 +566,21 @@ export default function MedicalScoresModal({ isOpen, onClose, isDarkMode }) {
             </div>
         </div>
 
-        {/* MAIN CONTENT */}
-        <div className="flex-1 flex flex-col h-full relative bg-opacity-50">
+        {/* MAIN CONTENT (CALCULADORA) */}
+        <div className={`flex-1 flex flex-col h-full relative bg-opacity-50 ${!selectedScore ? 'hidden md:flex' : 'flex'}`}>
+            {/* BOTÃO VOLTAR (SÓ MOBILE) */}
+            {selectedScore && (
+                <button onClick={() => setSelectedScore(null)} className="md:hidden absolute left-4 top-4 p-2 rounded-full z-10 bg-gray-100 dark:bg-slate-800 text-slate-500">
+                    <ArrowLeft size={24}/>
+                </button>
+            )}
+
             <button onClick={onClose} className={`absolute right-4 top-4 p-2 rounded-full z-10 transition-colors ${isDarkMode ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-gray-100 text-gray-500'}`}><X size={24}/></button>
             
             {selectedScore ? (
                 <>
                     <div className={`p-8 border-b ${isDarkMode ? 'border-slate-800' : 'border-gray-100'}`}>
+                        <div className="md:hidden h-8"></div> {/* Espaço para o botão voltar no mobile */}
                         <h2 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent w-fit">{selectedScore.name}</h2>
                         <p className={`text-sm mt-2 max-w-xl ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>{selectedScore.description}</p>
                     </div>
@@ -586,7 +590,7 @@ export default function MedicalScoresModal({ isOpen, onClose, isDarkMode }) {
                     </div>
 
                     <div className={`p-6 border-t ${isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-white border-gray-100 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]'}`}>
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                            <div>
                                 <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block mb-1">Resultado em Tempo Real</span>
                                 <div className="text-4xl font-black tracking-tight flex items-baseline gap-2">
@@ -595,7 +599,7 @@ export default function MedicalScoresModal({ isOpen, onClose, isDarkMode }) {
                                 </div>
                            </div>
                            {result && (
-                               <div className={`px-6 py-4 rounded-2xl border-l-4 max-w-md flex-1 ml-8 shadow-sm animate-in fade-in slide-in-from-bottom-4 ${result.color}`}>
+                               <div className={`px-6 py-4 rounded-2xl border-l-4 w-full md:max-w-md flex-1 md:ml-8 shadow-sm animate-in fade-in slide-in-from-bottom-4 ${result.color}`}>
                                    <p className="font-bold text-sm leading-relaxed flex gap-2">
                                      <AlertTriangle size={18} className="shrink-0 mt-0.5"/>
                                      {result.text}

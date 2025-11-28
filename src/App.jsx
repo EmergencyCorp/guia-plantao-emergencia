@@ -35,16 +35,6 @@ import { doc, setDoc, getDoc, collection, query as firestoreQuery, where, orderB
 
 const appId = (typeof __app_id !== 'undefined') ? __app_id : 'emergency-guide-app';
 
-// --- FUNÇÃO AUXILIAR (MOVIDA PARA FORA DO COMPONENTE PARA EVITAR ERROS) ---
-const getVitalIcon = (text) => {
-  const t = text.toLowerCase();
-  if (t.includes('fc') || t.includes('bpm')) return <HeartPulse size={16} className="text-rose-500" />;
-  if (t.includes('pa') || t.includes('mmhg') || t.includes('pam')) return <Activity size={16} className="text-blue-500" />;
-  if (t.includes('sat') || t.includes('o2')) return <Droplet size={16} className="text-cyan-500" />;
-  if (t.includes('fr') || t.includes('resp')) return <Wind size={16} className="text-teal-500" />;
-  return <Activity size={16} className="text-slate-400" />;
-};
-
 // --- ERROR BOUNDARY ---
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -66,10 +56,8 @@ function EmergencyGuideAppContent() {
   const [authLoading, setAuthLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [isCloudConnected, setIsCloudConnected] = useState(false);
-  const [approvalStatus, setApprovalStatus] = useState(null); // 'pending', 'approved', 'rejected', null
+  const [approvalStatus, setApprovalStatus] = useState(null);
   const [configStatus, setConfigStatus] = useState('verificando');
-  
-  // Estado para usuário do Google que precisa completar cadastro
   const [pendingGoogleUser, setPendingGoogleUser] = useState(null);
 
   // App States
@@ -109,24 +97,17 @@ function EmergencyGuideAppContent() {
   const [isCurrentConductFavorite, setIsCurrentConductFavorite] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // --- INIT ---
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme_preference');
-    if (savedTheme === 'dark') setIsDarkMode(true);
-    if (localStorage.getItem('terms_accepted_v1') === 'true') setHasAcceptedTerms(true);
-    
-    if (firebaseConfig && firebaseConfig.apiKey) {
-        setIsCloudConnected(true);
-        setConfigStatus('ok');
-    } else {
-        setConfigStatus('missing');
-    }
-  }, []);
-
-  const toggleTheme = () => {
-    const newMode = !isDarkMode;
-    setIsDarkMode(newMode);
-    localStorage.setItem('theme_preference', newMode ? 'dark' : 'light');
+  // --- HELPER FUNCTIONS ---
+  const showError = (msg) => { setErrorMsg(msg); setTimeout(() => setErrorMsg(''), 4000); };
+  const getConductDocId = (query, room) => `${query.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}_${room}`;
+  
+  const getVitalIcon = (text) => {
+    const t = text.toLowerCase();
+    if (t.includes('fc') || t.includes('bpm')) return <HeartPulse size={16} className="text-rose-500" />;
+    if (t.includes('pa') || t.includes('mmhg') || t.includes('pam')) return <Activity size={16} className="text-blue-500" />;
+    if (t.includes('sat') || t.includes('o2')) return <Droplet size={16} className="text-cyan-500" />;
+    if (t.includes('fr') || t.includes('resp')) return <Wind size={16} className="text-teal-500" />;
+    return <Activity size={16} className="text-slate-400" />;
   };
 
   // --- DATA SYNC ---
@@ -165,6 +146,26 @@ function EmergencyGuideAppContent() {
         snapshot.forEach((doc) => favs.push({ id: doc.id, ...doc.data() }));
         setFavorites(favs);
     });
+  };
+
+  // --- EFFECTS ---
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme_preference');
+    if (savedTheme === 'dark') setIsDarkMode(true);
+    if (localStorage.getItem('terms_accepted_v1') === 'true') setHasAcceptedTerms(true);
+    
+    if (firebaseConfig && firebaseConfig.apiKey) {
+        setIsCloudConnected(true);
+        setConfigStatus('ok');
+    } else {
+        setConfigStatus('missing');
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    const newMode = !isDarkMode;
+    setIsDarkMode(newMode);
+    localStorage.setItem('theme_preference', newMode ? 'dark' : 'light');
   };
 
   // --- AUTH LISTENER ---
@@ -283,10 +284,6 @@ function EmergencyGuideAppContent() {
   };
 
   const handleNoteChange = (e) => setUserNotes(e.target.value);
-
-  // --- HELPERS ---
-  const showError = (msg) => { setErrorMsg(msg); setTimeout(() => setErrorMsg(''), 4000); };
-  const getConductDocId = (query, room) => `${query.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}_${room}`;
 
   // --- CORE LOGIC ---
   const toggleFavorite = async () => {
@@ -467,13 +464,13 @@ function EmergencyGuideAppContent() {
   return (
     <div className={`min-h-screen flex flex-col font-sans selection:bg-blue-100 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
       <header className={`border-b sticky top-0 z-40 shadow-sm ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 py-2 flex items-center justify-between">
           <div className="flex items-center gap-3">
-             <img src={isDarkMode ? "https://i.ibb.co/d0W4s2yH/logobranco.png" : "https://i.ibb.co/vCp5pXZP/logopreto.png"} alt="Logo" className="h-12 w-auto object-contain" />
-             <div><h1 className={`text-lg font-bold leading-none ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>Lister Guidance</h1><span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Suporte Médico</span></div>
+             <img src={isDarkMode ? "https://i.ibb.co/d0W4s2yH/logobranco.png" : "https://i.ibb.co/vCp5pXZP/logopreto.png"} alt="Logo" className="h-10 w-auto object-contain" />
+             <div className="hidden sm:block"><h1 className={`text-lg font-bold leading-none ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>Lister Guidance</h1><span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Suporte Médico</span></div>
           </div>
-          <div className="flex items-center gap-3">
-             <div className="hidden sm:flex flex-col items-end mr-2"><span className={`text-xs font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{currentUser.name}</span><span className="text-[10px] text-slate-400 uppercase">Médico(a)</span></div>
+          <div className="flex items-center gap-2">
+             <div className="hidden md:flex flex-col items-end mr-2"><span className={`text-xs font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{currentUser.name}</span></div>
              <ThemeToggle isDarkMode={isDarkMode} toggleTheme={toggleTheme} />
              <div className="relative">
                 <button aria-label="Ferramentas" onClick={() => setShowToolsMenu(!showToolsMenu)} className={`px-3 py-2 rounded-lg flex items-center gap-2 transition-colors font-bold text-sm ${isDarkMode ? 'bg-blue-900/30 text-blue-300 hover:bg-blue-900/50' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}>
@@ -507,7 +504,7 @@ function EmergencyGuideAppContent() {
         )}
 
         <div className="space-y-6">
-          <div className="grid md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {Object.entries(roomConfig).map(([key, config]) => {
               const isActive = activeRoom === key;
               return (
