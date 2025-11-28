@@ -443,14 +443,68 @@ function EmergencyGuideAppContent() {
     }
   };
 
-  // --- OTHER HANDLERS ---
+  // --- NOVA FUNÇÃO REAL DE ANÁLISE DE IMAGEM ---
+  const convertToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
   const handleAnalyzeImage = async () => {
-    if (!selectedImage || !imageQuery.trim()) { showError("Selecione imagem e pergunta."); return; }
-    setIsAnalyzingImage(true); setImageAnalysisResult(null);
+    // Tenta pegar o arquivo real do input via ID
+    const fileInput = document.getElementById('image-upload-input');
+    const file = fileInput?.files?.[0];
+
+    // Se não tiver arquivo novo nem URL antiga
+    if (!file && !selectedImage) { 
+        showError("Selecione uma imagem."); return; 
+    }
+    if (!imageQuery.trim()) { 
+        showError("Digite uma pergunta sobre a imagem."); return; 
+    }
+
+    setIsAnalyzingImage(true); 
+    setImageAnalysisResult(null);
+
     try {
-      await new Promise(r => setTimeout(r, 1500));
-      setImageAnalysisResult("Simulação: A análise de imagem requer um backend Python configurado. (Esta é uma resposta placeholder)");
-    } catch (error) { showError("Falha na análise."); } finally { setIsAnalyzingImage(false); }
+      let base64Image = null;
+      
+      if (file) {
+          base64Image = await convertToBase64(file);
+      } else if (typeof selectedImage === 'string' && selectedImage.includes('base64')) {
+          // Se já for base64 (reuso)
+          base64Image = selectedImage;
+      } else {
+          // Se for blob url e não tiver arquivo, pedimos reupload por segurança
+          if(!file) throw new Error("Por favor, selecione a imagem novamente.");
+      }
+
+      const response = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            image: base64Image, 
+            prompt: imageQuery 
+        })
+      });
+
+      if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.error || "Erro na comunicação com a IA");
+      }
+
+      const data = await response.json();
+      setImageAnalysisResult(data.result);
+
+    } catch (error) { 
+      console.error(error);
+      showError(error.message || "Falha na análise da imagem."); 
+    } finally { 
+      setIsAnalyzingImage(false); 
+    }
   };
 
   const handleImageUpload = (e) => {
@@ -655,7 +709,7 @@ function EmergencyGuideAppContent() {
               </div>
             )}
 
-            {/* --- BLOCO NOVO: TRANSFERÊNCIA AMARELA -> VERMELHA --- */}
+            {/* BLOCO TRANSFERÊNCIA AMARELA -> VERMELHA */}
             {activeRoom === 'amarela' && (
               <div className={`border-l-4 border-rose-500 p-4 rounded-r-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${isDarkMode ? 'bg-rose-900/20' : 'bg-rose-50'}`}>
                 <div className="flex items-center gap-3">
@@ -791,10 +845,7 @@ function EmergencyGuideAppContent() {
 
       {/* --- FOOTER REESTRUTURADO (CENTRALIZADO & HARMONICO) --- */}
       <footer className={`border-t py-6 mt-auto transition-colors ${isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-500' : 'bg-white border-gray-200 text-slate-500'}`}>
-        {/* Container relativo para posicionamento absoluto do botão no desktop */}
         <div className="max-w-6xl mx-auto px-4 relative flex flex-col md:block items-center py-4 sm:py-6">
-          
-          {/* Texto / Disclaimer - Centralizado */}
           <div className="flex flex-col items-center text-center gap-1.5 md:w-3/4 md:mx-auto mb-6 md:mb-0">
              <div className="flex items-center gap-2 mb-2">
                 <ShieldAlert size={16} className={isDarkMode ? 'text-blue-500' : 'text-blue-700'} />
@@ -805,8 +856,6 @@ function EmergencyGuideAppContent() {
                <br className="hidden sm:block"/> A EmergencyCorp não se responsabiliza por condutas tomadas com base nas informações aqui contidas.
              </p>
           </div>
-          
-          {/* Botão - Absoluto na direita (desktop), estático centralizado (mobile) */}
           <button 
             onClick={() => setShowFeedbackModal(true)}
             className={`shrink-0 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider border flex items-center gap-2 transition-all hover:-translate-y-0.5 md:absolute md:right-4 md:top-1/2 md:-translate-y-1/2 ${isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-white hover:border-slate-600' : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-white hover:text-blue-600 hover:border-gray-300'}`}
