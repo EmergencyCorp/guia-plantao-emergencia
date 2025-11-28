@@ -38,5 +38,4 @@ if (firebaseConfig && firebaseConfig.apiKey) {
   }
 }
 
-// Exportando sem 'storage' para evitar erros
 export { auth, db, app, googleProvider, firebaseConfig };

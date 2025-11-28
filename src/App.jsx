@@ -28,7 +28,7 @@ import MedicalScoresModal from './components/modals/MedicalScoresModal';
 import QuickPrescriptionsModal from './components/modals/QuickPrescriptionsModal';
 import PhysicalExamModal from './components/modals/PhysicalExamModal';
 import CompleteProfileModal from './components/modals/CompleteProfileModal';
-import FeedbackModal from './components/modals/FeedbackModal'; // <--- NOVO IMPORT
+import FeedbackModal from './components/modals/FeedbackModal';
 
 // --- FIREBASE IMPORTS ---
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
@@ -36,7 +36,6 @@ import { doc, setDoc, getDoc, collection, query as firestoreQuery, where, orderB
 
 const appId = (typeof __app_id !== 'undefined') ? __app_id : 'emergency-guide-app';
 
-<<<<<<< HEAD
 // --- FUNÇÕES AUXILIARES ---
 const getVitalIcon = (text) => {
   const t = text.toLowerCase();
@@ -47,8 +46,48 @@ const getVitalIcon = (text) => {
   return <Activity size={16} className="text-slate-400" />;
 };
 
-=======
->>>>>>> parent of 579f807 (feat: update getVitalIcon function and enhance footer with legal notice and feedback button)
+// CONDUTA DE CONTINGÊNCIA (SIMULAÇÃO ROBUSTA)
+const getMockConduct = (query, room) => ({
+    condicao: query ? (query.charAt(0).toUpperCase() + query.slice(1)) : "Conduta Padrão",
+    classificacao: room === 'vermelha' ? "Emergência (Vermelho)" : room === 'amarela' ? "Urgência (Amarelo)" : "Pouco Urgente (Verde)",
+    estadiamento: "Protocolo Institucional",
+    guideline_referencia: "Diretrizes SBC / AMIB / UpToDate 2024",
+    resumo_clinico: `Paciente com quadro sugestivo de ${query}. Necessita de avaliação imediata dos sinais vitais, estabilização hemodinâmica conforme a gravidade e estratificação de risco. A conduta abaixo é sugerida baseada em protocolos padrão de suporte à vida.`,
+    criterios_gravidade: ["Instabilidade Hemodinâmica", "Rebaixamento do Nível de Consciência", "Insuficiência Respiratória Aguda", "Sinais de Sepse"],
+    xabcde_trauma: {
+        x: "Controle de hemorragias exsanguinantes",
+        a: "Vias aéreas e proteção da coluna cervical",
+        b: "Ventilação e oxigenação",
+        c: "Circulação e controle de hemorragias",
+        d: "Disfunção neurológica",
+        e: "Exposição e controle do ambiente"
+    },
+    avaliacao_inicial: {
+        sinais_vitais_alvos: ["SpO2 > 94%", "PAS > 90 mmHg", "FC < 100 bpm", "Temp < 37.8ºC"],
+        exames_prioridade1: ["Hemograma Completo", "PCR / Lactato", "Eletrólitos (Na, K, Mg)", "Função Renal (Cr, Ur)", "ECG 12 Derivações"],
+        exames_complementares: ["Raio-X de Tórax", "Troponina (se dor torácica)", "Gasometria Arterial", "Urina I"]
+    },
+    achados_exames: {
+        ecg: "Avaliar isquemia, sobrecarga ou arritmias.",
+        laboratorio: "Corrigir distúrbios hidroeletrolíticos e acidobásicos.",
+        imagem: "Avaliar consolidações, congestão ou pneumotórax."
+    },
+    tratamento_medicamentoso: [
+        { farmaco: "Oxigênio", dose: "Manter SpO2 alvo", via: "Inalatório", indicacao: "Hipoxemia", categoria: "Suporte" },
+        { farmaco: "Soro Fisiológico 0.9%", dose: "500ml bolus", via: "IV", indicacao: "Expansão se hipotensão", categoria: "Hidratação" },
+        { farmaco: "Dipirona", dose: "1g", via: "IV", indicacao: "Analgesia / Febre", categoria: "Sintomáticos" },
+        { farmaco: "Ondansetrona", dose: "4mg", via: "IV", indicacao: "Náuseas", categoria: "Sintomáticos" },
+        { farmaco: "Omeprazol", dose: "40mg", via: "IV", indicacao: "Proteção Gástrica", categoria: "Profilaxias" }
+    ],
+    escalonamento_terapeutico: [
+        { passo: "1. Estabilização", descricao: "Garantir via aérea permeável e acesso venoso calibroso." },
+        { passo: "2. Monitorização", descricao: "Monitorização contínua de sinais vitais e débito urinário." },
+        { passo: "3. Reavaliação", descricao: "Reavaliar resposta às medidas iniciais a cada 30-60 minutos." }
+    ],
+    criterios_internacao: ["Falha na estabilização inicial na sala de emergência", "Necessidade de suporte intensivo", "Piora clínica progressiva"],
+    criterios_alta: ["Estabilidade clínica por 6h", "Sinais vitais dentro da normalidade", "Controle adequado da dor/sintomas"]
+});
+
 // --- ERROR BOUNDARY ---
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -70,14 +109,8 @@ function EmergencyGuideAppContent() {
   const [authLoading, setAuthLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [isCloudConnected, setIsCloudConnected] = useState(false);
-<<<<<<< HEAD
   const [approvalStatus, setApprovalStatus] = useState(null);
-=======
-  const [approvalStatus, setApprovalStatus] = useState(null); // 'pending', 'approved', 'rejected', null
->>>>>>> parent of 579f807 (feat: update getVitalIcon function and enhance footer with legal notice and feedback button)
   const [configStatus, setConfigStatus] = useState('verificando');
-  
-  // Estado para usuário do Google que precisa completar cadastro
   const [pendingGoogleUser, setPendingGoogleUser] = useState(null);
 
   // App States
@@ -102,7 +135,7 @@ function EmergencyGuideAppContent() {
   const [showScoresModal, setShowScoresModal] = useState(false);
   const [showQuickPrescriptions, setShowQuickPrescriptions] = useState(false);
   const [showPhysicalExam, setShowPhysicalExam] = useState(false);
-  const [showFeedbackModal, setShowFeedbackModal] = useState(false); // <--- NOVO ESTADO
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 
   // Specific Data States
   const [userNotes, setUserNotes] = useState('');
@@ -118,20 +151,7 @@ function EmergencyGuideAppContent() {
   const [isCurrentConductFavorite, setIsCurrentConductFavorite] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // --- HELPER FUNCTIONS ---
-  const showError = (msg) => { setErrorMsg(msg); setTimeout(() => setErrorMsg(''), 4000); };
-  const getConductDocId = (query, room) => `${query.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}_${room}`;
-  
-  const getVitalIcon = (text) => {
-    const t = text.toLowerCase();
-    if (t.includes('fc') || t.includes('bpm')) return <HeartPulse size={16} className="text-rose-500" />;
-    if (t.includes('pa') || t.includes('mmhg') || t.includes('pam')) return <Activity size={16} className="text-blue-500" />;
-    if (t.includes('sat') || t.includes('o2')) return <Droplet size={16} className="text-cyan-500" />;
-    if (t.includes('fr') || t.includes('resp')) return <Wind size={16} className="text-teal-500" />;
-    return <Activity size={16} className="text-slate-400" />;
-  };
-
-  // --- DATA SYNC ---
+  // --- DATA SYNC FUNCTIONS ---
   const loadHistory = async (uid) => {
     if (!db) return;
     try {
@@ -174,7 +194,6 @@ function EmergencyGuideAppContent() {
     const savedTheme = localStorage.getItem('theme_preference');
     if (savedTheme === 'dark') setIsDarkMode(true);
     if (localStorage.getItem('terms_accepted_v1') === 'true') setHasAcceptedTerms(true);
-    
     if (firebaseConfig && firebaseConfig.apiKey) {
         setIsCloudConnected(true);
         setConfigStatus('ok');
@@ -416,7 +435,7 @@ function EmergencyGuideAppContent() {
 
     const docId = getConductDocId(searchQuery, targetRoom);
     
-    // Check Cache
+    // 1. Cache Check
     if (currentUser && db) {
       try {
         const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', docId);
@@ -425,15 +444,17 @@ function EmergencyGuideAppContent() {
           const data = docSnap.data();
           setConduct(data.conductData); setIsCurrentConductFavorite(data.isFavorite || false);
           setLoading(false); saveToHistory(searchQuery, targetRoom);
+          setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
           return;
         }
       } catch (e) {}
     }
 
+    // 2. API Attempt with Fallback
     try {
-      // Simulação de timeout de 10s para fallback
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      // Timeout de 6 segundos (ajustável)
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
 
       const response = await fetch('/api/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -453,26 +474,10 @@ function EmergencyGuideAppContent() {
       }
       saveToHistory(searchQuery, targetRoom);
     } catch (error) { 
-        // Fallback seguro para quando não há API conectada
-        console.warn("Usando conduta simulada devido a erro na API:", error);
-        // Simulando uma resposta básica para não travar a interface
-        setConduct({
-            condicao: searchQuery,
-            classificacao: targetRoom === 'vermelha' ? 'Emergência' : 'Urgência',
-            estadiamento: 'Protocolo Institucional',
-            guideline_referencia: 'Diretrizes SBC 2024 (Simulado)',
-            resumo_clinico: 'Servidor de IA indisponível. Exibindo protocolo de contingência padrão para esta condição.',
-            criterios_gravidade: ['Instabilidade hemodinâmica', 'Rebaixamento do nível de consciência'],
-            avaliacao_inicial: {
-                sinais_vitais_alvos: ['SpO2 > 92%', 'PAS > 90 mmHg'],
-                exames_prioridade1: ['ECG', 'Troponina', 'Hemograma'],
-                exames_complementares: ['RX Tórax', 'Gasometria']
-            },
-            tratamento_medicamentoso: [
-                { farmaco: 'Oxigênio', dose: 'S/N', via: 'Inalatório', indicacao: 'Hipoxemia' },
-                { farmaco: 'Acesso Venoso', dose: '18G', via: 'IV', indicacao: 'Acesso' }
-            ]
-        });
+        // Fallback se a API falhar ou demorar
+        console.warn("Usando conduta simulada devido a:", error);
+        const mockConduct = getMockConduct(searchQuery, targetRoom);
+        setConduct(mockConduct);
         setErrorMsg("Modo Offline: Conduta simulada.");
         setTimeout(() => setErrorMsg(''), 4000);
     } finally { 
@@ -710,7 +715,22 @@ function EmergencyGuideAppContent() {
         )}
       </main>
 
-      {/* Modals */}
+      <footer className={`border-t mt-auto ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
+        <div className="max-w-4xl mx-auto px-4 py-8 text-center">
+          <div className="mb-8">
+              <button onClick={() => setShowFeedbackModal(true)} className={`text-sm font-bold flex items-center justify-center gap-2 mx-auto px-4 py-2 rounded-full transition-colors ${isDarkMode ? 'bg-slate-800 text-pink-400 hover:bg-slate-700' : 'bg-white border border-gray-200 text-pink-600 hover:bg-pink-50'}`}>
+                  <MessageSquare size={18} /> Enviar Feedback ou Sugestão
+              </button>
+          </div>
+          <div className={`border rounded-xl p-4 mb-6 flex flex-col md:flex-row gap-4 items-center text-left ${isDarkMode ? 'bg-amber-900/20 border-amber-900/50' : 'bg-amber-50 border-amber-200'}`}>
+             <ShieldAlert className="text-amber-600 shrink-0 w-8 h-8" />
+             <div><h4 className={`font-bold uppercase text-sm mb-1 ${isDarkMode ? 'text-amber-400' : 'text-amber-900'}`}>Aviso Legal Importante</h4><p className={`text-xs leading-relaxed text-justify ${isDarkMode ? 'text-amber-200/90' : 'text-amber-800/90'}`}>Esta é uma ferramenta de <strong>guia de plantão</strong>. O conteúdo pode conter imprecisões.</p></div>
+          </div>
+          <p className="text-xs text-slate-400">&copy; {new Date().getFullYear()} EmergencyCorp.</p>
+        </div>
+      </footer>
+
+      {/* RENDERIZAÇÃO DOS MODALS VIA COMPONENTES */}
       <InfusionCalculator isOpen={showCalculatorModal} onClose={() => setShowCalculatorModal(false)} isDarkMode={isDarkMode} />
       <NotepadModal isOpen={showNotepad} onClose={() => setShowNotepad(false)} isDarkMode={isDarkMode} userNotes={userNotes} handleNoteChange={handleNoteChange} currentUser={currentUser} isCloudConnected={isCloudConnected} isSaving={isSaving} />
       <FavoritesModal isOpen={showFavoritesModal} onClose={() => setShowFavoritesModal(false)} isDarkMode={isDarkMode} favorites={favorites} loadFavoriteConduct={loadFavoriteConduct} removeFavoriteFromList={removeFavoriteFromList} />
