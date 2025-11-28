@@ -448,7 +448,7 @@ function EmergencyGuideAppContent() {
     if (!selectedImage || !imageQuery.trim()) { showError("Selecione imagem e pergunta."); return; }
     setIsAnalyzingImage(true); setImageAnalysisResult(null);
     try {
-      await new Promise(r => setTimeout(r, 1500));
+      await new Promise(r => setTimeout(r, 45000));
       setImageAnalysisResult("Simulação: A análise de imagem requer um backend Python configurado. (Esta é uma resposta placeholder)");
     } catch (error) { showError("Falha na análise."); } finally { setIsAnalyzingImage(false); }
   };
@@ -463,7 +463,7 @@ function EmergencyGuideAppContent() {
     if (!bedsideAnamnesis.trim()) { showError('Preencha a anamnese.'); return; }
     setIsGeneratingBedside(true); setBedsideResult(null);
     try {
-      await new Promise(r => setTimeout(r, 1500));
+      await new Promise(r => setTimeout(r, 45000));
       setBedsideResult({ hypotheses: ["Hipótese Principal", "Diagnóstico Diferencial"], conduct: "Conduta sugerida baseada na anamnese (Simulação)..." });
     } catch (error) { showError("Erro ao processar."); } finally { setIsGeneratingBedside(false); }
   };
