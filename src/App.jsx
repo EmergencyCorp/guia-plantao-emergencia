@@ -6,7 +6,7 @@ import {
   LogOut, History, Cloud, CloudOff, HeartPulse, Microscope, Image as ImageIcon, 
   Wind, Droplet, Skull, Printer, Calculator, Star, Utensils, Zap, Camera, 
   BedDouble, ClipboardList, Edit, LayoutGrid, ChevronDown, FileText, Droplets,
-  Pill, HelpCircle, UserCheck, Lock, MessageSquare, Terminal
+  Pill, HelpCircle, UserCheck, Lock, MessageSquare
 } from 'lucide-react';
 
 // --- CONFIG & COMPONENTS ---
@@ -36,52 +36,21 @@ import { doc, setDoc, getDoc, collection, query as firestoreQuery, where, orderB
 
 const appId = (typeof __app_id !== 'undefined') ? __app_id : 'emergency-guide-app';
 
-// --- FUNÇÕES AUXILIARES ---
-const getVitalIcon = (text) => {
-  const t = text.toLowerCase();
-  if (t.includes('fc') || t.includes('bpm')) return <HeartPulse size={16} className="text-rose-500" />;
-  if (t.includes('pa') || t.includes('mmhg') || t.includes('pam')) return <Activity size={16} className="text-blue-500" />;
-  if (t.includes('sat') || t.includes('o2')) return <Droplet size={16} className="text-cyan-500" />;
-  if (t.includes('fr') || t.includes('resp')) return <Wind size={16} className="text-teal-500" />;
-  return <Activity size={16} className="text-slate-400" />;
-};
-
-const getMockConduct = (query, room) => ({
-    condicao: query || "Conduta de Suporte (Offline)",
-    classificacao: "Protocolo de Contingência",
-    estadiamento: "Suporte Inicial",
-    guideline_referencia: "Protocolos Gerais de Emergência",
-    resumo_clinico: "O servidor não respondeu. Esta é uma conduta de segurança gerada automaticamente para estabilização inicial.",
-    criterios_gravidade: ["Instabilidade", "Rebaixamento", "Insuficiência Respiratória"],
-    avaliacao_inicial: {
-        sinais_vitais_alvos: ["SpO2 > 92%", "PAS > 90", "FC < 100"],
-        exames_prioridade1: ["Hemograma", "Gaso", "ECG", "Eletrólitos"],
-        exames_complementares: ["RX Tórax", "Lactato"]
-    },
-    achados_exames: { ecg: "Avaliar isquemia/arritmia", laboratorio: "Corrigir distúrbios", imagem: "Avaliar congestão" },
-    tratamento_medicamentoso: [
-        { farmaco: "Oxigênio", dose: "S/N", via: "Inalatório" },
-        { farmaco: "Acesso Venoso", dose: "Calibre 18/20G", via: "IV" },
-        { farmaco: "Soro Fisiológico 0.9%", dose: "500ml se choque", via: "IV" },
-        { farmaco: "Dipirona", dose: "1g", via: "IV" },
-        { farmaco: "Ondansetrona", dose: "4mg", via: "IV" }
-    ],
-    escalonamento_terapeutico: [{ passo: "1. MOV", descricao: "Monitorização, Oxigênio, Veia." }],
-    criterios_internacao: ["Falha na estabilização"],
-    criterios_alta: ["Estabilidade por 6h"]
-});
-
 // --- ERROR BOUNDARY ---
 class ErrorBoundary extends React.Component {
-  constructor(props) { super(props); this.state = { hasError: false, error: null }; }
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
   static getDerivedStateFromError(error) { return { hasError: true, error }; }
   render() {
-    if (this.state.hasError) return <div className="p-8 text-center bg-red-50 text-red-800"><h1>Erro Crítico</h1><pre className="text-xs mt-2">{this.state.error?.toString()}</pre><button onClick={()=>window.location.reload()} className="mt-4 bg-red-600 text-white px-4 py-2 rounded">Recarregar</button></div>;
+    if (this.state.hasError) return <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center text-red-600 bg-red-50"><h1 className="text-2xl font-bold">Ops! Erro crítico.</h1><p className="mt-2 text-sm">{this.state.error?.toString()}</p><button onClick={()=>window.location.reload()} className="mt-6 bg-red-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-red-700">Recarregar Aplicação</button></div>;
     return this.props.children; 
   }
 }
 
 function EmergencyGuideAppContent() {
+  // --- STATE MANAGEMENT ---
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
@@ -101,10 +70,6 @@ function EmergencyGuideAppContent() {
   const [favorites, setFavorites] = useState([]);
   const [errorMsg, setErrorMsg] = useState('');
   const resultsRef = useRef(null);
-  
-  // Debug States
-  const [debugLogs, setDebugLogs] = useState([]);
-  const [showDebug, setShowDebug] = useState(false);
 
   // Modals
   const [showToolsMenu, setShowToolsMenu] = useState(false);
@@ -133,12 +98,6 @@ function EmergencyGuideAppContent() {
   const [isGeneratingBedside, setIsGeneratingBedside] = useState(false);
   const [isCurrentConductFavorite, setIsCurrentConductFavorite] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-
-  const addLog = (msg) => {
-      const log = `[${new Date().toLocaleTimeString()}] ${msg}`;
-      console.log(log);
-      setDebugLogs(prev => [...prev, log]);
-  };
 
   // --- DATA SYNC ---
   const loadHistory = async (uid) => {
@@ -183,13 +142,11 @@ function EmergencyGuideAppContent() {
     const savedTheme = localStorage.getItem('theme_preference');
     if (savedTheme === 'dark') setIsDarkMode(true);
     if (localStorage.getItem('terms_accepted_v1') === 'true') setHasAcceptedTerms(true);
-    
     if (firebaseConfig && firebaseConfig.apiKey) {
         setIsCloudConnected(true);
         setConfigStatus('ok');
     } else {
         setConfigStatus('missing');
-        addLog("ERRO: Firebase Config ausente.");
     }
   }, []);
 
@@ -207,7 +164,6 @@ function EmergencyGuideAppContent() {
         try {
           const userDocRef = doc(db, 'artifacts', appId, 'users', user.uid);
           const docSnap = await getDoc(userDocRef);
-          
           if (docSnap.exists()) {
             const userData = docSnap.data();
             if (userData.status === 'approved') {
@@ -225,9 +181,7 @@ function EmergencyGuideAppContent() {
             setCurrentUser(null);
             setApprovalStatus(null);
           }
-        } catch (e) {
-          setLoginError("Erro ao verificar permissões.");
-        }
+        } catch (e) { setLoginError("Erro ao verificar permissões."); }
       } else {
         setCurrentUser(null);
         setApprovalStatus(null);
@@ -287,7 +241,12 @@ function EmergencyGuideAppContent() {
       if (!pendingGoogleUser) return;
       try {
           await setDoc(doc(db, 'artifacts', appId, 'users', pendingGoogleUser.uid), {
-              name: name, crm: crm, email: pendingGoogleUser.email, status: 'pending', role: 'user', createdAt: new Date().toISOString()
+              name: name,
+              crm: crm,
+              email: pendingGoogleUser.email,
+              status: 'pending',
+              role: 'user',
+              createdAt: new Date().toISOString()
           });
           setPendingGoogleUser(null);
           setApprovalStatus('pending'); 
@@ -300,6 +259,60 @@ function EmergencyGuideAppContent() {
   };
 
   const handleNoteChange = (e) => setUserNotes(e.target.value);
+
+  // --- CORE LOGIC & HELPERS (MOVIDOS PARA DENTRO PARA SEGURANÇA) ---
+  
+  // Helper de Ícones
+  const getVitalIcon = (text) => {
+    const t = text.toLowerCase();
+    if (t.includes('fc') || t.includes('bpm')) return <HeartPulse size={16} className="text-rose-500" />;
+    if (t.includes('pa') || t.includes('mmhg') || t.includes('pam')) return <Activity size={16} className="text-blue-500" />;
+    if (t.includes('sat') || t.includes('o2')) return <Droplet size={16} className="text-cyan-500" />;
+    if (t.includes('fr') || t.includes('resp')) return <Wind size={16} className="text-teal-500" />;
+    return <Activity size={16} className="text-slate-400" />;
+  };
+
+  // Mock de Contingência
+  const getMockConduct = (query, room) => ({
+      condicao: query ? (query.charAt(0).toUpperCase() + query.slice(1)) : "Conduta Padrão",
+      classificacao: room === 'vermelha' ? "Emergência (Vermelho)" : room === 'amarela' ? "Urgência (Amarelo)" : "Pouco Urgente (Verde)",
+      estadiamento: "Protocolo Institucional",
+      guideline_referencia: "Diretrizes SBC / AMIB / UpToDate 2024",
+      resumo_clinico: `Paciente com quadro sugestivo de ${query}. Necessita de avaliação imediata dos sinais vitais e estabilização hemodinâmica conforme a gravidade.`,
+      criterios_gravidade: ["Instabilidade Hemodinâmica", "Rebaixamento do Nível de Consciência", "Insuficiência Respiratória Aguda", "Sinais de Sepse"],
+      xabcde_trauma: {
+          x: "Controle de hemorragias",
+          a: "Vias aéreas e coluna cervical",
+          b: "Ventilação e oxigenação",
+          c: "Circulação",
+          d: "Neurológico",
+          e: "Exposição"
+      },
+      avaliacao_inicial: {
+          sinais_vitais_alvos: ["SpO2 > 94%", "PAS > 90 mmHg", "FC < 100 bpm", "Temp < 37.8ºC"],
+          exames_prioridade1: ["Hemograma Completo", "PCR / Lactato", "Eletrólitos", "Função Renal", "ECG 12 Derivações"],
+          exames_complementares: ["Raio-X de Tórax", "Troponina (se dor torácica)", "Gasometria Arterial", "Urina I"]
+      },
+      achados_exames: {
+          ecg: "Avaliar isquemia, sobrecarga ou arritmias.",
+          laboratorio: "Corrigir distúrbios hidroeletrolíticos.",
+          imagem: "Avaliar consolidações ou congestão."
+      },
+      tratamento_medicamentoso: [
+          { farmaco: "Oxigênio", dose: "Manter SpO2 alvo", via: "Inalatório", indicacao: "Hipoxemia", categoria: "Suporte" },
+          { farmaco: "Soro Fisiológico 0.9%", dose: "500ml bolus", via: "IV", indicacao: "Expansão se hipotensão", categoria: "Hidratação" },
+          { farmaco: "Dipirona", dose: "1g", via: "IV", indicacao: "Analgesia / Febre", categoria: "Sintomáticos" },
+          { farmaco: "Ondansetrona", dose: "4mg", via: "IV", indicacao: "Náuseas", categoria: "Sintomáticos" },
+          { farmaco: "Omeprazol", dose: "40mg", via: "IV", indicacao: "Proteção Gástrica", categoria: "Profilaxias" }
+      ],
+      escalonamento_terapeutico: [
+          { passo: "1. Estabilização", descricao: "Garantir via aérea permeável e acesso venoso." },
+          { passo: "2. Monitorização", descricao: "Monitorização contínua de sinais vitais." },
+          { passo: "3. Reavaliação", descricao: "Reavaliar resposta às medidas iniciais a cada 30-60 minutos." }
+      ],
+      criterios_internacao: ["Falha na estabilização inicial", "Necessidade de suporte intensivo"],
+      criterios_alta: ["Estabilidade clínica por 6h", "Sinais vitais normais"]
+  });
 
   const toggleFavorite = async () => {
     if (!currentUser || !conduct) { showError("Necessário estar online."); return; }
@@ -375,9 +388,17 @@ function EmergencyGuideAppContent() {
     if (!selectedImage || !imageQuery.trim()) { showError("Selecione imagem e pergunta."); return; }
     setIsAnalyzingImage(true); setImageAnalysisResult(null);
     try {
-      // Simulação de API
-      await new Promise(r => setTimeout(r, 2000));
-      setImageAnalysisResult("Simulação: A análise de imagem requer um backend Python configurado. Esta é uma resposta placeholder para evitar travamento.");
+      const response = await fetch('/api/generate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: selectedImage, prompt: imageQuery })
+      });
+      if (!response.ok) throw new Error('Erro ao analisar.');
+      const data = await response.json();
+      let finalResult = data.analysis;
+      if (typeof finalResult === 'string' && finalResult.trim().startsWith('{')) {
+         try { const p = JSON.parse(finalResult); finalResult = p.analise_ecg || p.analysis || p; } catch(e){}
+      }
+      setImageAnalysisResult(finalResult);
     } catch (error) { showError("Falha na análise."); } finally { setIsAnalyzingImage(false); }
   };
 
@@ -385,54 +406,41 @@ function EmergencyGuideAppContent() {
     if (!bedsideAnamnesis.trim()) { showError('Preencha a anamnese.'); return; }
     setIsGeneratingBedside(true); setBedsideResult(null);
     try {
-      await new Promise(r => setTimeout(r, 2000));
-      setBedsideResult({ hypotheses: ["Hipótese A", "Hipótese B"], conduct: "Conduta sugerida simulada..." });
+      const response = await fetch('/api/generate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'bedside', anamnesis: bedsideAnamnesis, exams: bedsideExams, searchQuery: 'Bedside', activeRoom: 'bedside' })
+      });
+      if (!response.ok) throw new Error('Erro Bedside.');
+      const data = await response.json();
+      setBedsideResult(data);
     } catch (error) { showError("Erro ao processar."); } finally { setIsGeneratingBedside(false); }
   };
-
-  const getConductDocId = (query, room) => `${query.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}_${room}`;
 
   const generateConduct = async (overrideRoom = null) => {
     if (!searchQuery.trim()) { showError('Digite uma condição clínica.'); return; }
     const targetRoom = overrideRoom || activeRoom;
-    
-    setLoading(true); 
-    setConduct(null); 
-    setErrorMsg(''); 
-    setDebugLogs([]);
-    setShowDebug(false);
-    setIsCurrentConductFavorite(false);
-    
+    setLoading(true); setConduct(null); setErrorMsg(''); setIsCurrentConductFavorite(false);
     if (overrideRoom) setActiveRoom(overrideRoom);
 
     const docId = getConductDocId(searchQuery, targetRoom);
     
-    addLog(`Iniciando busca: ${searchQuery} (${targetRoom})`);
-
-    // 1. Tenta Cache Local
     if (currentUser && db) {
       try {
-        addLog("Verificando cache do Firestore...");
         const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', docId);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-          addLog("Encontrado no cache!");
           const data = docSnap.data();
-          setConduct(data.conductData); 
-          setIsCurrentConductFavorite(data.isFavorite || false);
-          setLoading(false); 
-          saveToHistory(searchQuery, targetRoom);
+          setConduct(data.conductData); setIsCurrentConductFavorite(data.isFavorite || false);
+          setLoading(false); saveToHistory(searchQuery, targetRoom);
           return;
         }
-        addLog("Não encontrado no cache.");
-      } catch (e) { addLog(`Erro no cache: ${e.message}`); }
+      } catch (e) {}
     }
 
-    // 2. Tenta API com Fallback Robusto
+    // Tenta API com Fallback Robusto
     try {
-      addLog("Chamando API externa...");
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s Timeout
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s Timeout
 
       const response = await fetch('/api/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -441,32 +449,25 @@ function EmergencyGuideAppContent() {
       });
       
       clearTimeout(timeoutId);
-      addLog(`Status API: ${response.status}`);
 
-      if (!response.ok) throw new Error(`Erro API: ${response.statusText}`);
-      
+      if (!response.ok) throw new Error('Erro IA.');
       const parsedConduct = await response.json();
-      if (!parsedConduct) throw new Error('JSON Vazio');
-
       setConduct(parsedConduct);
-      addLog("Conduta gerada com sucesso pela API.");
       
       if (currentUser && db) {
         const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', docId);
         await setDoc(docRef, { query: searchQuery, room: targetRoom, conductData: parsedConduct, isFavorite: false, lastAccessed: new Date().toISOString() });
       }
-      
+      saveToHistory(searchQuery, targetRoom);
     } catch (error) { 
-       addLog(`FALHA: ${error.message}. Ativando Contingência.`);
-       const mockConduct = getMockConduct(searchQuery, targetRoom);
-       setConduct(mockConduct);
-       setErrorMsg("Modo Offline: Conduta simulada.");
-       setTimeout(() => setErrorMsg(''), 4000);
-       setShowDebug(true); // Mostra debug se falhar
+        console.log("Usando conduta de contingência.");
+        const mockConduct = getMockConduct(searchQuery, targetRoom);
+        setConduct(mockConduct);
+        setErrorMsg("Modo Offline: Conduta simulada.");
+        setTimeout(() => setErrorMsg(''), 4000);
     } finally { 
-       setLoading(false); 
-       saveToHistory(searchQuery, targetRoom);
-       setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
+        setLoading(false); 
+        setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
     }
   };
 
@@ -571,26 +572,7 @@ function EmergencyGuideAppContent() {
           </div>
 
           {recentSearches.length > 0 && (<div className="flex flex-wrap gap-2 px-1"><div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase mr-2"><History size={14} /> Recentes</div>{recentSearches.map((search, idx) => (<button key={idx} onClick={() => {setActiveRoom(search.room); setSearchQuery(search.query);}} className={`flex items-center gap-2 text-xs px-3 py-1 border rounded-full transition-colors ${isDarkMode ? 'bg-slate-900 border-slate-700 hover:border-blue-500 hover:text-blue-400 text-slate-300' : 'bg-white border-gray-200 hover:border-blue-300 hover:text-blue-700'}`}><div className={`w-2 h-2 rounded-full shrink-0 ${search.room === 'verde' ? 'bg-emerald-500' : search.room === 'amarela' ? 'bg-amber-500' : 'bg-rose-500'}`} />{search.query}</button>))}</div>)}
-          
-          {/* DEBUG ERROR BOX */}
-          {errorMsg && (
-              <div className={`px-4 py-3 rounded-xl border flex items-center gap-3 text-sm font-medium animate-in slide-in-from-top-2 ${isDarkMode ? 'bg-red-900/30 text-red-300 border-red-800' : 'bg-red-50 text-red-700 border-red-200'}`}>
-                  <AlertCircle size={18} /> {errorMsg}
-              </div>
-          )}
-          
-          {/* DEBUG PANEL (HIDDEN BY DEFAULT UNLESS NEEDED) */}
-          {showDebug && (
-             <div className="mt-4 p-4 bg-black text-green-400 font-mono text-xs rounded-lg overflow-hidden">
-                 <div className="flex justify-between items-center mb-2 border-b border-green-800 pb-2">
-                     <span className="flex items-center gap-2"><Terminal size={14}/> Logs de Diagnóstico</span>
-                     <button onClick={() => setShowDebug(false)}><X size={14}/></button>
-                 </div>
-                 <div className="max-h-40 overflow-y-auto space-y-1">
-                     {debugLogs.map((log, i) => <div key={i}>{log}</div>)}
-                 </div>
-             </div>
-          )}
+          {errorMsg && <div className={`px-4 py-3 rounded-xl border flex items-center gap-3 text-sm font-medium ${isDarkMode ? 'bg-red-900/30 text-red-300 border-red-800' : 'bg-red-50 text-red-700 border-red-200'}`}><AlertCircle size={18} /> {errorMsg}</div>}
         </div>
 
         {conduct && (
@@ -718,7 +700,22 @@ function EmergencyGuideAppContent() {
         )}
       </main>
 
-      {/* Modals */}
+      <footer className={`border-t mt-auto ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
+        <div className="max-w-4xl mx-auto px-4 py-8 text-center">
+          <div className="mb-8">
+              <button onClick={() => setShowFeedbackModal(true)} className={`text-sm font-bold flex items-center justify-center gap-2 mx-auto px-4 py-2 rounded-full transition-colors ${isDarkMode ? 'bg-slate-800 text-pink-400 hover:bg-slate-700' : 'bg-white border border-gray-200 text-pink-600 hover:bg-pink-50'}`}>
+                  <MessageSquare size={18} /> Enviar Feedback ou Sugestão
+              </button>
+          </div>
+          <div className={`border rounded-xl p-4 mb-6 flex flex-col md:flex-row gap-4 items-center text-left ${isDarkMode ? 'bg-amber-900/20 border-amber-900/50' : 'bg-amber-50 border-amber-200'}`}>
+             <ShieldAlert className="text-amber-600 shrink-0 w-8 h-8" />
+             <div><h4 className={`font-bold uppercase text-sm mb-1 ${isDarkMode ? 'text-amber-400' : 'text-amber-900'}`}>Aviso Legal Importante</h4><p className={`text-xs leading-relaxed text-justify ${isDarkMode ? 'text-amber-200/90' : 'text-amber-800/90'}`}>Esta é uma ferramenta de <strong>guia de plantão</strong>. O conteúdo pode conter imprecisões.</p></div>
+          </div>
+          <p className="text-xs text-slate-400">&copy; {new Date().getFullYear()} EmergencyCorp.</p>
+        </div>
+      </footer>
+
+      {/* RENDERIZAÇÃO DOS MODALS VIA COMPONENTES */}
       <InfusionCalculator isOpen={showCalculatorModal} onClose={() => setShowCalculatorModal(false)} isDarkMode={isDarkMode} />
       <NotepadModal isOpen={showNotepad} onClose={() => setShowNotepad(false)} isDarkMode={isDarkMode} userNotes={userNotes} handleNoteChange={handleNoteChange} currentUser={currentUser} isCloudConnected={isCloudConnected} isSaving={isSaving} />
       <FavoritesModal isOpen={showFavoritesModal} onClose={() => setShowFavoritesModal(false)} isDarkMode={isDarkMode} favorites={favorites} loadFavoriteConduct={loadFavoriteConduct} removeFavoriteFromList={removeFavoriteFromList} />
@@ -726,8 +723,21 @@ function EmergencyGuideAppContent() {
       <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} isDarkMode={isDarkMode} />
       <MedicalScoresModal isOpen={showScoresModal} onClose={() => setShowScoresModal(false)} isDarkMode={isDarkMode} />
       <QuickPrescriptionsModal isOpen={showQuickPrescriptions} onClose={() => setShowQuickPrescriptions(false)} isDarkMode={isDarkMode} />
-      <ImageAnalysisModal isOpen={showImageModal} onClose={() => setShowImageModal(false)} isDarkMode={isDarkMode} selectedImage={selectedImage} handleImageUpload={handleImageUpload} imageQuery={imageQuery} setImageQuery={setImageQuery} handleAnalyzeImage={handleAnalyzeImage} isAnalyzingImage={isAnalyzingImage} imageAnalysisResult={imageAnalysisResult} setImageAnalysisResult={setImageAnalysisResult} />
-      <BedsideModal isOpen={showBedsideModal} onClose={() => setShowBedsideModal(false)} isDarkMode={isDarkMode} bedsideAnamnesis={bedsideAnamnesis} setBedsideAnamnesis={setBedsideAnamnesis} bedsideExams={bedsideExams} setBedsideExams={setBedsideExams} generateBedsideConduct={generateBedsideConduct} isGeneratingBedside={isGeneratingBedside} bedsideResult={bedsideResult} />
+      
+      <ImageAnalysisModal 
+        isOpen={showImageModal} onClose={() => setShowImageModal(false)} isDarkMode={isDarkMode}
+        selectedImage={selectedImage} handleImageUpload={handleImageUpload} imageQuery={imageQuery} setImageQuery={setImageQuery}
+        handleAnalyzeImage={handleAnalyzeImage} isAnalyzingImage={isAnalyzingImage} imageAnalysisResult={imageAnalysisResult} setImageAnalysisResult={setImageAnalysisResult}
+      />
+
+      <BedsideModal 
+        isOpen={showBedsideModal} onClose={() => setShowBedsideModal(false)} isDarkMode={isDarkMode}
+        bedsideAnamnesis={bedsideAnamnesis} setBedsideAnamnesis={setBedsideAnamnesis}
+        bedsideExams={bedsideExams} setBedsideExams={setBedsideExams}
+        generateBedsideConduct={generateBedsideConduct} isGeneratingBedside={isGeneratingBedside} bedsideResult={bedsideResult}
+      />
+      
+      {/* RENDERIZAÇÃO DO MODAL DE EXAME FÍSICO E FEEDBACK */}
       <PhysicalExamModal isOpen={showPhysicalExam} onClose={() => setShowPhysicalExam(false)} isDarkMode={isDarkMode} />
       <FeedbackModal isOpen={showFeedbackModal} onClose={() => setShowFeedbackModal(false)} isDarkMode={isDarkMode} currentUser={currentUser} />
     </div>
