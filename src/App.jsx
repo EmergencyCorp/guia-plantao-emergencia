@@ -31,7 +31,8 @@ import CompleteProfileModal from './components/modals/CompleteProfileModal';
 
 // --- FIREBASE IMPORTS ---
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
-import { doc, setDoc, getDoc, collection, query as firestoreQuery, where, orderBy, getDocs, deleteDoc } from 'firebase/firestore';
+// ADICIONADO: onSnapshot estava faltando nas importações
+import { doc, setDoc, getDoc, collection, query as firestoreQuery, where, orderBy, getDocs, deleteDoc, onSnapshot } from 'firebase/firestore';
 
 const appId = (typeof __app_id !== 'undefined') ? __app_id : 'emergency-guide-app';
 const GLOBAL_CACHE_COLLECTION = 'global_conduct_cache'; // Coleção compartilhada
@@ -81,7 +82,10 @@ class ErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { hasError: false, error: null }; }
   static getDerivedStateFromError(error) { return { hasError: true, error }; }
   render() {
-    if (this.state.hasError) return <div className="p-8 text-center"><h1>Erro no App</h1><button onClick={()=>window.location.reload()} className="bg-blue-600 text-white px-4 py-2 rounded mt-4">Recarregar</button></div>;
+    if (this.state.hasError) {
+        console.error("Erro capturado pelo Boundary:", this.state.error); // Log para debug
+        return <div className="p-8 text-center"><h1>Erro no App</h1><p className="text-red-500 text-sm mt-2">{this.state.error?.toString()}</p><button onClick={()=>window.location.reload()} className="bg-blue-600 text-white px-4 py-2 rounded mt-4">Recarregar</button></div>;
+    }
     return this.props.children; 
   }
 }
@@ -134,6 +138,12 @@ function EmergencyGuideAppContent() {
   const [isGeneratingBedside, setIsGeneratingBedside] = useState(false);
   const [isCurrentConductFavorite, setIsCurrentConductFavorite] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // --- HELPER FUNCTION: SHOW ERROR ---
+  const showError = (msg) => {
+    setErrorMsg(msg);
+    setTimeout(() => setErrorMsg(''), 4000);
+  };
 
   // --- INIT ---
   useEffect(() => {
@@ -231,11 +241,16 @@ function EmergencyGuideAppContent() {
         const favs = [];
         snapshot.forEach((doc) => favs.push({ id: doc.id, ...doc.data() }));
         setFavorites(favs);
+        // Verifica se a conduta atual está nos favoritos
+        if (conduct) {
+             const conductId = getConductDocId(searchQuery, activeRoom);
+             setIsCurrentConductFavorite(favs.some(f => f.id === conductId));
+        }
     });
   };
 
   const handleNoteChange = (e) => {
-     setUserNotes(e.target.value);
+      setUserNotes(e.target.value);
   };
 
   useEffect(() => { 
@@ -389,7 +404,7 @@ function EmergencyGuideAppContent() {
     }
   };
 
-  // --- OTHER HANDLERS ---
+  // --- OTHER HANDLERS (QUE ESTAVAM FALTANDO) ---
   const handleAnalyzeImage = async () => {
     if (!selectedImage || !imageQuery.trim()) { showError("Selecione imagem e pergunta."); return; }
     setIsAnalyzingImage(true); setImageAnalysisResult(null);
@@ -399,6 +414,12 @@ function EmergencyGuideAppContent() {
     } catch (error) { showError("Falha na análise."); } finally { setIsAnalyzingImage(false); }
   };
 
+  const handleImageUpload = (e) => {
+      if (e.target.files && e.target.files[0]) {
+          setSelectedImage(URL.createObjectURL(e.target.files[0]));
+      }
+  };
+
   const generateBedsideConduct = async () => {
     if (!bedsideAnamnesis.trim()) { showError('Preencha a anamnese.'); return; }
     setIsGeneratingBedside(true); setBedsideResult(null);
@@ -406,6 +427,61 @@ function EmergencyGuideAppContent() {
       await new Promise(r => setTimeout(r, 1500));
       setBedsideResult({ hypotheses: ["Hipótese Principal", "Diagnóstico Diferencial"], conduct: "Conduta sugerida baseada na anamnese (Simulação)..." });
     } catch (error) { showError("Erro ao processar."); } finally { setIsGeneratingBedside(false); }
+  };
+
+  // Funções de Favoritos
+  const toggleFavorite = async () => {
+      if (!conduct || !currentUser) return;
+      try {
+        const conductId = getConductDocId(searchQuery, activeRoom);
+        const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', conductId);
+        
+        if (isCurrentConductFavorite) {
+            await deleteDoc(docRef);
+            setIsCurrentConductFavorite(false);
+        } else {
+            await setDoc(docRef, {
+                query: searchQuery, 
+                room: activeRoom,
+                conductData: conduct,
+                isFavorite: true,
+                savedAt: new Date().toISOString()
+            });
+            setIsCurrentConductFavorite(true);
+        }
+      } catch (e) {
+          showError("Erro ao atualizar favoritos");
+      }
+  };
+
+  const loadFavoriteConduct = (fav) => {
+      setConduct(fav.conductData);
+      setSearchQuery(fav.query);
+      setActiveRoom(fav.room);
+      setIsCurrentConductFavorite(true);
+      setShowFavoritesModal(false);
+  };
+
+  const removeFavoriteFromList = async (favId) => {
+      if (!currentUser || !db) return;
+      try {
+          await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', favId));
+      } catch (e) {
+          showError("Erro ao remover favorito");
+      }
+  };
+
+  // Funções de Prescrição
+  const togglePrescriptionItem = (item) => {
+      if (selectedPrescriptionItems.some(i => i.farmaco === item.farmaco)) {
+          setSelectedPrescriptionItems(prev => prev.filter(i => i.farmaco !== item.farmaco));
+      } else {
+          setSelectedPrescriptionItems(prev => [...prev, { ...item, days: 3 }]);
+      }
+  };
+
+  const updateItemDays = (farmaco, days) => {
+      setSelectedPrescriptionItems(prev => prev.map(i => i.farmaco === farmaco ? { ...i, days: parseInt(days) || 1 } : i));
   };
   
   const roomConfig = {
@@ -593,7 +669,7 @@ function EmergencyGuideAppContent() {
                       ))
                    ) : (
                       <div className="space-y-8">
-                         {RED_ROOM_CATEGORIES.map((catName) => {
+                          {RED_ROOM_CATEGORIES.map((catName) => {
                            const catItems = conduct.tratamento_medicamentoso?.filter(m => {
                               const mCat = m.categoria || "Outros";
                               return mCat.toLowerCase() === catName.toLowerCase() || (catName === "Outros" && !RED_ROOM_CATEGORIES.slice(0,6).some(c => c.toLowerCase() === mCat.toLowerCase()));
@@ -603,18 +679,18 @@ function EmergencyGuideAppContent() {
 
                            return (
                               <div key={catName} className="relative">
-                                 <h4 className={`flex items-center gap-2 font-bold uppercase text-xs mb-3 pl-1 border-b pb-1 ${isDarkMode ? 'text-rose-300 border-rose-800/50' : 'text-rose-800 border-rose-100'}`}>
-                                   {catName === 'Dieta' && <Utensils size={14}/>}
-                                   {catName === 'Hidratação' && <Droplets size={14}/>}
-                                   {catName === 'Drogas Vasoativas' && <Zap size={14}/>}
-                                   {catName}
-                                 </h4>
-                                 <div className="grid gap-4">
-                                   {catItems.map((med, idx) => (<MedicationCard key={idx} med={med} activeRoom={activeRoom} selectedPrescriptionItems={selectedPrescriptionItems} togglePrescriptionItem={togglePrescriptionItem} updateItemDays={updateItemDays} isDarkMode={isDarkMode} />))}
-                                 </div>
+                                  <h4 className={`flex items-center gap-2 font-bold uppercase text-xs mb-3 pl-1 border-b pb-1 ${isDarkMode ? 'text-rose-300 border-rose-800/50' : 'text-rose-800 border-rose-100'}`}>
+                                    {catName === 'Dieta' && <Utensils size={14}/>}
+                                    {catName === 'Hidratação' && <Droplets size={14}/>}
+                                    {catName === 'Drogas Vasoativas' && <Zap size={14}/>}
+                                    {catName}
+                                  </h4>
+                                  <div className="grid gap-4">
+                                    {catItems.map((med, idx) => (<MedicationCard key={idx} med={med} activeRoom={activeRoom} selectedPrescriptionItems={selectedPrescriptionItems} togglePrescriptionItem={togglePrescriptionItem} updateItemDays={updateItemDays} isDarkMode={isDarkMode} />))}
+                                  </div>
                               </div>
                            );
-                         })}
+                          })}
                       </div>
                    )}
                 </div>
