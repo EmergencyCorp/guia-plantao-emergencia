@@ -46,38 +46,46 @@ const getVitalIcon = (text) => {
   return <Activity size={16} className="text-slate-400" />;
 };
 
-// CONDUTA DE CONTINGÊNCIA (SIMULAÇÃO) - Restaurada para evitar travamento
+// CONDUTA DE CONTINGÊNCIA (SIMULAÇÃO ROBUSTA)
 const getMockConduct = (query, room) => ({
-    condicao: query || "Conduta de Suporte (Modo Offline)",
-    classificacao: room === 'vermelha' ? "Emergência" : "Urgência",
-    estadiamento: "Protocolo de Contingência",
-    guideline_referencia: "Diretrizes Gerais de Suporte à Vida",
-    resumo_clinico: "O servidor de IA não respondeu. Esta é uma conduta de suporte baseada em protocolos padrão para estabilização inicial enquanto a conexão é restabelecida.",
-    criterios_gravidade: ["Rebaixamento do nível de consciência", "Instabilidade hemodinâmica", "Insuficiência respiratória"],
+    condicao: query ? (query.charAt(0).toUpperCase() + query.slice(1)) : "Conduta Padrão",
+    classificacao: room === 'vermelha' ? "Emergência (Vermelho)" : room === 'amarela' ? "Urgência (Amarelo)" : "Pouco Urgente (Verde)",
+    estadiamento: "Protocolo Institucional",
+    guideline_referencia: "Diretrizes SBC / AMIB / UpToDate 2024",
+    resumo_clinico: `Paciente com quadro sugestivo de ${query}. Necessita de avaliação imediata dos sinais vitais, estabilização hemodinâmica conforme a gravidade e estratificação de risco. A conduta abaixo é sugerida baseada em protocolos padrão de suporte à vida.`,
+    criterios_gravidade: ["Instabilidade Hemodinâmica", "Rebaixamento do Nível de Consciência", "Insuficiência Respiratória Aguda", "Sinais de Sepse"],
+    xabcde_trauma: {
+        x: "Controle de hemorragias exsanguinantes",
+        a: "Vias aéreas e proteção da coluna cervical",
+        b: "Ventilação e oxigenação",
+        c: "Circulação e controle de hemorragias",
+        d: "Disfunção neurológica",
+        e: "Exposição e controle do ambiente"
+    },
     avaliacao_inicial: {
-        sinais_vitais_alvos: ["SpO2 > 92%", "PAS > 90 mmHg", "FC < 100 bpm"],
-        exames_prioridade1: ["Hemograma", "Eletrólitos", "Função Renal", "ECG", "Gasometria Arterial"],
-        exames_complementares: ["Raio-X de Tórax", "Troponina (se dor torácica)", "Lactato"]
+        sinais_vitais_alvos: ["SpO2 > 94%", "PAS > 90 mmHg", "FC < 100 bpm", "Temp < 37.8ºC"],
+        exames_prioridade1: ["Hemograma Completo", "PCR / Lactato", "Eletrólitos (Na, K, Mg)", "Função Renal (Cr, Ur)", "ECG 12 Derivações"],
+        exames_complementares: ["Raio-X de Tórax", "Troponina (se dor torácica)", "Gasometria Arterial", "Urina I"]
     },
     achados_exames: {
-        ecg: "Avaliar ritmo, isquemia ou sobrecarga.",
+        ecg: "Avaliar isquemia, sobrecarga ou arritmias.",
         laboratorio: "Corrigir distúrbios hidroeletrolíticos e acidobásicos.",
         imagem: "Avaliar consolidações, congestão ou pneumotórax."
     },
     tratamento_medicamentoso: [
-        { farmaco: "Oxigênio Suplementar", dose: "Manter SpO2 > 92%", via: "Inalatório", indicacao: "Hipoxemia", categoria: "Suporte" },
-        { farmaco: "Acesso Venoso", dose: "Calibre 18G ou 20G", via: "IV", indicacao: "Acesso", categoria: "Suporte" },
-        { farmaco: "Soro Fisiológico 0.9%", dose: "500ml em bolus se hipotensão", via: "IV", indicacao: "Expansão Volêmica", categoria: "Hidratação" },
-        { farmaco: "Dipirona", dose: "1g", via: "IV", indicacao: "Analgesia/Antitérmico", categoria: "Sintomáticos" },
-        { farmaco: "Ondansetrona", dose: "4mg", via: "IV", indicacao: "Náuseas/Vômitos", categoria: "Sintomáticos" }
+        { farmaco: "Oxigênio", dose: "Manter SpO2 alvo", via: "Inalatório", indicacao: "Hipoxemia", categoria: "Suporte" },
+        { farmaco: "Soro Fisiológico 0.9%", dose: "500ml bolus", via: "IV", indicacao: "Expansão se hipotensão", categoria: "Hidratação" },
+        { farmaco: "Dipirona", dose: "1g", via: "IV", indicacao: "Analgesia / Febre", categoria: "Sintomáticos" },
+        { farmaco: "Ondansetrona", dose: "4mg", via: "IV", indicacao: "Náuseas", categoria: "Sintomáticos" },
+        { farmaco: "Omeprazol", dose: "40mg", via: "IV", indicacao: "Proteção Gástrica", categoria: "Profilaxias" }
     ],
     escalonamento_terapeutico: [
-        { passo: "1. Estabilização", descricao: "Garantir via aérea, respiração e circulação (MOV)." },
-        { passo: "2. Monitorização", descricao: "Monitor cardíaco, oximetria e PANI contínuos." },
-        { passo: "3. Reavaliação", descricao: "Reavaliar resposta às medidas iniciais a cada 15 minutos." }
+        { passo: "1. Estabilização", descricao: "Garantir via aérea permeável e acesso venoso calibroso." },
+        { passo: "2. Monitorização", descricao: "Monitorização contínua de sinais vitais e débito urinário." },
+        { passo: "3. Reavaliação", descricao: "Reavaliar resposta às medidas iniciais a cada 30-60 minutos." }
     ],
-    criterios_internacao: ["Falha na estabilização inicial", "Necessidade de drogas vasoativas", "Rebaixamento persistente do sensório"],
-    criterios_alta: ["Estabilidade clínica por 6h", "Sinais vitais normais", "Ausência de critérios de gravidade"]
+    criterios_internacao: ["Falha na estabilização inicial na sala de emergência", "Necessidade de suporte intensivo", "Piora clínica progressiva"],
+    criterios_alta: ["Estabilidade clínica por 6h", "Sinais vitais dentro da normalidade", "Controle adequado da dor/sintomas"]
 });
 
 // --- ERROR BOUNDARY ---
@@ -143,7 +151,7 @@ function EmergencyGuideAppContent() {
   const [isCurrentConductFavorite, setIsCurrentConductFavorite] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // --- DATA SYNC FUNCTIONS ---
+  // --- DATA SYNC ---
   const loadHistory = async (uid) => {
     if (!db) return;
     try {
@@ -419,33 +427,42 @@ function EmergencyGuideAppContent() {
     } catch (error) { showError("Erro ao processar."); } finally { setIsGeneratingBedside(false); }
   };
 
+  // --- FUNÇÃO DE GERAÇÃO CORRIGIDA E BLINDADA ---
   const generateConduct = async (overrideRoom = null) => {
     if (!searchQuery.trim()) { showError('Digite uma condição clínica.'); return; }
     const targetRoom = overrideRoom || activeRoom;
-    setLoading(true); setConduct(null); setErrorMsg(''); setIsCurrentConductFavorite(false);
+    
+    setLoading(true); 
+    setConduct(null); 
+    setErrorMsg(''); 
+    setIsCurrentConductFavorite(false);
+    
     if (overrideRoom) setActiveRoom(overrideRoom);
 
     const docId = getConductDocId(searchQuery, targetRoom);
     
-    // Check Cache
+    // 1. Tenta Cache Local (Firestore)
     if (currentUser && db) {
       try {
         const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', docId);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const data = docSnap.data();
-          setConduct(data.conductData); setIsCurrentConductFavorite(data.isFavorite || false);
-          setLoading(false); saveToHistory(searchQuery, targetRoom);
+          setConduct(data.conductData); 
+          setIsCurrentConductFavorite(data.isFavorite || false);
+          setLoading(false); 
+          saveToHistory(searchQuery, targetRoom);
           setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
           return;
         }
-      } catch (e) {}
+      } catch (e) { console.warn("Erro cache:", e); }
     }
 
-    // ATENÇÃO: Bloco corrigido com Timeout e Fallback
+    // 2. Tenta API com Fallback Automático
     try {
+      // Timeout de 6 segundos para não deixar o usuário esperando
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000); // 12 segundos de timeout
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
 
       const response = await fetch('/api/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -455,25 +472,29 @@ function EmergencyGuideAppContent() {
       
       clearTimeout(timeoutId);
 
-      if (!response.ok) throw new Error('Erro IA.');
+      if (!response.ok) throw new Error('Erro API');
+      
       const parsedConduct = await response.json();
+      if (!parsedConduct) throw new Error('JSON Vazio');
+
       setConduct(parsedConduct);
       
+      // Salva no cache
       if (currentUser && db) {
         const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', docId);
         await setDoc(docRef, { query: searchQuery, room: targetRoom, conductData: parsedConduct, isFavorite: false, lastAccessed: new Date().toISOString() });
       }
-      saveToHistory(searchQuery, targetRoom);
+      
     } catch (error) { 
-        console.error("Erro API:", error);
-        // Se falhar (ou não existir backend), usa o Mock
-        const mockConduct = getMockConduct(searchQuery, targetRoom);
-        setConduct(mockConduct);
-        setErrorMsg("Modo Offline: Conduta simulada.");
-        setTimeout(() => setErrorMsg(''), 4000);
+       console.log("Usando conduta de contingência (Offline/Erro API)");
+       const mockConduct = getMockConduct(searchQuery, targetRoom);
+       setConduct(mockConduct);
+       setErrorMsg("Modo Offline ativado.");
+       setTimeout(() => setErrorMsg(''), 3000);
     } finally { 
-        setLoading(false); 
-        setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
+       setLoading(false); 
+       saveToHistory(searchQuery, targetRoom);
+       setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
     }
   };
 
@@ -706,22 +727,7 @@ function EmergencyGuideAppContent() {
         )}
       </main>
 
-      <footer className={`border-t mt-auto ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
-        <div className="max-w-4xl mx-auto px-4 py-8 text-center">
-          <div className="mb-8">
-              <button onClick={() => setShowFeedbackModal(true)} className={`text-sm font-bold flex items-center justify-center gap-2 mx-auto px-4 py-2 rounded-full transition-colors ${isDarkMode ? 'bg-slate-800 text-pink-400 hover:bg-slate-700' : 'bg-white border border-gray-200 text-pink-600 hover:bg-pink-50'}`}>
-                  <MessageSquare size={18} /> Enviar Feedback ou Sugestão
-              </button>
-          </div>
-          <div className={`border rounded-xl p-4 mb-6 flex flex-col md:flex-row gap-4 items-center text-left ${isDarkMode ? 'bg-amber-900/20 border-amber-900/50' : 'bg-amber-50 border-amber-200'}`}>
-             <ShieldAlert className="text-amber-600 shrink-0 w-8 h-8" />
-             <div><h4 className={`font-bold uppercase text-sm mb-1 ${isDarkMode ? 'text-amber-400' : 'text-amber-900'}`}>Aviso Legal Importante</h4><p className={`text-xs leading-relaxed text-justify ${isDarkMode ? 'text-amber-200/90' : 'text-amber-800/90'}`}>Esta é uma ferramenta de <strong>guia de plantão</strong>. O conteúdo pode conter imprecisões.</p></div>
-          </div>
-          <p className="text-xs text-slate-400">&copy; {new Date().getFullYear()} EmergencyCorp.</p>
-        </div>
-      </footer>
-
-      {/* RENDERIZAÇÃO DOS MODALS VIA COMPONENTES */}
+      {/* Modals */}
       <InfusionCalculator isOpen={showCalculatorModal} onClose={() => setShowCalculatorModal(false)} isDarkMode={isDarkMode} />
       <NotepadModal isOpen={showNotepad} onClose={() => setShowNotepad(false)} isDarkMode={isDarkMode} userNotes={userNotes} handleNoteChange={handleNoteChange} currentUser={currentUser} isCloudConnected={isCloudConnected} isSaving={isSaving} />
       <FavoritesModal isOpen={showFavoritesModal} onClose={() => setShowFavoritesModal(false)} isDarkMode={isDarkMode} favorites={favorites} loadFavoriteConduct={loadFavoriteConduct} removeFavoriteFromList={removeFavoriteFromList} />
@@ -729,20 +735,8 @@ function EmergencyGuideAppContent() {
       <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} isDarkMode={isDarkMode} />
       <MedicalScoresModal isOpen={showScoresModal} onClose={() => setShowScoresModal(false)} isDarkMode={isDarkMode} />
       <QuickPrescriptionsModal isOpen={showQuickPrescriptions} onClose={() => setShowQuickPrescriptions(false)} isDarkMode={isDarkMode} />
-      
-      <ImageAnalysisModal 
-        isOpen={showImageModal} onClose={() => setShowImageModal(false)} isDarkMode={isDarkMode}
-        selectedImage={selectedImage} handleImageUpload={handleImageUpload} imageQuery={imageQuery} setImageQuery={setImageQuery}
-        handleAnalyzeImage={handleAnalyzeImage} isAnalyzingImage={isAnalyzingImage} imageAnalysisResult={imageAnalysisResult} setImageAnalysisResult={setImageAnalysisResult}
-      />
-
-      <BedsideModal 
-        isOpen={showBedsideModal} onClose={() => setShowBedsideModal(false)} isDarkMode={isDarkMode}
-        bedsideAnamnesis={bedsideAnamnesis} setBedsideAnamnesis={setBedsideAnamnesis}
-        bedsideExams={bedsideExams} setBedsideExams={setBedsideExams}
-        generateBedsideConduct={generateBedsideConduct} isGeneratingBedside={isGeneratingBedside} bedsideResult={bedsideResult}
-      />
-      
+      <ImageAnalysisModal isOpen={showImageModal} onClose={() => setShowImageModal(false)} isDarkMode={isDarkMode} selectedImage={selectedImage} handleImageUpload={handleImageUpload} imageQuery={imageQuery} setImageQuery={setImageQuery} handleAnalyzeImage={handleAnalyzeImage} isAnalyzingImage={isAnalyzingImage} imageAnalysisResult={imageAnalysisResult} setImageAnalysisResult={setImageAnalysisResult} />
+      <BedsideModal isOpen={showBedsideModal} onClose={() => setShowBedsideModal(false)} isDarkMode={isDarkMode} bedsideAnamnesis={bedsideAnamnesis} setBedsideAnamnesis={setBedsideAnamnesis} bedsideExams={bedsideExams} setBedsideExams={setBedsideExams} generateBedsideConduct={generateBedsideConduct} isGeneratingBedside={isGeneratingBedside} bedsideResult={bedsideResult} />
       <PhysicalExamModal isOpen={showPhysicalExam} onClose={() => setShowPhysicalExam(false)} isDarkMode={isDarkMode} />
       <FeedbackModal isOpen={showFeedbackModal} onClose={() => setShowFeedbackModal(false)} isDarkMode={isDarkMode} currentUser={currentUser} />
     </div>
