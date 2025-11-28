@@ -31,7 +31,6 @@ import CompleteProfileModal from './components/modals/CompleteProfileModal';
 
 // --- FIREBASE IMPORTS ---
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
-// ADICIONADO: onSnapshot estava faltando nas importações
 import { doc, setDoc, getDoc, collection, query as firestoreQuery, where, orderBy, getDocs, deleteDoc, onSnapshot } from 'firebase/firestore';
 
 const appId = (typeof __app_id !== 'undefined') ? __app_id : 'emergency-guide-app';
@@ -49,7 +48,6 @@ const getVitalIcon = (text) => {
 };
 
 const getConductDocId = (query, room) => {
-  // Cria um ID padronizado para que buscas iguais usem o mesmo cache
   return `${query.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}_${room}`;
 };
 
@@ -59,7 +57,7 @@ const getMockConduct = (query, room) => ({
     classificacao: room === 'vermelha' ? "Emergência" : "Urgência",
     estadiamento: "Protocolo de Contingência",
     guideline_referencia: "Diretrizes Gerais de Suporte à Vida",
-    resumo_clinico: "O servidor não respondeu a tempo. Esta é uma conduta de segurança gerada automaticamente.",
+    resumo_clinico: "O servidor não respondeu a tempo ou houve falha de conexão. Esta é uma conduta de segurança gerada automaticamente.",
     criterios_gravidade: ["Instabilidade", "Rebaixamento", "Insuficiência Respiratória"],
     avaliacao_inicial: {
         sinais_vitais_alvos: ["SpO2 > 94%", "PAS > 90 mmHg", "FC < 100 bpm"],
@@ -83,7 +81,7 @@ class ErrorBoundary extends React.Component {
   static getDerivedStateFromError(error) { return { hasError: true, error }; }
   render() {
     if (this.state.hasError) {
-        console.error("Erro capturado pelo Boundary:", this.state.error); // Log para debug
+        console.error("Erro capturado pelo Boundary:", this.state.error); 
         return <div className="p-8 text-center"><h1>Erro no App</h1><p className="text-red-500 text-sm mt-2">{this.state.error?.toString()}</p><button onClick={()=>window.location.reload()} className="bg-blue-600 text-white px-4 py-2 rounded mt-4">Recarregar</button></div>;
     }
     return this.props.children; 
@@ -241,7 +239,6 @@ function EmergencyGuideAppContent() {
         const favs = [];
         snapshot.forEach((doc) => favs.push({ id: doc.id, ...doc.data() }));
         setFavorites(favs);
-        // Verifica se a conduta atual está nos favoritos
         if (conduct) {
              const conductId = getConductDocId(searchQuery, activeRoom);
              setIsCurrentConductFavorite(favs.some(f => f.id === conductId));
@@ -308,13 +305,11 @@ function EmergencyGuideAppContent() {
     if (!db) return;
     try {
         const cacheRef = collection(db, GLOBAL_CACHE_COLLECTION);
-        // Pega os documentos ordenados pelos mais antigos acessados
         const q = firestoreQuery(cacheRef, orderBy('lastAccessed', 'asc')); 
         const snapshot = await getDocs(q);
         
         if (snapshot.size > CACHE_LIMIT) {
             const toDeleteCount = snapshot.size - CACHE_LIMIT;
-            // Apaga os mais antigos que excedem o limite
             for (let i = 0; i < toDeleteCount; i++) {
                 await deleteDoc(snapshot.docs[i].ref);
             }
@@ -324,7 +319,7 @@ function EmergencyGuideAppContent() {
     }
   };
 
-  // --- GERAR CONDUTA (COM CACHE GLOBAL) ---
+  // --- GERAR CONDUTA CORRIGIDA (CACHE SAFE & API SEPARADA) ---
   const generateConduct = async (overrideRoom = null) => {
     if (!searchQuery.trim()) { showError('Digite uma condição clínica.'); return; }
     const targetRoom = overrideRoom || activeRoom;
@@ -337,66 +332,90 @@ function EmergencyGuideAppContent() {
     if (overrideRoom) setActiveRoom(overrideRoom);
 
     const docId = getConductDocId(searchQuery, targetRoom);
+    let foundInCache = false;
     
+    // 1. TENTATIVA DE CACHE (BLINDADA)
+    // Se falhar (ex: erro de permissão do firebase), ignoramos e seguimos para a API.
+    if (db) {
+        try {
+            const docRef = doc(db, GLOBAL_CACHE_COLLECTION, docId);
+            const docSnap = await getDoc(docRef);
+            
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                setConduct(data.conductData);
+                setLoading(false);
+                saveToHistory(searchQuery, targetRoom);
+                
+                // Atualiza data de acesso sem esperar promessa
+                setDoc(docRef, { lastAccessed: new Date().toISOString() }, { merge: true }).catch(e => console.warn("Cache update warning:", e));
+                
+                setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
+                foundInCache = true;
+            }
+        } catch (cacheError) {
+            console.warn("Cache inacessível (Possível restrição de permissão):", cacheError);
+            // NÃO jogamos erro aqui, apenas ignoramos o cache
+        }
+    }
+
+    if (foundInCache) return;
+
+    // 2. TENTATIVA DE API (Só executa se não achou no cache)
     try {
-      // 1. Tenta buscar no CACHE GLOBAL
-      if (db) {
-          const docRef = doc(db, GLOBAL_CACHE_COLLECTION, docId);
-          const docSnap = await getDoc(docRef);
-          
-          if (docSnap.exists()) {
-              const data = docSnap.data();
-              setConduct(data.conductData);
-              setLoading(false);
-              saveToHistory(searchQuery, targetRoom);
-              
-              // Atualiza data de acesso (para não ser deletado pelo LRU)
-              setDoc(docRef, { lastAccessed: new Date().toISOString() }, { merge: true }).catch(()=>{});
-              
-              setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
-              return; // Encerra se achou no cache
-          }
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000); // Aumentei timeout para 20s
+
+      // Prepara Headers (incluindo token se disponível)
+      const headers = { 'Content-Type': 'application/json' };
+      if (auth?.currentUser) {
+          try {
+             const token = await auth.currentUser.getIdToken();
+             headers['Authorization'] = `Bearer ${token}`;
+          } catch(e) { console.warn("Erro ao pegar token:", e); }
       }
 
-      // 2. Se não achou, chama a API
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
-
       const response = await fetch('/api/generate', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: headers,
         body: JSON.stringify({ searchQuery, activeRoom: targetRoom }),
         signal: controller.signal
       });
       
       clearTimeout(timeoutId);
 
-      if (!response.ok) throw new Error('API Error');
+      if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`API Error: ${response.status} - ${errText}`);
+      }
+
       const parsedConduct = await response.json();
       
       setConduct(parsedConduct);
       
-      // 3. Salva no CACHE GLOBAL e aplica limite (LRU)
+      // 3. TENTA SALVAR NO CACHE (SE TIVER PERMISSÃO)
       if (db) {
-          const docRef = doc(db, GLOBAL_CACHE_COLLECTION, docId);
-          await setDoc(docRef, { 
-              query: searchQuery, 
-              room: targetRoom, 
-              conductData: parsedConduct, 
-              lastAccessed: new Date().toISOString() 
-          });
-          
-          // Chama limpeza do cache em background
-          manageGlobalCache();
+          try {
+            const docRef = doc(db, GLOBAL_CACHE_COLLECTION, docId);
+            await setDoc(docRef, { 
+                query: searchQuery, 
+                room: targetRoom, 
+                conductData: parsedConduct, 
+                lastAccessed: new Date().toISOString() 
+            });
+            manageGlobalCache();
+          } catch (saveError) {
+              console.warn("Erro ao salvar cache (Possível restrição de permissão):", saveError);
+          }
       }
       
       saveToHistory(searchQuery, targetRoom);
 
     } catch (error) { 
-       // Fallback
-       console.warn("Usando Fallback (Erro na API):", error);
+       // Fallback real - Só entra aqui se a API falhar
+       console.error("Erro Fatal na Geração:", error);
        const mockConduct = getMockConduct(searchQuery, targetRoom);
        setConduct(mockConduct);
-       setErrorMsg("Modo Offline: Conduta gerada localmente.");
+       setErrorMsg("Erro de conexão com IA. Exibindo protocolo de contingência.");
        setTimeout(() => setErrorMsg(''), 4000);
     } finally { 
        setLoading(false); 
@@ -404,7 +423,7 @@ function EmergencyGuideAppContent() {
     }
   };
 
-  // --- OTHER HANDLERS (QUE ESTAVAM FALTANDO) ---
+  // --- OTHER HANDLERS ---
   const handleAnalyzeImage = async () => {
     if (!selectedImage || !imageQuery.trim()) { showError("Selecione imagem e pergunta."); return; }
     setIsAnalyzingImage(true); setImageAnalysisResult(null);
