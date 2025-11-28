@@ -101,6 +101,9 @@ function EmergencyGuideAppContent() {
 	const [approvalStatus, setApprovalStatus] = useState(null);
 	const [configStatus, setConfigStatus] = useState('verificando');
 	const [pendingGoogleUser, setPendingGoogleUser] = useState(null);
+    // NOVO ESTADO PARA CONTROLE DE EXPIRAÇÃO
+    const [isAccessExpired, setIsAccessExpired] = useState(false);
+
 
 	// Main Data States
 	const [activeRoom, setActiveRoom] = useState('verde');
@@ -190,12 +193,32 @@ function EmergencyGuideAppContent() {
 					const docSnap = await getDoc(userDocRef);
 					if (docSnap.exists()) {
 						const userData = docSnap.data();
-						if (userData.status === 'approved') {
+                        
+                        // --- LÓGICA DE EXPIRAÇÃO DE ACESSO ---
+                        const expirationTimestamp = userData.access_expires_at ? userData.access_expires_at.toDate().getTime() : null;
+                        const now = Date.now();
+                        
+                        let isExpired = false;
+                        if (expirationTimestamp) {
+                            if (now > expirationTimestamp) {
+                                isExpired = true;
+                            }
+                        }
+                        setIsAccessExpired(isExpired);
+                        // ------------------------------------
+
+                        // Acesso aprovado E NÃO expirado
+						if (userData.status === 'approved' && !isExpired) {
 							setCurrentUser({ ...userData, uid: user.uid, email: user.email });
 							setApprovalStatus('approved');
 							loadHistory(user.uid);
 							fetchNotesFromCloud(user.uid);
-						} else {
+						} else if (isExpired) {
+                            // Acesso expirado
+                            setApprovalStatus('expired');
+                            setCurrentUser(null);
+                        } else {
+                            // Acesso pendente/rejeitado, mas não expirado
 							setApprovalStatus(userData.status || 'pending');
 							setCurrentUser(null);
 						}
@@ -204,12 +227,17 @@ function EmergencyGuideAppContent() {
 						setPendingGoogleUser(user);
 						setCurrentUser(null);
 						setApprovalStatus(null);
+                        setIsAccessExpired(false);
 					}
-				} catch (e) { setLoginError("Erro ao verificar permissões."); }
+				} catch (e) { 
+                    console.error("Erro ao verificar permissões/expiração:", e);
+                    setLoginError("Erro ao verificar permissões."); 
+                }
 			} else {
 				setCurrentUser(null);
 				setApprovalStatus(null);
 				setPendingGoogleUser(null);
+                setIsAccessExpired(false);
 			}
 		});
 		return () => unsubscribe();
@@ -315,7 +343,7 @@ function EmergencyGuideAppContent() {
 	};
 
 	const handleLogout = async () => {
-		await signOut(auth); setCurrentUser(null); setConduct(null); setFavorites([]); setPendingGoogleUser(null); setApprovalStatus(null);
+		await signOut(auth); setCurrentUser(null); setConduct(null); setFavorites([]); setPendingGoogleUser(null); setApprovalStatus(null); setIsAccessExpired(false);
 	};
 
 	// --- GERENCIAMENTO DO CACHE GLOBAL ---
@@ -339,6 +367,12 @@ function EmergencyGuideAppContent() {
 
 	// --- GERAR CONDUTA ---
 	const generateConduct = async (overrideRoom = null) => {
+        // Bloqueio de acesso expirado
+        if (isAccessExpired) {
+            showError('Seu acesso expirou. Renove sua assinatura para continuar.');
+            return;
+        }
+
 		if (!searchQuery.trim()) { showError('Digite uma condição clínica.'); return; }
 		const targetRoom = overrideRoom || activeRoom;
 		
@@ -383,7 +417,7 @@ function EmergencyGuideAppContent() {
 		// 2. TENTATIVA DE API
 		try {
 			const controller = new AbortController();
-			const timeoutId = setTimeout(() => controller.abort(), 120000);	
+			const timeoutId = setTimeout(() => controller.abort(), 90000);	// 90 segundos
 
 			const headers = { 'Content-Type': 'application/json' };
 			if (auth?.currentUser) {
@@ -446,6 +480,12 @@ function EmergencyGuideAppContent() {
 
 	// --- OTHER HANDLERS ---
 	const handleAnalyzeImage = async () => {
+        // Bloqueio de acesso expirado
+        if (isAccessExpired) {
+            showError('Seu acesso expirou. Renove sua assinatura para continuar.');
+            return;
+        }
+
 		if (!selectedImage || !imageQuery.trim()) { showError("Selecione imagem e pergunta."); return; }
 		setIsAnalyzingImage(true); setImageAnalysisResult(null);
 		
@@ -509,6 +549,12 @@ function EmergencyGuideAppContent() {
 	};
 
 	const generateBedsideConduct = async () => {
+        // Bloqueio de acesso expirado
+        if (isAccessExpired) {
+            showError('Seu acesso expirou. Renove sua assinatura para continuar.');
+            return;
+        }
+
 		if (!bedsideAnamnesis.trim()) { showError('Preencha a anamnese.'); return; }
 		setIsGeneratingBedside(true); setBedsideResult(null);
 		
@@ -516,7 +562,7 @@ function EmergencyGuideAppContent() {
 
 		try {
 			const controller = new AbortController();
-			const timeoutId = setTimeout(() => controller.abort(), 120000); 
+			const timeoutId = setTimeout(() => controller.abort(), 45000); 
 
 			const headers = { 'Content-Type': 'application/json' };
 			if (auth?.currentUser) {
@@ -635,7 +681,21 @@ function EmergencyGuideAppContent() {
 			return <CompleteProfileModal isOpen={true} googleUser={pendingGoogleUser} onComplete={handleCompleteGoogleSignup} />;
 	}
 
-	if (!currentUser && approvalStatus !== 'pending' && approvalStatus !== 'rejected') {
+    // NOVA TELA DE ACESSO EXPIRADO
+    if (isAccessExpired) {
+        return (
+			<div className={`min-h-screen flex items-center justify-center p-4 font-sans ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-gray-50 text-slate-800'}`}>
+				<div className={`max-w-md w-full p-8 rounded-2xl shadow-xl text-center border ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
+					<div className="bg-red-100 text-red-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><Lock size={32} /></div>
+					<h2 className="text-2xl font-bold mb-2">Acesso Expirado</h2>
+					<p className="text-sm mb-6 opacity-80">Sua assinatura expirou. Seus dados estão salvos, mas você precisa renovar o acesso para usar a plataforma.</p>
+					<button onClick={handleLogout} className="text-blue-600 hover:underline text-sm">Sair</button>
+				</div>
+			</div>
+		);
+    }
+    
+	if (!currentUser && approvalStatus !== 'pending' && approvalStatus !== 'rejected' && approvalStatus !== 'expired') {
 		return <LoginScreen isDarkMode={isDarkMode} toggleTheme={toggleTheme} loginError={loginError} handleEmailLogin={handleEmailLogin} handleGoogleLogin={handleGoogleLogin} handleSignUp={handleSignUp} configStatus={configStatus} isCloudConnected={isCloudConnected} isLoading={authLoading} />;
 	}
 
@@ -776,7 +836,7 @@ function EmergencyGuideAppContent() {
 									<div className="flex flex-wrap gap-2 mb-2"><span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase text-white ${roomConfig[activeRoom].accent.replace('bg-', 'bg-')}`}>{conduct.classificacao}</span>{conduct.estadiamento && <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-800 text-white">{conduct.estadiamento}</span>}</div>
 									<h2 className={`text-2xl sm:text-3xl font-bold leading-tight ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>{conduct.condicao}</h2>
 									
-                                    {/* --- CORREÇÃO APLICADA AQUI --- */}
+                                    {/* CORREÇÃO PARA QUEBRA DE TEXTO LONGO */}
 									{conduct.guideline_referencia && (
                                         <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
                                             <BookOpen size={12} /> 
@@ -785,7 +845,6 @@ function EmergencyGuideAppContent() {
                                             </span>
                                         </p>
                                     )}
-                                    {/* --- FIM DA CORREÇÃO --- */}
                                     
 								</div>
 								<div className="flex gap-2 self-end sm:self-auto">
