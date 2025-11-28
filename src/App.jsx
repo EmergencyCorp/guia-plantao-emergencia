@@ -35,7 +35,6 @@ import { doc, setDoc, getDoc, collection, query as firestoreQuery, where, orderB
 
 const appId = (typeof __app_id !== 'undefined') ? __app_id : 'emergency-guide-app';
 
-<<<<<<< HEAD
 // --- FUNÇÕES AUXILIARES GLOBAIS ---
 const getVitalIcon = (text) => {
   const t = text.toLowerCase();
@@ -88,8 +87,6 @@ const getMockConduct = (query, room) => ({
     criterios_alta: ["Estabilidade clínica por 6h", "Sinais vitais dentro da normalidade", "Controle adequado da dor/sintomas"]
 });
 
-=======
->>>>>>> parent of 579f807 (feat: update getVitalIcon function and enhance footer with legal notice and feedback button)
 // --- ERROR BOUNDARY ---
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -111,14 +108,8 @@ function EmergencyGuideAppContent() {
   const [authLoading, setAuthLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [isCloudConnected, setIsCloudConnected] = useState(false);
-<<<<<<< HEAD
   const [approvalStatus, setApprovalStatus] = useState(null);
-=======
-  const [approvalStatus, setApprovalStatus] = useState(null); // 'pending', 'approved', 'rejected', null
->>>>>>> parent of 579f807 (feat: update getVitalIcon function and enhance footer with legal notice and feedback button)
   const [configStatus, setConfigStatus] = useState('verificando');
-  
-  // Estado para usuário do Google que precisa completar cadastro
   const [pendingGoogleUser, setPendingGoogleUser] = useState(null);
 
   // App States
@@ -158,24 +149,7 @@ function EmergencyGuideAppContent() {
   const [isCurrentConductFavorite, setIsCurrentConductFavorite] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-<<<<<<< HEAD
   // --- DATA SYNC FUNCTIONS ---
-=======
-  // --- HELPER FUNCTIONS ---
-  const showError = (msg) => { setErrorMsg(msg); setTimeout(() => setErrorMsg(''), 4000); };
-  const getConductDocId = (query, room) => `${query.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}_${room}`;
-  
-  const getVitalIcon = (text) => {
-    const t = text.toLowerCase();
-    if (t.includes('fc') || t.includes('bpm')) return <HeartPulse size={16} className="text-rose-500" />;
-    if (t.includes('pa') || t.includes('mmhg') || t.includes('pam')) return <Activity size={16} className="text-blue-500" />;
-    if (t.includes('sat') || t.includes('o2')) return <Droplet size={16} className="text-cyan-500" />;
-    if (t.includes('fr') || t.includes('resp')) return <Wind size={16} className="text-teal-500" />;
-    return <Activity size={16} className="text-slate-400" />;
-  };
-
-  // --- DATA SYNC ---
->>>>>>> parent of 579f807 (feat: update getVitalIcon function and enhance footer with legal notice and feedback button)
   const loadHistory = async (uid) => {
     if (!db) return;
     try {
@@ -218,7 +192,6 @@ function EmergencyGuideAppContent() {
     const savedTheme = localStorage.getItem('theme_preference');
     if (savedTheme === 'dark') setIsDarkMode(true);
     if (localStorage.getItem('terms_accepted_v1') === 'true') setHasAcceptedTerms(true);
-    
     if (firebaseConfig && firebaseConfig.apiKey) {
         setIsCloudConnected(true);
         setConfigStatus('ok');
@@ -460,7 +433,6 @@ function EmergencyGuideAppContent() {
 
     const docId = getConductDocId(searchQuery, targetRoom);
     
-    // Check Cache
     if (currentUser && db) {
       try {
         const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', docId);
@@ -739,11 +711,7 @@ function EmergencyGuideAppContent() {
         )}
       </main>
 
-<<<<<<< HEAD
-      {/* RENDERIZAÇÃO DOS MODALS VIA COMPONENTES */}
-=======
-      {/* Modals */}
->>>>>>> parent of 579f807 (feat: update getVitalIcon function and enhance footer with legal notice and feedback button)
+      {/* RENDERIZAÇÃO DOS MODALS VIA COMPONENTES  */}
       <InfusionCalculator isOpen={showCalculatorModal} onClose={() => setShowCalculatorModal(false)} isDarkMode={isDarkMode} />
       <NotepadModal isOpen={showNotepad} onClose={() => setShowNotepad(false)} isDarkMode={isDarkMode} userNotes={userNotes} handleNoteChange={handleNoteChange} currentUser={currentUser} isCloudConnected={isCloudConnected} isSaving={isSaving} />
       <FavoritesModal isOpen={showFavoritesModal} onClose={() => setShowFavoritesModal(false)} isDarkMode={isDarkMode} favorites={favorites} loadFavoriteConduct={loadFavoriteConduct} removeFavoriteFromList={removeFavoriteFromList} />
@@ -751,8 +719,21 @@ function EmergencyGuideAppContent() {
       <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} isDarkMode={isDarkMode} />
       <MedicalScoresModal isOpen={showScoresModal} onClose={() => setShowScoresModal(false)} isDarkMode={isDarkMode} />
       <QuickPrescriptionsModal isOpen={showQuickPrescriptions} onClose={() => setShowQuickPrescriptions(false)} isDarkMode={isDarkMode} />
-      <ImageAnalysisModal isOpen={showImageModal} onClose={() => setShowImageModal(false)} isDarkMode={isDarkMode} selectedImage={selectedImage} handleImageUpload={handleImageUpload} imageQuery={imageQuery} setImageQuery={setImageQuery} handleAnalyzeImage={handleAnalyzeImage} isAnalyzingImage={isAnalyzingImage} imageAnalysisResult={imageAnalysisResult} setImageAnalysisResult={setImageAnalysisResult} />
-      <BedsideModal isOpen={showBedsideModal} onClose={() => setShowBedsideModal(false)} isDarkMode={isDarkMode} bedsideAnamnesis={bedsideAnamnesis} setBedsideAnamnesis={setBedsideAnamnesis} bedsideExams={bedsideExams} setBedsideExams={setBedsideExams} generateBedsideConduct={generateBedsideConduct} isGeneratingBedside={isGeneratingBedside} bedsideResult={bedsideResult} />
+      
+      <ImageAnalysisModal 
+        isOpen={showImageModal} onClose={() => setShowImageModal(false)} isDarkMode={isDarkMode}
+        selectedImage={selectedImage} handleImageUpload={handleImageUpload} imageQuery={imageQuery} setImageQuery={setImageQuery}
+        handleAnalyzeImage={handleAnalyzeImage} isAnalyzingImage={isAnalyzingImage} imageAnalysisResult={imageAnalysisResult} setImageAnalysisResult={setImageAnalysisResult}
+      />
+
+      <BedsideModal 
+        isOpen={showBedsideModal} onClose={() => setShowBedsideModal(false)} isDarkMode={isDarkMode}
+        bedsideAnamnesis={bedsideAnamnesis} setBedsideAnamnesis={setBedsideAnamnesis}
+        bedsideExams={bedsideExams} setBedsideExams={setBedsideExams}
+        generateBedsideConduct={generateBedsideConduct} isGeneratingBedside={isGeneratingBedside} bedsideResult={bedsideResult}
+      />
+      
+      {/* RENDERIZAÇÃO DO MODAL DE EXAME FÍSICO E FEEDBACK */}
       <PhysicalExamModal isOpen={showPhysicalExam} onClose={() => setShowPhysicalExam(false)} isDarkMode={isDarkMode} />
       <FeedbackModal isOpen={showFeedbackModal} onClose={() => setShowFeedbackModal(false)} isDarkMode={isDarkMode} currentUser={currentUser} />
     </div>
