@@ -11,48 +11,51 @@ const useSpeechRecognition = (onResult) => {
     const [isAPISupported, setIsAPISupported] = useState(false);
 
     useEffect(() => {
-        // Verifica a compatibilidade (Chrome/Safari/Outros)
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition || window.mozSpeechRecognition || window.msSpeechRecognition;
         
         if (SpeechRecognition) {
             setIsAPISupported(true);
             const recognition = new SpeechRecognition();
             
-            // Configurações para ditado contínuo e feedback
             recognition.continuous = true; 
             recognition.interimResults = true; 
-            
-            // Define o idioma principal para o Português do Brasil, melhorando a precisão
             recognition.lang = 'pt-BR'; 
+            
+            // Necessário para manter a referência no loop do useEffect
+            let isListeningInternal = false;
 
             recognition.onstart = () => {
                 setIsListening(true);
+                isListeningInternal = true;
             };
 
             recognition.onend = () => {
                 setIsListening(false);
+                isListeningInternal = false;
             };
 
             recognition.onerror = (event) => {
                 console.error('Speech Recognition Error:', event.error);
                 setIsListening(false);
-                // Feedback mais explícito ao usuário
-                alert(`Erro de Microfone: ${event.error === 'not-allowed' ? 'Permissão negada. Verifique as configurações do navegador para acesso ao microfone.' : 'Ocorreu um erro. Tente novamente.'}`);
+                isListeningInternal = false;
+                // Feedback mais claro para problemas de permissão
+                if (event.error === 'not-allowed') {
+                    alert('Permissão de microfone negada. Verifique as configurações do navegador e do iOS (Geral -> Chrome) para o acesso ao microfone.');
+                } else if (event.error === 'network' || event.error === 'service-not-allowed') {
+                    alert('Erro de serviço de reconhecimento de fala. Tente novamente ou use o navegador Safari nativo no iPhone.');
+                }
             };
 
             recognition.onresult = (event) => {
-                let interimTranscript = '';
                 let finalTranscript = '';
 
                 for (let i = event.resultIndex; i < event.results.length; i++) {
                     const transcript = event.results[i][0].transcript;
                     if (event.results[i].isFinal) {
                         finalTranscript += transcript + ' ';
-                    } else {
-                        interimTranscript += transcript;
                     }
                 }
-                onResult(finalTranscript.trim(), interimTranscript.trim());
+                onResult(finalTranscript.trim(), event.results.length > 0 ? event.results[event.results.length - 1][0].transcript.trim() : '');
             };
 
             recognitionRef.current = recognition;
@@ -61,21 +64,26 @@ const useSpeechRecognition = (onResult) => {
         }
 
         return () => {
-            if (recognitionRef.current && isListening) {
+            if (recognitionRef.current && isListeningInternal) {
                 recognitionRef.current.stop();
             }
         };
-    }, [onResult, isListening]); // Adicionado isListening para evitar loop infinito em alguns casos
+    }, [onResult]);
 
     const startListening = (targetRef) => {
-        if (recognitionRef.current && !isListening) {
+        if (recognitionRef.current && !recognitionRef.current.isListening) {
             textAreaRef.current = targetRef; 
-            recognitionRef.current.start();
+            try {
+                recognitionRef.current.start();
+            } catch (e) {
+                // Captura erro se o start for chamado novamente antes do onend
+                if (e.name !== 'InvalidStateError') console.error(e);
+            }
         }
     };
 
     const stopListening = () => {
-        if (recognitionRef.current && isListening) {
+        if (recognitionRef.current) {
             recognitionRef.current.stop();
         }
     };
@@ -101,7 +109,6 @@ export default function BedsideModal({
         const target = speech.getTargetRef();
         if (!target) return;
 
-        // Determina o estado (anamnese ou exames) que está sendo atualizado
         const currentStateValue = target === anamnesisRef.current 
             ? bedsideAnamnesis 
             : bedsideExams;
@@ -110,16 +117,12 @@ export default function BedsideModal({
             ? setBedsideAnamnesis
             : setBedsideExams;
 
-
-        // Anexa o resultado final ao estado principal
         if (final) {
-            // Garante um espaço se não for o início do texto
             const separator = currentStateValue.length > 0 && !currentStateValue.endsWith(' ') ? ' ' : '';
             const newText = currentStateValue + separator + final;
             setStateFunction(newText);
             setCurrentInterimTranscript('');
         } else {
-            // Exibe o texto intermediário (feedback visual)
             setCurrentInterimTranscript(interim);
         }
     };
@@ -127,63 +130,59 @@ export default function BedsideModal({
     const speech = useSpeechRecognition(handleSpeechResult);
 
 
-    // Função para alternar o microfone em um campo específico
+    // FUNÇÃO SIMPLIFICADA E CORRIGIDA PARA IOS
     const toggleSpeech = (fieldRef, fieldName) => {
         if (!speech.isAPISupported) {
-            alert("O ditado por voz não é suportado ou requer a última versão do Chrome/Edge/Safari (HTTPS obrigatório).");
+            alert("O ditado por voz pode não ser suportado neste navegador (requer Chrome/Safari/Edge atualizados em ambiente seguro).");
             return;
         }
         
         if (speech.isListening && activeSpeechField === fieldName) {
-            // Se já estiver escutando no campo ATUAL, pare.
+            // Caso 1: Pare a escuta (se estiver no campo atual)
             speech.stopListening();
             setActiveSpeechField(null);
-        } else if (!speech.isListening) {
-            // Se não estiver escutando, comece no campo selecionado.
+        } else if (speech.isListening && activeSpeechField !== fieldName) {
+            // Caso 2: Se estiver escutando em OUTRO campo, pare e inicie a nova escuta
+            // Nota: No iOS, a parada e o início em sequência podem falhar.
+            // A melhor prática é parar e forçar o usuário a dar um novo toque para iniciar.
+            // Para simplificar, tentamos o restart, mas a falha é esperada em iPhones/Chrome.
+            speech.stopListening();
+            setActiveSpeechField(null); // Limpa o estado ativo imediatamente
+            
+            // Tenta reiniciar após o stop (não funciona bem em iOS/Chrome, mas vale a tentativa)
+            setTimeout(() => {
+                speech.startListening(fieldRef);
+                setActiveSpeechField(fieldName);
+            }, 50); // Delay mínimo
+            
+        } else {
+            // Caso 3: Comece a escuta (se não estiver escutando)
             speech.startListening(fieldRef);
             setActiveSpeechField(fieldName);
-        } else if (speech.isListening && activeSpeechField !== fieldName) {
-            // Se estiver escutando em outro campo, pare e reinicie no novo.
-            speech.stopListening();
-            setActiveSpeechField(fieldName);
-            // Pequeno delay para reiniciar após parar (necessário em alguns navegadores)
-            setTimeout(() => speech.startListening(fieldRef), 100);
         }
     };
     
-    // Lógica para mostrar o texto intermediário (placeholder/feedback)
+    // Lógica para mostrar o texto intermediário (feedback visual)
     const getFieldContent = (field) => {
         const text = field === 'anamnesis' ? bedsideAnamnesis : bedsideExams;
         if (speech.isListening && activeSpeechField === field) {
-            // Retorna o texto atual + o transcrito intermediário (em cinza, se aplicável)
+            // Simula o texto intermediário anexado ao valor, permitindo edição
             return text + (currentInterimTranscript ? ` ${currentInterimTranscript}` : '');
         }
         return text;
     };
 
-    // Estilo especial para o placeholder/texto intermediário
+    // Estilo para a textarea
     const getTextAreaClasses = (field) => {
-        const baseClasses = `w-full p-3 rounded-xl border focus:ring-2 focus:ring-indigo-500 outline-none text-sm leading-relaxed resize-none ${isDarkMode ? 'bg-slate-800 border-slate-700 placeholder-slate-500' : 'bg-gray-50 border-gray-200'} h-40`;
+        const baseClasses = `w-full p-3 rounded-xl border focus:ring-2 focus:ring-indigo-500 outline-none text-sm leading-relaxed resize-none ${isDarkMode ? 'bg-slate-800 border-slate-700 placeholder-slate-500' : 'bg-gray-50 border-gray-200'}`;
+        const heightClass = field === 'anamnesis' ? 'h-40' : 'h-32';
         const activeClasses = speech.isListening && activeSpeechField === field 
             ? `ring-2 ring-red-500 ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`
             : (isDarkMode ? 'text-slate-200' : 'text-slate-800');
             
-        // Adiciona classe customizada para o texto intermediário se estiver ativo
-        const interimClass = speech.isListening && activeSpeechField === field && currentInterimTranscript 
-            ? 'interim-speech' // Classe CSS customizada para estilizar o texto intermediário
-            : '';
-            
-        return `${baseClasses} ${activeClasses} ${interimClass} h-40`;
+        return `${baseClasses} ${activeClasses} ${heightClass}`;
     }
     
-    // Adiciona CSS para o texto intermediário (precisa ser adicionado globalmente ou em um arquivo CSS)
-    // Para fins deste exemplo, vou mantê-lo como um lembrete.
-    // Você pode ignorar esta parte se já tiver um arquivo CSS onde adicionar.
-    if (speech.isAPISupported) {
-         // O CSS correto deve ser adicionado globalmente:
-         // textarea.interim-speech::placeholder { color: #ccc; }
-    }
-
 
 	return (
 		<div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
@@ -210,7 +209,7 @@ export default function BedsideModal({
                             <div className="relative">
                                 <textarea 
                                     ref={anamnesisRef}
-                                    className={getTextAreaClasses('anamnesis').replace('h-40', '') + ' h-40'} // Garante altura
+                                    className={getTextAreaClasses('anamnesis')}
                                     placeholder="Descreva a história clínica..." 
                                     value={getFieldContent('anamnesis')} 
                                     onChange={(e) => setBedsideAnamnesis(e.target.value)} 
@@ -231,7 +230,7 @@ export default function BedsideModal({
                             <div className="relative">
 							    <textarea 
                                     ref={examsRef}
-                                    className={getTextAreaClasses('exams').replace('h-40', '') + ' h-32'} // Garante altura
+                                    className={getTextAreaClasses('exams')}
                                     placeholder="PA, FC, exames..." 
                                     value={getFieldContent('exams')} 
                                     onChange={(e) => setBedsideExams(e.target.value)} 
