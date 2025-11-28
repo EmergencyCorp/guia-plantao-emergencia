@@ -771,27 +771,27 @@ function EmergencyGuideAppContent() {
         )}
       </main>
 
-      {/* --- FOOTER REESTRUTURADO (WIDE & CLEAN) --- */}
+      {/* --- FOOTER REESTRUTURADO (CENTRALIZADO & HARMONICO) --- */}
       <footer className={`border-t py-6 mt-auto transition-colors ${isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-500' : 'bg-white border-gray-200 text-slate-500'}`}>
-        <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-6">
+        {/* Container relativo para posicionamento absoluto do botão no desktop */}
+        <div className="max-w-6xl mx-auto px-4 relative flex flex-col md:block items-center py-4 sm:py-6">
           
-          {/* Texto / Disclaimer */}
-          <div className="flex flex-col items-center md:items-start text-center md:text-left gap-1.5">
-             <div className="flex items-center gap-2">
-                <ShieldAlert size={14} className={isDarkMode ? 'text-blue-500' : 'text-blue-700'} />
-                <span className={`text-xs font-bold uppercase tracking-widest ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>EmergencyCorp © 2025</span>
+          {/* Texto / Disclaimer - Centralizado */}
+          <div className="flex flex-col items-center text-center gap-1.5 md:w-3/4 md:mx-auto mb-6 md:mb-0">
+             <div className="flex items-center gap-2 mb-2">
+                <ShieldAlert size={16} className={isDarkMode ? 'text-blue-500' : 'text-blue-700'} />
+                <span className={`text-sm font-bold uppercase tracking-widest ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>EmergencyCorp © 2025</span>
              </div>
-             <p className="text-[10px] sm:text-xs leading-relaxed max-w-2xl opacity-80">
-               Esta plataforma serve apenas para consulta rápida e auxílio. <strong className={isDarkMode ? 'text-slate-400' : 'text-slate-600'}>Não substitui o julgamento clínico.</strong>
-               <span className="hidden sm:inline"> | </span>
-               <span className="block sm:inline">A EmergencyCorp não se responsabiliza por condutas médicas tomadas com base nestas informações.</span>
+             <p className="text-xs leading-relaxed opacity-80">
+               Esta plataforma é uma ferramenta de auxílio e consulta rápida. <strong className={isDarkMode ? 'text-slate-400' : 'text-slate-600'}>Não substitui o julgamento clínico do médico.</strong>
+               <br className="hidden sm:block"/> A EmergencyCorp não se responsabiliza por condutas tomadas com base nas informações aqui contidas.
              </p>
           </div>
           
-          {/* Botão */}
+          {/* Botão - Absoluto na direita (desktop), estático centralizado (mobile) */}
           <button 
             onClick={() => setShowFeedbackModal(true)}
-            className={`shrink-0 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider border flex items-center gap-2 transition-all hover:-translate-y-0.5 ${isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-white hover:border-slate-600' : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-white hover:text-blue-600 hover:border-gray-300'}`}
+            className={`shrink-0 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider border flex items-center gap-2 transition-all hover:-translate-y-0.5 md:absolute md:right-4 md:top-1/2 md:-translate-y-1/2 ${isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-white hover:border-slate-600' : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-white hover:text-blue-600 hover:border-gray-300'}`}
           >
             <MessageSquare size={14} /> Feedback
           </button>
