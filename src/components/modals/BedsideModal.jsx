@@ -1,14 +1,17 @@
-// Arquivo: components/modals/BedsideModal.jsx
+// Arquivo: components/modals/BedsideModal.jsx (CORRIGIDO)
 
 import React, { useState, useRef, useEffect } from 'react';
 import { ClipboardList, X, Loader2, UserCheck, Pill, Mic, AlertTriangle } from 'lucide-react';
 
-// --- HOOK CUSTOMIZADO PARA RECONHECIMENTO DE FALA ---
+// --- HOOK CUSTOMIZADO PARA RECONHECIMENTO DE FALA (CORRIGIDO O ESCOPO) ---
 const useSpeechRecognition = (onResult) => {
     const [isListening, setIsListening] = useState(false);
     const recognitionRef = useRef(null);
     const textAreaRef = useRef(null);
     const [isAPISupported, setIsAPISupported] = useState(false);
+    
+    // Este estado é usado internamente para garantir que a parada seja segura
+    const [hasBeenStarted, setHasBeenStarted] = useState(false);
 
     useEffect(() => {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition || window.mozSpeechRecognition || window.msSpeechRecognition;
@@ -21,24 +24,21 @@ const useSpeechRecognition = (onResult) => {
             recognition.interimResults = true; 
             recognition.lang = 'pt-BR'; 
             
-            // Necessário para manter a referência no loop do useEffect
-            let isListeningInternal = false;
-
             recognition.onstart = () => {
                 setIsListening(true);
-                isListeningInternal = true;
+                setHasBeenStarted(true);
             };
 
             recognition.onend = () => {
                 setIsListening(false);
-                isListeningInternal = false;
+                // Não alteramos hasBeenStarted aqui para permitir que a função de cleanup funcione.
             };
 
             recognition.onerror = (event) => {
                 console.error('Speech Recognition Error:', event.error);
                 setIsListening(false);
-                isListeningInternal = false;
-                // Feedback mais claro para problemas de permissão
+                setHasBeenStarted(false);
+
                 if (event.error === 'not-allowed') {
                     alert('Permissão de microfone negada. Verifique as configurações do navegador e do iOS (Geral -> Chrome) para o acesso ao microfone.');
                 } else if (event.error === 'network' || event.error === 'service-not-allowed') {
@@ -55,7 +55,9 @@ const useSpeechRecognition = (onResult) => {
                         finalTranscript += transcript + ' ';
                     }
                 }
-                onResult(finalTranscript.trim(), event.results.length > 0 ? event.results[event.results.length - 1][0].transcript.trim() : '');
+                // Garante que o interim transcript seja o último resultado, mesmo que não seja final
+                const interim = event.results.length > 0 ? event.results[event.results.length - 1][0].transcript.trim() : '';
+                onResult(finalTranscript.trim(), interim);
             };
 
             recognitionRef.current = recognition;
@@ -63,20 +65,26 @@ const useSpeechRecognition = (onResult) => {
             setIsAPISupported(false);
         }
 
+        // Função de cleanup do useEffect (onde o erro estava)
         return () => {
-            if (recognitionRef.current && isListeningInternal) {
-                recognitionRef.current.stop();
+            // Utilizamos isListening no estado para verificar se precisa parar
+            if (recognitionRef.current && hasBeenStarted) {
+                // Necessário tentar parar para não vazar recursos
+                 try {
+                    recognitionRef.current.stop();
+                 } catch(e) { /* ignore InvalidStateError on stop */ }
             }
         };
-    }, [onResult]);
+    }, [onResult, hasBeenStarted]); // Dependência ajustada para hasBeenStarted
 
     const startListening = (targetRef) => {
-        if (recognitionRef.current && !recognitionRef.current.isListening) {
+        // Verifica se já não está escutando, prevenindo InvalidStateError
+        if (recognitionRef.current && !isListening) {
             textAreaRef.current = targetRef; 
             try {
                 recognitionRef.current.start();
+                setHasBeenStarted(true);
             } catch (e) {
-                // Captura erro se o start for chamado novamente antes do onend
                 if (e.name !== 'InvalidStateError') console.error(e);
             }
         }
@@ -130,7 +138,7 @@ export default function BedsideModal({
     const speech = useSpeechRecognition(handleSpeechResult);
 
 
-    // FUNÇÃO SIMPLIFICADA E CORRIGIDA PARA IOS
+    // FUNÇÃO SIMPLIFICADA E CORRIGIDA PARA iOS
     const toggleSpeech = (fieldRef, fieldName) => {
         if (!speech.isAPISupported) {
             alert("O ditado por voz pode não ser suportado neste navegador (requer Chrome/Safari/Edge atualizados em ambiente seguro).");
@@ -143,17 +151,13 @@ export default function BedsideModal({
             setActiveSpeechField(null);
         } else if (speech.isListening && activeSpeechField !== fieldName) {
             // Caso 2: Se estiver escutando em OUTRO campo, pare e inicie a nova escuta
-            // Nota: No iOS, a parada e o início em sequência podem falhar.
-            // A melhor prática é parar e forçar o usuário a dar um novo toque para iniciar.
-            // Para simplificar, tentamos o restart, mas a falha é esperada em iPhones/Chrome.
             speech.stopListening();
-            setActiveSpeechField(null); // Limpa o estado ativo imediatamente
+            setActiveSpeechField(fieldName); // Define o novo campo como ativo
             
-            // Tenta reiniciar após o stop (não funciona bem em iOS/Chrome, mas vale a tentativa)
+            // Tenta reiniciar após o stop
             setTimeout(() => {
                 speech.startListening(fieldRef);
-                setActiveSpeechField(fieldName);
-            }, 50); // Delay mínimo
+            }, 50); 
             
         } else {
             // Caso 3: Comece a escuta (se não estiver escutando)
@@ -166,7 +170,6 @@ export default function BedsideModal({
     const getFieldContent = (field) => {
         const text = field === 'anamnesis' ? bedsideAnamnesis : bedsideExams;
         if (speech.isListening && activeSpeechField === field) {
-            // Simula o texto intermediário anexado ao valor, permitindo edição
             return text + (currentInterimTranscript ? ` ${currentInterimTranscript}` : '');
         }
         return text;
