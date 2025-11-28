@@ -28,7 +28,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Configuração de servidor ausente (API Key).' });
   }
   
-  // --- LÓGICA DE CHAT EM TEMPO REAL (CORRIGIDA) ---
+  // --- LÓGICA DE CHAT EM TEMPO REAL ---
   if (mode === 'chat') {
     if (!history || history.length === 0) {
         return res.status(400).json({ error: 'Histórico de chat ausente.' });
@@ -48,7 +48,6 @@ export default async function handler(req, res) {
     
     // Converte o histórico de mensagens do frontend
     const conversationContents = history.map(msg => ({
-        // Mapeia 'preceptor' (a IA no frontend) para 'model' para o backend do Gemini
         role: msg.role === 'user' ? 'user' : 'model', 
         parts: [{ text: msg.text }]
     }));
@@ -68,7 +67,6 @@ export default async function handler(req, res) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 contents: contentsWithSystemInstruction, 
-                // REMOVIDO: generationConfig com systemInstruction, que estava falhando
             })
         });
 
@@ -150,7 +148,7 @@ export default async function handler(req, res) {
     }
   }
 
-  // --- LÓGICA DE ANÁLISE DE IMAGEM (EXISTENTE) ---
+  // --- LÓGICA DE ANÁLISE DE IMAGEM (IA VISION EXPANDIDA) ---
   if (image) {
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt é obrigatório para Análise de Imagem.' });
@@ -161,13 +159,17 @@ export default async function handler(req, res) {
     const userPrompt = prompt || "Analise esta imagem médica e descreva os achados.";
 
     const visionPrompt = `
-      Você é um médico especialista em radiologia e diagnóstico por imagem (Cardiologista para ECGs).
-      Tarefa: Analisar a imagem fornecida e responder à pergunta do usuário: "${userPrompt}"
-      Diretrizes:
-      1. Seja extremamente técnico e preciso.
-      2. Se for um ECG: Descreva ritmo, frequência, eixo, ondas P, complexo QRS, segmento ST e ondas T. Conclua com o diagnóstico provável.
-      3. Se for Raio-X/TC: Descreva a qualidade da imagem e os achados patológicos visíveis.
-      4. Responda DIRETAMENTE em texto corrido e tópicos (Markdown). NÃO use formato JSON.
+      Você é um médico consultor de diagnóstico com expertise em diversas áreas, incluindo Radiologia, Cardiologia e Dermatologia/Clínica Geral.
+      
+      TAREFA: Analisar a imagem fornecida e responder à pergunta do usuário: "${userPrompt}"
+
+      DIRETRIZES DE ANÁLISE:
+      1. **Identificação:** Identifique o tipo de imagem (ECG, Raio-X, Lesão Cutânea, Fezes, Sputum, Monitor, etc.).
+      2. **Especialidade:** Assuma a função de especialista mais relevante (ex: Dermatologista para pele, Cardiologista para ECG).
+      3. **Achados Técnicos:** Descreva os achados de forma extremamente técnica, precisa e detalhada.
+      4. **ECG/Imagens:** Siga os protocolos usuais (ritmo, eixo, qualidade da imagem, achados patológicos, etc.).
+      5. **Lesões/Secreções/Outros:** Descreva cor, textura, margens, localização e sugira as hipóteses diagnósticas e exames complementares para confirmação.
+      6. **Formato:** Responda DIRETAMENTE em texto corrido e tópicos (Markdown). NÃO use formato JSON.
     `;
 
     try {
