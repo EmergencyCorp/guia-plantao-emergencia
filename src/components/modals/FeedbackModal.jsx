@@ -6,7 +6,7 @@ import { db } from '../../firebaseClient';
 
 export default function FeedbackModal({ isOpen, onClose, isDarkMode, currentUser }) {
   const [message, setMessage] = useState('');
-  const [selectedFileBase64, setSelectedFileBase64] = useState(null); // Guarda a imagem como texto
+  const [selectedFileBase64, setSelectedFileBase64] = useState(null);
   const [isSending, setIsSending] = useState(false);
   const [sentSuccess, setSentSuccess] = useState(false);
   const [imageError, setImageError] = useState('');
@@ -16,12 +16,12 @@ export default function FeedbackModal({ isOpen, onClose, isDarkMode, currentUser
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      // Validação de tamanho mais rigorosa (400KB) para caber no Firestore
+      // Limite de 400KB para garantir que cabe no documento do Firestore (limite de 1MB por doc)
       if (file.size > 400 * 1024) {
-        setImageError('Para envio sem Storage, a imagem deve ser menor que 400KB.');
+        setImageError('A imagem é muito grande. Máximo permitido: 400KB.');
         return;
       }
-      // Validação de tipo
+      
       if (!file.type.startsWith('image/')) {
         setImageError('Apenas arquivos de imagem são permitidos.');
         return;
@@ -29,7 +29,7 @@ export default function FeedbackModal({ isOpen, onClose, isDarkMode, currentUser
 
       setImageError('');
       
-      // Converter imagem para Base64 (Texto)
+      // Converter para Base64
       const reader = new FileReader();
       reader.onloadend = () => {
           setSelectedFileBase64(reader.result);
@@ -48,20 +48,23 @@ export default function FeedbackModal({ isOpen, onClose, isDarkMode, currentUser
     setImageError('');
 
     try {
-      // Salvar no Firestore
       if (db) {
         const feedbackId = `feedback_${Date.now()}`;
-        // Salvamos a imagem (se existir) diretamente dentro do documento como texto (imageBase64)
         await setDoc(doc(db, 'artifacts', 'emergency-guide-app', 'feedbacks', feedbackId), {
           userId: currentUser?.uid || 'anonymous',
           userName: currentUser?.name || 'Anônimo',
           userEmail: currentUser?.email || 'N/A',
           message: message,
-          imageBase64: selectedFileBase64, // Salvando a string da imagem aqui
+          imageBase64: selectedFileBase64, // Salva a imagem como string
           createdAt: new Date().toISOString(),
           status: 'unread'
         });
       }
+
+      // Opcional: Abrir cliente de email para garantir envio duplo
+      // const subject = encodeURIComponent(`Feedback Lister Guidance`);
+      // const body = encodeURIComponent(`Mensagem:\n${message}\n\n---\nEnviado por: ${currentUser?.name || 'N/A'}`);
+      // window.location.href = `mailto:emergencycorp22@gmail.com?subject=${subject}&body=${body}`;
 
       setSentSuccess(true);
       setTimeout(() => {
@@ -72,8 +75,8 @@ export default function FeedbackModal({ isOpen, onClose, isDarkMode, currentUser
       }, 2500);
 
     } catch (error) {
-      console.error("Erro crítico ao enviar:", error);
-      setImageError(error.message || "Erro ao salvar no banco de dados.");
+      console.error("Erro ao enviar:", error);
+      setImageError("Erro ao salvar feedback. Verifique sua conexão.");
     } finally {
       setIsSending(false);
     }
@@ -98,7 +101,7 @@ export default function FeedbackModal({ isOpen, onClose, isDarkMode, currentUser
                <CheckCircle2 size={32} />
              </div>
              <h4 className="text-xl font-bold text-green-600 mb-2">Recebido!</h4>
-             <p className="text-sm text-gray-500">Seu feedback foi salvo no banco de dados com sucesso.</p>
+             <p className="text-sm text-gray-500">Seu feedback foi enviado com sucesso.</p>
            </div>
         ) : (
           <div className="p-6 space-y-4">
@@ -118,7 +121,7 @@ export default function FeedbackModal({ isOpen, onClose, isDarkMode, currentUser
                 htmlFor="feedback-image" 
                 className={`flex items-center gap-2 w-fit px-4 py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors border ${isDarkMode ? 'bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-300' : 'bg-gray-50 border-gray-200 hover:bg-gray-100 text-slate-600'}`}
               >
-                <ImageIcon size={18} /> {selectedFileBase64 ? 'Trocar Imagem' : 'Anexar Print (Máx 400KB)'}
+                <ImageIcon size={18} /> {selectedFileBase64 ? 'Trocar Imagem' : 'Anexar Print (Opcional)'}
               </label>
               <input 
                 id="feedback-image" 
