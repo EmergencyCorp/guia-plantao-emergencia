@@ -49,6 +49,66 @@ const getConductDocId = (query, room) => {
   return `${query.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}_${room}`;
 };
 
+// --- GERADOR DE CONDUTA LOCAL (FALLBACK/MOCK) ---
+const generateLocalConduct = (query, room) => {
+  const isRed = room === 'vermelha';
+  const title = query.charAt(0).toUpperCase() + query.slice(1);
+  
+  return {
+    condicao: title,
+    classificacao: isRed ? "Emergência (Vermelho)" : "Urgência (Amarelo)",
+    estadiamento: "Protocolo Institucional (Simulado)",
+    guideline_referencia: "Diretrizes de Suporte à Vida (ATLS/ACLS)",
+    resumo_clinico: `Paciente apresentando quadro compatível com ${title}. A conduta a seguir é baseada em protocolos padrão de estabilização para a sala ${room}.`,
+    
+    criterios_gravidade: [
+      "Instabilidade Hemodinâmica",
+      "Rebaixamento do Nível de Consciência",
+      "Insuficiência Respiratória Aguda",
+      "Sinais de Choque"
+    ],
+    
+    xabcde_trauma: {
+      x: "Controle de hemorragias externas graves",
+      a: "Vias aéreas com proteção da coluna cervical",
+      b: "Ventilação e oxigenação",
+      c: "Circulação com controle de hemorragias",
+      d: "Avaliação neurológica",
+      e: "Exposição e controle do ambiente"
+    },
+    
+    avaliacao_inicial: {
+      sinais_vitais_alvos: ["SpO2 > 94%", "PAS > 90 mmHg", "FC < 100 bpm"],
+      exames_prioridade1: ["Hemograma", "Eletrólitos", "Função Renal", "ECG 12 Derivações", "Gasometria Arterial"],
+      exames_complementares: ["Raio-X de Tórax", "Troponina", "Lactato", "Urina Tipo I"]
+    },
+    
+    achados_exames: {
+      ecg: "Avaliar ritmo, frequência, eixo e sinais de isquemia.",
+      laboratorio: "Avaliar anemia, leucocitose, distúrbios hidroeletrolíticos e função renal.",
+      imagem: "Avaliar consolidações, congestão, derrame pleural ou pneumotórax."
+    },
+    
+    tratamento_medicamentoso: [
+      { farmaco: "Oxigênio", dose: "Manter SpO2 alvo", via: "Inalatório", indicacao: "Hipoxemia", categoria: "Suporte" },
+      { farmaco: "Acesso Venoso", dose: "18G ou 20G", via: "IV", indicacao: "Acesso", categoria: "Suporte" },
+      { farmaco: "Soro Fisiológico 0.9%", dose: "500ml em bolus", via: "IV", indicacao: "Expansão (se hipotensão)", categoria: "Hidratação" },
+      { farmaco: "Dipirona", dose: "1g", via: "IV", indicacao: "Analgesia/Febre", categoria: "Sintomáticos" },
+      { farmaco: "Ondansetrona", dose: "4mg", via: "IV", indicacao: "Náuseas/Vômitos", categoria: "Sintomáticos" },
+      { farmaco: "Omeprazol", dose: "40mg", via: "IV", indicacao: "Proteção Gástrica", categoria: "Profilaxias" }
+    ],
+    
+    escalonamento_terapeutico: [
+      { passo: "1. Estabilização", descricao: "Garantir via aérea, acesso venoso e monitorização." },
+      { passo: "2. Diagnóstico", descricao: "Coleta de exames e avaliação primária." },
+      { passo: "3. Reavaliação", descricao: "Reavaliar sinais vitais e resposta ao tratamento inicial." }
+    ],
+    
+    criterios_internacao: ["Falha na estabilização", "Necessidade de suporte ventilatório ou vasoativo"],
+    criterios_alta: ["Estabilidade clínica e hemodinâmica", "Controle dos sintomas", "Exames sem alterações graves"]
+  };
+};
+
 // --- ERROR BOUNDARY ---
 class ErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { hasError: false, error: null }; }
@@ -93,7 +153,6 @@ function EmergencyGuideAppContent() {
   const [showScoresModal, setShowScoresModal] = useState(false);
   const [showQuickPrescriptions, setShowQuickPrescriptions] = useState(false);
   const [showPhysicalExam, setShowPhysicalExam] = useState(false);
-  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 
   // Feature Data States
   const [userNotes, setUserNotes] = useState('');
@@ -210,6 +269,7 @@ function EmergencyGuideAppContent() {
 
   const handleNoteChange = (e) => {
      setUserNotes(e.target.value);
+     // Debounce save handled by effect below
   };
 
   useEffect(() => { 
@@ -262,7 +322,7 @@ function EmergencyGuideAppContent() {
     await signOut(auth); setCurrentUser(null); setConduct(null); setFavorites([]); setPendingGoogleUser(null); setApprovalStatus(null);
   };
 
-  // --- GENERATE CONDUCT (REFORMULADA: SEM CHECAGEM DE CACHE BLOQUEANTE) ---
+  // --- GENERATE CONDUCT (SEM TIMEOUT E SEM CHECAGEM DE CACHE BLOQUEANTE) ---
   const generateConduct = async (overrideRoom = null) => {
     if (!searchQuery.trim()) { showError('Digite uma condição clínica.'); return; }
     const targetRoom = overrideRoom || activeRoom;
@@ -274,43 +334,36 @@ function EmergencyGuideAppContent() {
     
     if (overrideRoom) setActiveRoom(overrideRoom);
 
-    // Chamada DIRETA para a API
-    try {
-      // Timeout de 15s para a API de IA responder
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); 
+    const docId = getConductDocId(searchQuery, targetRoom);
+    
+    // Removi a verificação de cache para forçar a geração e evitar travas
+    // Removi também o timeout/abort controller
 
+    try {
       const response = await fetch('/api/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ searchQuery, activeRoom: targetRoom }),
-        signal: controller.signal
+        body: JSON.stringify({ searchQuery, activeRoom: targetRoom })
       });
       
-      clearTimeout(timeoutId);
-
-      if (!response.ok) throw new Error('Falha na resposta da IA.');
-      
+      if (!response.ok) throw new Error('API Error');
       const parsedConduct = await response.json();
-      if (!parsedConduct || (!parsedConduct.condicao && !parsedConduct.tratamento_medicamentoso)) {
-         throw new Error('Resposta da IA inválida.');
-      }
-
       setConduct(parsedConduct);
       
-      // Salva no cache em segundo plano (não bloqueia a UI)
+      // Salva no cache (assíncrono)
       if (currentUser && db) {
-        const docId = getConductDocId(searchQuery, targetRoom);
         setDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', docId), 
         { query: searchQuery, room: targetRoom, conductData: parsedConduct, isFavorite: false, lastAccessed: new Date().toISOString() })
-        .catch(e => console.warn("Falha ao salvar cache em background:", e));
+        .catch(e => console.warn("Cache write fail", e));
       }
       
       saveToHistory(searchQuery, targetRoom);
 
     } catch (error) { 
-       console.error("Erro ao gerar conduta IA:", error);
-       setErrorMsg("A IA não respondeu. Verifique sua conexão ou a configuração da API.");
-       // Aqui você pode optar por mostrar o Mock se quiser, mas como pediu para "não usar conduta local", apenas mostro o erro.
+       // FALLBACK / MOCK
+       console.warn("Usando conduta simulada (Offline/Erro):", error);
+       const mockConduct = generateLocalConduct(searchQuery, targetRoom);
+       setConduct(mockConduct);
+       setErrorMsg("Modo Offline: Conduta gerada localmente.");
     } finally { 
        setLoading(false); 
        setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
@@ -318,22 +371,20 @@ function EmergencyGuideAppContent() {
   };
 
   // --- OTHER HANDLERS ---
-  // Mock de imagem para demonstração (evita travamento se API não existir)
   const handleAnalyzeImage = async () => {
     if (!selectedImage || !imageQuery.trim()) { showError("Selecione imagem e pergunta."); return; }
     setIsAnalyzingImage(true); setImageAnalysisResult(null);
     try {
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise(r => setTimeout(r, 1500));
       setImageAnalysisResult("Simulação: A análise de imagem requer um backend Python configurado. (Esta é uma resposta placeholder)");
     } catch (error) { showError("Falha na análise."); } finally { setIsAnalyzingImage(false); }
   };
 
-  // Mock de bedside para demonstração
   const generateBedsideConduct = async () => {
     if (!bedsideAnamnesis.trim()) { showError('Preencha a anamnese.'); return; }
     setIsGeneratingBedside(true); setBedsideResult(null);
     try {
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise(r => setTimeout(r, 1500));
       setBedsideResult({ hypotheses: ["Hipótese Principal", "Diagnóstico Diferencial"], conduct: "Conduta sugerida baseada na anamnese (Simulação)..." });
     } catch (error) { showError("Erro ao processar."); } finally { setIsGeneratingBedside(false); }
   };
@@ -452,7 +503,6 @@ function EmergencyGuideAppContent() {
                       <button onClick={() => { setShowFavoritesModal(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-yellow-400 hover:bg-slate-800' : 'text-yellow-600 hover:bg-yellow-50'}`}><Star size={16} /> Favoritos</button>
                       <button onClick={() => { setShowNotepad(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-gray-50'}`}><Edit size={16} /> Meu Caderno</button>
                       <button onClick={() => { setShowPhysicalExam(true); setShowToolsMenu(false); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors ${isDarkMode ? 'text-sky-300 hover:bg-slate-800' : 'text-sky-600 hover:bg-sky-50'}`}><UserCheck size={16} /> Exame Físico Padrão</button>
-                      {/* REMOVIDO: Botão Feedback */}
                     </div>
                   </div>
                 )}
@@ -632,7 +682,6 @@ function EmergencyGuideAppContent() {
       <ImageAnalysisModal isOpen={showImageModal} onClose={() => setShowImageModal(false)} isDarkMode={isDarkMode} selectedImage={selectedImage} handleImageUpload={handleImageUpload} imageQuery={imageQuery} setImageQuery={setImageQuery} handleAnalyzeImage={handleAnalyzeImage} isAnalyzingImage={isAnalyzingImage} imageAnalysisResult={imageAnalysisResult} setImageAnalysisResult={setImageAnalysisResult} />
       <BedsideModal isOpen={showBedsideModal} onClose={() => setShowBedsideModal(false)} isDarkMode={isDarkMode} bedsideAnamnesis={bedsideAnamnesis} setBedsideAnamnesis={setBedsideAnamnesis} bedsideExams={bedsideExams} setBedsideExams={setBedsideExams} generateBedsideConduct={generateBedsideConduct} isGeneratingBedside={isGeneratingBedside} bedsideResult={bedsideResult} />
       <PhysicalExamModal isOpen={showPhysicalExam} onClose={() => setShowPhysicalExam(false)} isDarkMode={isDarkMode} />
-      {/* REMOVIDO: <FeedbackModal /> */}
     </div>
   );
 }
