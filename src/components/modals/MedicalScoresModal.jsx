@@ -40,7 +40,7 @@ const getCategoryIcon = (category) => {
     }
 };
 
-// --- COMPONENTES DE UI (Movidos para fora para corrigir o bug de foco) ---
+// --- COMPONENTES DE UI ---
 const ScoreInput = ({ label, children, isDarkMode }) => (
   <div className="mb-4">
       <label className={`block text-xs font-bold uppercase mb-2 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>{label}</label>
@@ -290,17 +290,17 @@ export default function MedicalScoresModal({ isOpen, onClose, isDarkMode }) {
             break;
             
         case 'psi':
-             let psi = 0;
-             psi += (inputs.age || 0);
-             if (inputs.female) psi -= 10; if (inputs.nursing) psi += 10;
-             if (inputs.neo) psi += 30; if (inputs.liver) psi += 20; if (inputs.chf) psi += 10; if (inputs.cvd) psi += 10; if (inputs.renal) psi += 10;
-             if (inputs.mental) psi += 20; if ((inputs.rr || 0) >= 30) psi += 20; if ((inputs.sbp || 120) < 90) psi += 20;
-             if ((inputs.temp || 36) < 35 || (inputs.temp || 36) >= 40) psi += 15; if ((inputs.pulse || 80) >= 125) psi += 10;
-             if ((inputs.ph || 7.4) < 7.35) psi += 30; if ((inputs.bun || 20) >= 30) psi += 20; if ((inputs.sodium || 140) < 130) psi += 20;
-             if ((inputs.glucose || 100) >= 250) psi += 10; if ((inputs.hct || 40) < 30) psi += 10; if ((inputs.po2 || 90) < 60) psi += 10; if (inputs.pleural) psi += 10;
-             score = psi;
-             if (score <= 70) { interpretation = 'Classe II - Baixo'; severity = 'low'; } else if (score <= 90) { interpretation = 'Classe III - Moderado'; severity = 'medium'; } else { interpretation = 'Classe IV/V - Alto Risco'; severity = 'high'; }
-             break;
+              let psi = 0;
+              psi += (inputs.age || 0);
+              if (inputs.female) psi -= 10; if (inputs.nursing) psi += 10;
+              if (inputs.neo) psi += 30; if (inputs.liver) psi += 20; if (inputs.chf) psi += 10; if (inputs.cvd) psi += 10; if (inputs.renal) psi += 10;
+              if (inputs.mental) psi += 20; if ((inputs.rr || 0) >= 30) psi += 20; if ((inputs.sbp || 120) < 90) psi += 20;
+              if ((inputs.temp || 36) < 35 || (inputs.temp || 36) >= 40) psi += 15; if ((inputs.pulse || 80) >= 125) psi += 10;
+              if ((inputs.ph || 7.4) < 7.35) psi += 30; if ((inputs.bun || 20) >= 30) psi += 20; if ((inputs.sodium || 140) < 130) psi += 20;
+              if ((inputs.glucose || 100) >= 250) psi += 10; if ((inputs.hct || 40) < 30) psi += 10; if ((inputs.po2 || 90) < 60) psi += 10; if (inputs.pleural) psi += 10;
+              score = psi;
+              if (score <= 70) { interpretation = 'Classe II - Baixo'; severity = 'low'; } else if (score <= 90) { interpretation = 'Classe III - Moderado'; severity = 'medium'; } else { interpretation = 'Classe IV/V - Alto Risco'; severity = 'high'; }
+              break;
         
         case 'apache':
             let apache = 0; const ageApache = inputs.age || 0;
@@ -536,18 +536,26 @@ export default function MedicalScoresModal({ isOpen, onClose, isDarkMode }) {
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className={`w-full max-w-5xl h-[85vh] rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row ${isDarkMode ? 'bg-slate-900 text-slate-100' : 'bg-white'}`}>
+      <div className={`w-full max-w-5xl h-full md:h-[85vh] rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row relative ${isDarkMode ? 'bg-slate-900 text-slate-100' : 'bg-white'}`}>
         
+        {/* BOTÃO FECHAR GLOBAL (SEMPRE VISÍVEL) */}
+        <button 
+            onClick={onClose} 
+            className={`absolute right-4 top-4 p-2 rounded-full z-50 transition-colors ${isDarkMode ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-white shadow-sm text-gray-500 hover:text-gray-800'}`}
+        >
+            <X size={24}/>
+        </button>
+
         {/* SIDEBAR (LISTA DE SCORES) */}
-        <div className={`w-full md:w-80 border-r flex flex-col ${isDarkMode ? 'border-slate-800 bg-slate-950' : 'border-gray-100 bg-gray-50'} ${selectedScore ? 'hidden md:flex' : 'flex'}`}>
-            <div className="p-5 border-b border-gray-200 dark:border-slate-800">
+        <div className={`w-full md:w-80 border-r flex flex-col h-full ${isDarkMode ? 'border-slate-800 bg-slate-950' : 'border-gray-100 bg-gray-50'} ${selectedScore ? 'hidden md:flex' : 'flex'}`}>
+            <div className="p-5 border-b border-gray-200 dark:border-slate-800 mt-10 md:mt-0">
                 <h3 className="font-bold flex items-center gap-2 mb-4 text-lg"><Activity size={22} className="text-blue-500"/> Scores Médicos</h3>
                 <div className="relative group">
                     <input type="text" placeholder="Buscar..." className={`w-full pl-9 pr-3 py-2.5 rounded-xl text-sm border outline-none focus:ring-2 focus:ring-blue-500 transition-all ${isDarkMode ? 'bg-slate-900 border-slate-800 group-hover:border-slate-700' : 'bg-white border-gray-200 group-hover:border-gray-300'}`} onChange={(e) => setSearchTerm(e.target.value)} />
                     <Search className="absolute left-3 top-3 text-gray-400" size={16} />
                 </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-3 space-y-1">
+            <div className="flex-1 overflow-y-auto p-3 space-y-1 pb-20 md:pb-4">
                 {filteredScores.map(score => (
                     <button key={score.id} onClick={() => setSelectedScore(score)} className={`w-full text-left p-3 rounded-xl text-sm transition-all flex items-center justify-between group ${selectedScore?.id === score.id ? (isDarkMode ? 'bg-blue-900/30 text-blue-300 border border-blue-800' : 'bg-blue-50 text-blue-700 border border-blue-200 shadow-sm') : (isDarkMode ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-600 hover:bg-gray-100')}`}>
                         <div className="flex items-center gap-3">
@@ -566,53 +574,54 @@ export default function MedicalScoresModal({ isOpen, onClose, isDarkMode }) {
         </div>
 
         {/* MAIN CONTENT (CALCULADORA) */}
-        <div className={`flex-1 flex flex-col h-full relative bg-opacity-50 ${!selectedScore ? 'hidden md:flex' : 'flex'}`}>
-            {/* BOTÃO VOLTAR (SÓ MOBILE) */}
-            {selectedScore && (
-                <button onClick={() => setSelectedScore(null)} className="md:hidden absolute left-4 top-4 p-2 rounded-full z-10 bg-gray-100 dark:bg-slate-800 text-slate-500">
-                    <ArrowLeft size={24}/>
-                </button>
-            )}
-
-            <button onClick={onClose} className={`absolute right-4 top-4 p-2 rounded-full z-10 transition-colors ${isDarkMode ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-gray-100 text-gray-500'}`}><X size={24}/></button>
+        <div className={`flex-1 flex flex-col h-full relative bg-opacity-50 overflow-hidden ${!selectedScore ? 'hidden md:flex' : 'flex'}`}>
             
+            {/* CABEÇALHO DO SCORE COM BOTÃO VOLTAR */}
             {selectedScore ? (
-                <>
-                    <div className={`p-8 border-b ${isDarkMode ? 'border-slate-800' : 'border-gray-100'}`}>
-                        <div className="md:hidden h-8"></div> {/* Espaço para o botão voltar no mobile */}
-                        <h2 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent w-fit">{selectedScore.name}</h2>
-                        <p className={`text-sm mt-2 max-w-xl ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>{selectedScore.description}</p>
+                <div className={`p-6 md:p-8 border-b shrink-0 flex items-center gap-4 ${isDarkMode ? 'border-slate-800' : 'border-gray-100'}`}>
+                    <button onClick={() => setSelectedScore(null)} className="md:hidden p-2 -ml-2 rounded-full hover:bg-black/5 text-slate-500">
+                        <ArrowLeft size={24}/>
+                    </button>
+                    <div>
+                        <h2 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent w-fit pr-8">{selectedScore.name}</h2>
+                        <p className={`text-xs md:text-sm mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>{selectedScore.description}</p>
                     </div>
-                    
-                    <div className="flex-1 overflow-y-auto p-8">
-                        {renderInputs()}
-                    </div>
-
-                    <div className={`p-6 border-t ${isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-white border-gray-100 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]'}`}>
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                           <div>
-                                <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block mb-1">Resultado em Tempo Real</span>
-                                <div className="text-4xl font-black tracking-tight flex items-baseline gap-2">
-                                   {result?.value || '--'}
-                                   {result && <span className="text-sm font-medium text-slate-500">pontos</span>}
-                                </div>
-                           </div>
-                           {result && (
-                               <div className={`px-6 py-4 rounded-2xl border-l-4 w-full md:max-w-md flex-1 md:ml-8 shadow-sm animate-in fade-in slide-in-from-bottom-4 ${result.color}`}>
-                                   <p className="font-bold text-sm leading-relaxed flex gap-2">
-                                     <AlertTriangle size={18} className="shrink-0 mt-0.5"/>
-                                     {result.text}
-                                   </p>
-                               </div>
-                           )}
-                        </div>
-                    </div>
-                </>
+                </div>
             ) : (
-                <div className="flex-1 flex flex-col items-center justify-center text-center p-12 opacity-60">
+                <div className="hidden md:flex flex-1 flex-col items-center justify-center text-center p-12 opacity-60">
                     <div className={`p-6 rounded-full mb-6 ${isDarkMode ? 'bg-slate-800' : 'bg-gray-100'}`}><Activity size={48} className="text-slate-400"/></div>
                     <h3 className="text-2xl font-bold mb-2">Nenhum Score Selecionado</h3>
                     <p className="text-slate-500 max-w-xs">Selecione uma ferramenta clínica na barra lateral para iniciar os cálculos.</p>
+                </div>
+            )}
+            
+            {/* ÁREA DE INPUTS COM SCROLL INDEPENDENTE */}
+            {selectedScore && (
+                <div className="flex-1 overflow-y-auto p-6 md:p-8 pb-32">
+                    {renderInputs()}
+                </div>
+            )}
+
+            {/* BARRA DE RESULTADO FIXA EM BAIXO */}
+            {selectedScore && (
+                <div className={`p-6 border-t shrink-0 ${isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-white border-gray-100 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]'}`}>
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                       <div>
+                            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block mb-1">Resultado</span>
+                            <div className="text-4xl font-black tracking-tight flex items-baseline gap-2">
+                               {result?.value || '--'}
+                               {result && <span className="text-sm font-medium text-slate-500">pontos</span>}
+                            </div>
+                       </div>
+                       {result && (
+                           <div className={`px-4 py-3 rounded-xl border-l-4 w-full md:max-w-md flex-1 md:ml-8 shadow-sm animate-in fade-in slide-in-from-bottom-4 ${result.color}`}>
+                               <p className="font-bold text-sm leading-relaxed flex gap-2">
+                                 <AlertTriangle size={18} className="shrink-0 mt-0.5"/>
+                                 {result.text}
+                               </p>
+                           </div>
+                       )}
+                    </div>
                 </div>
             )}
         </div>
