@@ -28,7 +28,7 @@ import MedicalScoresModal from './components/modals/MedicalScoresModal';
 import QuickPrescriptionsModal from './components/modals/QuickPrescriptionsModal';
 import PhysicalExamModal from './components/modals/PhysicalExamModal';
 import CompleteProfileModal from './components/modals/CompleteProfileModal';
-import FeedbackModal from './components/modals/FeedbackModal'; // NOVO MODAL
+import FeedbackModal from './components/modals/FeedbackModal';
 
 // --- FIREBASE IMPORTS ---
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
@@ -127,7 +127,7 @@ function EmergencyGuideAppContent() {
   const [showScoresModal, setShowScoresModal] = useState(false);
   const [showQuickPrescriptions, setShowQuickPrescriptions] = useState(false);
   const [showPhysicalExam, setShowPhysicalExam] = useState(false);
-  const [showFeedbackModal, setShowFeedbackModal] = useState(false); // NOVO STATE
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 
   // Feature Data States
   const [userNotes, setUserNotes] = useState('');
@@ -554,7 +554,7 @@ function EmergencyGuideAppContent() {
     );
   }
 
-  // --- MAIN APP RENDER (RESPONSIVO COM FOOTER) ---
+  // --- MAIN APP RENDER ---
   return (
     <div className={`min-h-screen flex flex-col font-sans selection:bg-blue-100 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
       <header className={`border-b sticky top-0 z-40 shadow-sm ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
@@ -647,7 +647,7 @@ function EmergencyGuideAppContent() {
         </div>
 
         {conduct && (
-          <div ref={resultsRef} className="animate-in slide-in-from-bottom-4 fade-in duration-500 space-y-6">
+          <div ref={resultsRef} className="animate-in slide-in-from-bottom-4 fade-in duration-500 space-y-6 pb-20">
             {activeRoom === 'verde' && (
               <div className={`border-l-4 border-amber-500 p-4 rounded-r-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${isDarkMode ? 'bg-amber-900/20' : 'bg-amber-50'}`}>
                 <div className="flex items-center gap-3"><div className={`p-2 rounded-full ${isDarkMode ? 'bg-amber-900/50 text-amber-400' : 'bg-amber-100 text-amber-600'}`}><AlertTriangle size={20} /></div><div><h4 className={`text-sm font-bold ${isDarkMode ? 'text-amber-300' : 'text-amber-900'}`}>Caso mais grave que o esperado?</h4><p className={`text-xs ${isDarkMode ? 'text-amber-400/70' : 'text-amber-700'}`}>Gere uma conduta de média complexidade.</p></div></div>
@@ -771,26 +771,29 @@ function EmergencyGuideAppContent() {
         )}
       </main>
 
-      {/* --- FOOTER REESTRUTURADO --- */}
-      <footer className={`border-t py-8 mt-auto ${isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-white border-gray-200 text-gray-500'}`}>
+      {/* --- FOOTER REESTRUTURADO (WIDE & CLEAN) --- */}
+      <footer className={`border-t py-6 mt-auto transition-colors ${isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-500' : 'bg-white border-gray-200 text-slate-500'}`}>
         <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="text-center md:text-left">
-             <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
-                <ShieldAlert size={16} />
-                <span className="font-bold text-sm uppercase tracking-wider">EmergencyCorp © 2025</span>
+          
+          {/* Texto / Disclaimer */}
+          <div className="flex flex-col items-center md:items-start text-center md:text-left gap-1.5">
+             <div className="flex items-center gap-2">
+                <ShieldAlert size={14} className={isDarkMode ? 'text-blue-500' : 'text-blue-700'} />
+                <span className={`text-xs font-bold uppercase tracking-widest ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>EmergencyCorp © 2025</span>
              </div>
-             <p className="text-xs max-w-md mx-auto md:mx-0 leading-relaxed opacity-80">
-               Esta plataforma é uma ferramenta de auxílio e consulta rápida. 
-               <span className="font-bold block sm:inline"> Não substitui o julgamento clínico do médico.</span>
-               <br/> A EmergencyCorp não se responsabiliza por condutas tomadas com base nas informações aqui contidas.
+             <p className="text-[10px] sm:text-xs leading-relaxed max-w-2xl opacity-80">
+               Esta plataforma serve apenas para consulta rápida e auxílio. <strong className={isDarkMode ? 'text-slate-400' : 'text-slate-600'}>Não substitui o julgamento clínico.</strong>
+               <span className="hidden sm:inline"> | </span>
+               <span className="block sm:inline">A EmergencyCorp não se responsabiliza por condutas médicas tomadas com base nestas informações.</span>
              </p>
           </div>
           
+          {/* Botão */}
           <button 
             onClick={() => setShowFeedbackModal(true)}
-            className={`px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wide border flex items-center gap-2 transition-all hover:scale-105 ${isDarkMode ? 'border-slate-700 hover:bg-slate-800 hover:text-white' : 'border-gray-300 hover:bg-gray-100 hover:text-gray-800'}`}
+            className={`shrink-0 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider border flex items-center gap-2 transition-all hover:-translate-y-0.5 ${isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-white hover:border-slate-600' : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-white hover:text-blue-600 hover:border-gray-300'}`}
           >
-            <MessageSquare size={14} /> Enviar Feedback
+            <MessageSquare size={14} /> Feedback
           </button>
         </div>
       </footer>
