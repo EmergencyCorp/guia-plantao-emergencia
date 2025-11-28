@@ -31,6 +31,8 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Configuração de servidor ausente (API Key).' });
   }
   
+// A PARTIR DA LINHA ~37 (LÓGICA DE CHAT EM TEMPO REAL) NO api/generate.js
+
   // --- LÓGICA DE CHAT EM TEMPO REAL ---
   if (mode === 'chat') {
     if (!history || history.length === 0) {
@@ -51,6 +53,7 @@ export default async function handler(req, res) {
     
     // Converte o histórico simples [role: text] para o formato 'contents' do Gemini
     const contents = history.map(msg => ({
+        // O role 'preceptor' deve ser mapeado para 'model' para o histórico
         role: msg.role === 'user' ? 'user' : 'model', 
         parts: [{ text: msg.text }]
     }));
@@ -60,13 +63,9 @@ export default async function handler(req, res) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                contents: [
-                    // Adiciona a instrução do sistema como primeira parte (se o modelo suportar)
-                    { role: 'user', parts: [{ text: `INSTRUÇÃO DE SISTEMA: ${systemInstruction}\n\nINÍCIO DO CHAT:\n` }] }, 
-                    ...contents
-                ],
-                // Configuração para forçar a instrução de sistema
-                config: {
+                contents: contents, // Envia APENAS o histórico de mensagens
+                // CORREÇÃO: Usar generationConfig para systemInstruction
+                generationConfig: {
                    systemInstruction: systemInstruction,
                 }
             })
@@ -89,6 +88,8 @@ export default async function handler(req, res) {
         return;
     }
   }
+
+  // ... o restante do arquivo (lógicas bedside, image, e padrão) permanece inalterado.
 
 
   // --- LÓGICA BEDSIDE (EXISTENTE) ---
