@@ -433,6 +433,7 @@ function EmergencyGuideAppContent() {
 
     const docId = getConductDocId(searchQuery, targetRoom);
     
+    // Check Cache
     if (currentUser && db) {
       try {
         const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', docId);
@@ -711,7 +712,7 @@ function EmergencyGuideAppContent() {
         )}
       </main>
 
-      {/* RENDERIZAÇÃO DOS MODALS VIA COMPONENTES  */}
+      {/* Modals */}
       <InfusionCalculator isOpen={showCalculatorModal} onClose={() => setShowCalculatorModal(false)} isDarkMode={isDarkMode} />
       <NotepadModal isOpen={showNotepad} onClose={() => setShowNotepad(false)} isDarkMode={isDarkMode} userNotes={userNotes} handleNoteChange={handleNoteChange} currentUser={currentUser} isCloudConnected={isCloudConnected} isSaving={isSaving} />
       <FavoritesModal isOpen={showFavoritesModal} onClose={() => setShowFavoritesModal(false)} isDarkMode={isDarkMode} favorites={favorites} loadFavoriteConduct={loadFavoriteConduct} removeFavoriteFromList={removeFavoriteFromList} />
@@ -719,21 +720,9 @@ function EmergencyGuideAppContent() {
       <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} isDarkMode={isDarkMode} />
       <MedicalScoresModal isOpen={showScoresModal} onClose={() => setShowScoresModal(false)} isDarkMode={isDarkMode} />
       <QuickPrescriptionsModal isOpen={showQuickPrescriptions} onClose={() => setShowQuickPrescriptions(false)} isDarkMode={isDarkMode} />
-      
-      <ImageAnalysisModal 
-        isOpen={showImageModal} onClose={() => setShowImageModal(false)} isDarkMode={isDarkMode}
-        selectedImage={selectedImage} handleImageUpload={handleImageUpload} imageQuery={imageQuery} setImageQuery={setImageQuery}
-        handleAnalyzeImage={handleAnalyzeImage} isAnalyzingImage={isAnalyzingImage} imageAnalysisResult={imageAnalysisResult} setImageAnalysisResult={setImageAnalysisResult}
-      />
-
-      <BedsideModal 
-        isOpen={showBedsideModal} onClose={() => setShowBedsideModal(false)} isDarkMode={isDarkMode}
-        bedsideAnamnesis={bedsideAnamnesis} setBedsideAnamnesis={setBedsideAnamnesis}
-        bedsideExams={bedsideExams} setBedsideExams={setBedsideExams}
-        generateBedsideConduct={generateBedsideConduct} isGeneratingBedside={isGeneratingBedside} bedsideResult={bedsideResult}
-      />
-     
-    
+      <ImageAnalysisModal isOpen={showImageModal} onClose={() => setShowImageModal(false)} isDarkMode={isDarkMode} selectedImage={selectedImage} handleImageUpload={handleImageUpload} imageQuery={imageQuery} setImageQuery={setImageQuery} handleAnalyzeImage={handleAnalyzeImage} isAnalyzingImage={isAnalyzingImage} imageAnalysisResult={imageAnalysisResult} setImageAnalysisResult={setImageAnalysisResult} />
+      <BedsideModal isOpen={showBedsideModal} onClose={() => setShowBedsideModal(false)} isDarkMode={isDarkMode} bedsideAnamnesis={bedsideAnamnesis} setBedsideAnamnesis={setBedsideAnamnesis} bedsideExams={bedsideExams} setBedsideExams={setBedsideExams} generateBedsideConduct={generateBedsideConduct} isGeneratingBedside={isGeneratingBedside} bedsideResult={bedsideResult} />
+      <PhysicalExamModal isOpen={showPhysicalExam} onClose={() => setShowPhysicalExam(false)} isDarkMode={isDarkMode} />
     </div>
   );
 }
