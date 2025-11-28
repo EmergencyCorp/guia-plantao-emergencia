@@ -443,107 +443,49 @@ function EmergencyGuideAppContent() {
     }
   };
 
-  // --- NOVA FUNÇÃO REAL DE ANÁLISE DE IMAGEM ---
+// --- FUNÇÃO DE COMPRESSÃO OTIMIZADA ---
   const convertToBase64 = (file) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          // Cria canvas
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          // Redimensiona para no máximo 800px (Suficiente para IA ler ECG/Raio-X)
+          const MAX_DIM = 800;
+
+          if (width > height) {
+            if (width > MAX_DIM) {
+              height *= MAX_DIM / width;
+              width = MAX_DIM;
+            }
+          } else {
+            if (height > MAX_DIM) {
+              width *= MAX_DIM / height;
+              height = MAX_DIM;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Converte para JPEG com 60% de qualidade (Reduz de 5MB para ~100kb)
+          // Isso evita o erro de "Payload Too Large" do Vercel
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+          resolve(dataUrl);
+        };
+        img.onerror = (error) => reject(error);
+      };
       reader.onerror = (error) => reject(error);
     });
-  };
-
-  const handleAnalyzeImage = async () => {
-    // Tenta pegar o arquivo real do input via ID
-    const fileInput = document.getElementById('image-upload-input');
-    const file = fileInput?.files?.[0];
-
-    // Se não tiver arquivo novo nem URL antiga
-    if (!file && !selectedImage) { 
-        showError("Selecione uma imagem."); return; 
-    }
-    if (!imageQuery.trim()) { 
-        showError("Digite uma pergunta sobre a imagem."); return; 
-    }
-
-    setIsAnalyzingImage(true); 
-    setImageAnalysisResult(null);
-
-    try {
-      let base64Image = null;
-      
-      if (file) {
-          base64Image = await convertToBase64(file);
-      } else if (typeof selectedImage === 'string' && selectedImage.includes('base64')) {
-          // Se já for base64 (reuso)
-          base64Image = selectedImage;
-      } else {
-          // Se for blob url e não tiver arquivo, pedimos reupload por segurança
-          if(!file) throw new Error("Por favor, selecione a imagem novamente.");
-      }
-
-      const response = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-            image: base64Image, 
-            prompt: imageQuery 
-        })
-      });
-
-      if (!response.ok) {
-          const errData = await response.json();
-          throw new Error(errData.error || "Erro na comunicação com a IA");
-      }
-
-      const data = await response.json();
-      setImageAnalysisResult(data.result);
-
-    } catch (error) { 
-      console.error(error);
-      showError(error.message || "Falha na análise da imagem."); 
-    } finally { 
-      setIsAnalyzingImage(false); 
-    }
-  };
-
-  const handleImageUpload = (e) => {
-      if (e.target.files && e.target.files[0]) {
-          setSelectedImage(URL.createObjectURL(e.target.files[0]));
-      }
-  };
-
-  const generateBedsideConduct = async () => {
-    if (!bedsideAnamnesis.trim()) { showError('Preencha a anamnese.'); return; }
-    setIsGeneratingBedside(true); setBedsideResult(null);
-    try {
-      await new Promise(r => setTimeout(r, 1500));
-      setBedsideResult({ hypotheses: ["Hipótese Principal", "Diagnóstico Diferencial"], conduct: "Conduta sugerida baseada na anamnese (Simulação)..." });
-    } catch (error) { showError("Erro ao processar."); } finally { setIsGeneratingBedside(false); }
-  };
-
-  const toggleFavorite = async () => {
-      if (!conduct || !currentUser) return;
-      try {
-        const conductId = getConductDocId(searchQuery, activeRoom);
-        const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', conductId);
-        
-        if (isCurrentConductFavorite) {
-            await deleteDoc(docRef);
-            setIsCurrentConductFavorite(false);
-        } else {
-            await setDoc(docRef, {
-                query: searchQuery, 
-                room: activeRoom,
-                conductData: conduct,
-                isFavorite: true,
-                savedAt: new Date().toISOString()
-            });
-            setIsCurrentConductFavorite(true);
-        }
-      } catch (e) {
-          showError("Erro ao atualizar favoritos");
-      }
   };
 
   const loadFavoriteConduct = (fav) => {
