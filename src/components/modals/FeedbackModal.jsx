@@ -2,11 +2,13 @@
 import React, { useState } from 'react';
 import { X, Send, Image as ImageIcon, MessageSquare, Loader2, Trash2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { doc, setDoc } from 'firebase/firestore';
-import { db } from '../../firebaseClient';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'; // Novos imports
+import { db, storage } from '../../firebaseClient'; // Importando storage
 
 export default function FeedbackModal({ isOpen, onClose, isDarkMode, currentUser }) {
   const [message, setMessage] = useState('');
-  const [selectedImage, setSelectedImage] = useState(null);
+  const [selectedFile, setSelectedFile] = useState(null); // Guarda o arquivo real
+  const [previewUrl, setPreviewUrl] = useState(null);   // Guarda o preview pra mostrar na tela
   const [isSending, setIsSending] = useState(false);
   const [sentSuccess, setSentSuccess] = useState(false);
   const [imageError, setImageError] = useState('');
@@ -16,13 +18,16 @@ export default function FeedbackModal({ isOpen, onClose, isDarkMode, currentUser
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      if (file.size > 1024 * 1024) { // Limite de 1MB para evitar travar o Firestore
-        setImageError('A imagem deve ter no máximo 1MB.');
+      if (file.size > 5 * 1024 * 1024) { // Aumentei para 5MB já que agora vai pro Storage
+        setImageError('A imagem deve ter no máximo 5MB.');
         return;
       }
       setImageError('');
+      setSelectedFile(file);
+      
+      // Cria preview local apenas para mostrar ao usuário antes de enviar
       const reader = new FileReader();
-      reader.onloadend = () => setSelectedImage(reader.result);
+      reader.onloadend = () => setPreviewUrl(reader.result);
       reader.readAsDataURL(file);
     }
   };
@@ -32,7 +37,16 @@ export default function FeedbackModal({ isOpen, onClose, isDarkMode, currentUser
     setIsSending(true);
 
     try {
-      // 1. Tenta salvar no Firestore (Painel Admin)
+      let imageUrl = null;
+
+      // 1. Se tem imagem, faz upload para o Firebase Storage
+      if (selectedFile && storage) {
+        const storageRef = ref(storage, `feedbacks/${currentUser?.uid}/${Date.now()}_${selectedFile.name}`);
+        const snapshot = await uploadBytes(storageRef, selectedFile);
+        imageUrl = await getDownloadURL(snapshot.ref); // Pega o link curto (https://...)
+      }
+
+      // 2. Salva no Firestore (Com o link da imagem, não o código gigante)
       if (db && currentUser) {
         const feedbackId = `feedback_${Date.now()}`;
         await setDoc(doc(db, 'artifacts', 'emergency-guide-app', 'feedbacks', feedbackId), {
@@ -40,15 +54,15 @@ export default function FeedbackModal({ isOpen, onClose, isDarkMode, currentUser
           userName: currentUser.name,
           userEmail: currentUser.email,
           message: message,
-          image: selectedImage, // Salva Base64 (se houver e for pequena)
+          imageUrl: imageUrl, // Salva apenas a URL
           createdAt: new Date().toISOString(),
           status: 'unread'
         });
       }
 
-      // 2. Abre o cliente de e-mail do usuário
+      // 3. Abre o cliente de e-mail (Opcional, como backup)
       const subject = encodeURIComponent(`Feedback Lister Guidance - ${currentUser?.name || 'Usuário'}`);
-      const body = encodeURIComponent(`Olá Equipe Lister Guidance,\n\n${message}\n\n---\nEnviado por: ${currentUser?.name}\nCRM: ${currentUser?.crm || 'N/A'}`);
+      const body = encodeURIComponent(`Olá Equipe Lister Guidance,\n\n${message}\n\n---\nEnviado por: ${currentUser?.name}\nCRM: ${currentUser?.crm || 'N/A'}\n\n(Imagem anexada no sistema interno)`);
       
       window.location.href = `mailto:emergencycorp22@gmail.com?subject=${subject}&body=${body}`;
       
@@ -56,7 +70,8 @@ export default function FeedbackModal({ isOpen, onClose, isDarkMode, currentUser
       setTimeout(() => {
         setSentSuccess(false);
         setMessage('');
-        setSelectedImage(null);
+        setSelectedFile(null);
+        setPreviewUrl(null);
         onClose();
       }, 3000);
 
@@ -88,7 +103,7 @@ export default function FeedbackModal({ isOpen, onClose, isDarkMode, currentUser
                <CheckCircle2 size={32} />
              </div>
              <h4 className="text-xl font-bold text-green-600 mb-2">Obrigado!</h4>
-             <p className="text-sm text-gray-500">Seu feedback foi registrado e seu cliente de e-mail foi aberto.</p>
+             <p className="text-sm text-gray-500">Seu feedback foi registrado com sucesso.</p>
            </div>
         ) : (
           <div className="p-6 space-y-4">
@@ -110,7 +125,7 @@ export default function FeedbackModal({ isOpen, onClose, isDarkMode, currentUser
                 htmlFor="feedback-image" 
                 className={`flex items-center gap-2 w-fit px-4 py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors border ${isDarkMode ? 'bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-300' : 'bg-gray-50 border-gray-200 hover:bg-gray-100 text-slate-600'}`}
               >
-                <ImageIcon size={18} /> {selectedImage ? 'Trocar Print' : 'Anexar Print'}
+                <ImageIcon size={18} /> {selectedFile ? 'Trocar Print' : 'Anexar Print'}
               </label>
               <input 
                 id="feedback-image" 
@@ -122,11 +137,11 @@ export default function FeedbackModal({ isOpen, onClose, isDarkMode, currentUser
               
               {imageError && <p className="text-xs text-red-500 mt-2 flex items-center gap-1"><AlertCircle size={12}/> {imageError}</p>}
 
-              {selectedImage && (
+              {previewUrl && (
                 <div className="mt-3 relative w-full h-32 bg-black/50 rounded-lg overflow-hidden group border border-slate-700">
-                  <img src={selectedImage} alt="Preview" className="w-full h-full object-contain" />
+                  <img src={previewUrl} alt="Preview" className="w-full h-full object-contain" />
                   <button 
-                    onClick={() => setSelectedImage(null)}
+                    onClick={() => { setSelectedFile(null); setPreviewUrl(null); }}
                     className="absolute top-2 right-2 p-1.5 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
                   >
                     <Trash2 size={14} />
@@ -143,10 +158,6 @@ export default function FeedbackModal({ isOpen, onClose, isDarkMode, currentUser
             >
               {isSending ? <Loader2 size={20} className="animate-spin" /> : <><Send size={18} /> Enviar Feedback</>}
             </button>
-            
-            <p className="text-[10px] text-center text-gray-400 mt-2">
-              Ao clicar em enviar, seu cliente de e-mail padrão será aberto para finalizar o envio.
-            </p>
           </div>
         )}
       </div>
