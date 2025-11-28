@@ -1,4 +1,3 @@
-// Arquivo: src/components/modals/ImageAnalysisModal.jsx
 import React from 'react';
 import { Camera, X, Upload, Eye, Microscope, Loader2, AlertTriangle } from 'lucide-react';
 
@@ -20,8 +19,7 @@ export default function ImageAnalysisModal({
           {!imageAnalysisResult ? (
             <div className="space-y-6">
               <div className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-colors group ${isDarkMode ? 'border-slate-700 bg-slate-800/50 hover:border-blue-500' : 'border-gray-300 bg-gray-50 hover:border-blue-500'}`}>
-                {/* ADICIONADO O ID AQUI ABAIXO */}
-                <input id="image-upload-input" type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
+                <input type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
                 {selectedImage ? (
                   <div className="relative h-64 w-full">
                     <img src={selectedImage} alt="Preview" className="w-full h-full object-contain rounded-lg" />
