@@ -658,7 +658,7 @@ function EmergencyGuideAppContent() {
 			<header className={`border-b sticky top-0 z-40 shadow-sm ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
 				<div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
 					<div className="flex items-center gap-2 sm:gap-3">
-							<img src={isDarkMode ? "[https://i.ibb.co/d0W4s2yH/logobranco.png](https://i.ibb.co/d0W4s2yH/logobranco.png)" : "[https://i.ibb.co/vCp5pXZP/logopreto.png](https://i.ibb.co/vCp5pXZP/logopreto.png)"} alt="Logo" className="h-8 sm:h-12 w-auto object-contain" />
+							<img src={isDarkMode ? "https://i.ibb.co/d0W4s2y/logobranco.png" : "https://i.ibb.co/vCp5pXZ/logopreto.png"} alt="Logo" className="h-8 sm:h-12 w-auto object-contain" />
 							<div><h1 className={`text-base sm:text-lg font-bold leading-none ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>Lister Guidance</h1><span className="text-[9px] sm:text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Suporte Médico</span></div>
 					</div>
 					<div className="flex items-center gap-2 sm:gap-3">
