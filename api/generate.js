@@ -27,7 +27,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Configuração de servidor ausente (API Key).' });
   }
 
-  // --- LÓGICA BEDSIDE (CLINICAL CASE DISCUSSION) ---
+  // --- LÓGICA BEDSIDE (NOVA) ---
   if (mode === 'bedside') {
     const bedsidePrompt = `
       Você é um Médico Preceptor Sênior discutindo um caso clínico detalhado à beira leito (BedSide).
@@ -55,8 +55,7 @@ export default async function handler(req, res) {
     `;
 
     try {
-      // Usando modelo 1.5-flash para maior estabilidade
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -84,15 +83,9 @@ export default async function handler(req, res) {
   }
 
   // --- LÓGICA DE ANÁLISE DE IMAGEM (IA VISION) ---
-  if (mode === 'vision' && image) {
-    // A imagem já vem como base64 "data:image/xyz;base64,....." do frontend
-    // Precisamos extrair apenas a parte do base64 e o mimeType
-    const matches = image.match(/^data:(.+);base64,(.+)$/);
-    if (!matches) return res.status(400).json({ error: "Formato de imagem inválido" });
-    
-    const mimeType = matches[1];
-    const base64Data = matches[2];
-    
+  if (image) {
+    const base64Data = image.split(',')[1];
+    const mimeType = image.split(';')[0].split(':')[1];
     const userPrompt = prompt || "Analise esta imagem médica e descreva os achados.";
 
     const visionPrompt = `
@@ -102,11 +95,11 @@ export default async function handler(req, res) {
       1. Seja extremamente técnico e preciso.
       2. Se for um ECG: Descreva ritmo, frequência, eixo, ondas P, complexo QRS, segmento ST e ondas T. Conclua com o diagnóstico provável.
       3. Se for Raio-X/TC: Descreva a qualidade da imagem e os achados patológicos visíveis.
-      4. Responda DIRETAMENTE em texto corrido e tópicos (Markdown). NÃO use formato JSON para esta resposta.
+      4. Responda DIRETAMENTE em texto corrido e tópicos (Markdown). NÃO use formato JSON.
     `;
 
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -127,7 +120,14 @@ export default async function handler(req, res) {
       const data = await response.json();
       const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
       
-      res.status(200).json({ analysis: textResponse });
+      let finalAnalysis = textResponse;
+      try {
+         const parsed = JSON.parse(textResponse);
+         if(parsed.analysis) finalAnalysis = parsed.analysis;
+         else if (parsed.analise_ecg) finalAnalysis = JSON.stringify(parsed.analise_ecg);
+      } catch(e) {}
+
+      res.status(200).json({ analysis: finalAnalysis });
       return;
 
     } catch (error) {
@@ -269,7 +269,7 @@ export default async function handler(req, res) {
   Baseie-se em doses para adulto 70kg (padrão).`;
 
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

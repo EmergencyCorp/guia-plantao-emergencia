@@ -52,23 +52,6 @@ const getConductDocId = (query, room) => {
   return `${query.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}_${room}`;
 };
 
-// Converte URL de blob (da seleção de arquivo) para Base64 para envio à API
-const blobToDataURL = async (blobUrl) => {
-    try {
-        const response = await fetch(blobUrl);
-        const blob = await response.blob();
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-        });
-    } catch (e) {
-        console.error("Erro conversão imagem", e);
-        return null;
-    }
-};
-
 // --- MOCKS DE CONTINGÊNCIA ---
 const getMockConduct = (query, room) => ({
     condicao: query ? (query.charAt(0).toUpperCase() + query.slice(1)) : "Conduta Padrão",
@@ -127,7 +110,7 @@ function EmergencyGuideAppContent() {
   const [favorites, setFavorites] = useState([]);
   const [errorMsg, setErrorMsg] = useState('');
   const resultsRef = useRef(null);
-   
+  
   // Timer States
   const [elapsedTime, setElapsedTime] = useState(0);
   const [finalTime, setFinalTime] = useState(null);
@@ -353,30 +336,30 @@ function EmergencyGuideAppContent() {
     }
   };
 
-  // --- GERAR CONDUTA (TEXTO) ---
+  // --- GERAR CONDUTA ---
   const generateConduct = async (overrideRoom = null) => {
     if (!searchQuery.trim()) { showError('Digite uma condição clínica.'); return; }
     const targetRoom = overrideRoom || activeRoom;
-     
+    
     setLoading(true); 
     setConduct(null); 
     setErrorMsg(''); 
     setFinalTime(null); 
     setIsCurrentConductFavorite(false);
-     
+    
     const startTimestamp = Date.now();
 
     if (overrideRoom) setActiveRoom(overrideRoom);
 
     const docId = getConductDocId(searchQuery, targetRoom);
     let foundInCache = false;
-     
+    
     // 1. TENTATIVA DE CACHE
     if (db) {
         try {
             const docRef = doc(db, GLOBAL_CACHE_COLLECTION, docId);
             const docSnap = await getDoc(docRef);
-             
+            
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 setConduct(data.conductData);
@@ -460,40 +443,14 @@ function EmergencyGuideAppContent() {
     }
   };
 
-  // --- HANDLERS (AGORA COM API REAL) ---
-  
-  // 1. ANÁLISE DE IMAGEM (VISION)
+  // --- OTHER HANDLERS ---
   const handleAnalyzeImage = async () => {
     if (!selectedImage || !imageQuery.trim()) { showError("Selecione imagem e pergunta."); return; }
-    setIsAnalyzingImage(true); 
-    setImageAnalysisResult(null);
-
+    setIsAnalyzingImage(true); setImageAnalysisResult(null);
     try {
-      // Converte o Blob URL (do preview) para Base64 real
-      const base64Image = await blobToDataURL(selectedImage);
-      if (!base64Image) throw new Error("Falha ao processar imagem");
-
-      const response = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-           image: base64Image, // Data URI completa
-           prompt: imageQuery,
-           mode: 'vision'
-        })
-      });
-
-      if (!response.ok) throw new Error("Erro na API de Visão");
-      const data = await response.json();
-      
-      setImageAnalysisResult(data.analysis || "Não foi possível gerar uma análise detalhada.");
-
-    } catch (error) { 
-        console.error(error);
-        showError("Falha na análise da imagem. Tente novamente."); 
-    } finally { 
-        setIsAnalyzingImage(false); 
-    }
+      await new Promise(r => setTimeout(r, 1500));
+      setImageAnalysisResult("Simulação: A análise de imagem requer um backend Python configurado. (Esta é uma resposta placeholder)");
+    } catch (error) { showError("Falha na análise."); } finally { setIsAnalyzingImage(false); }
   };
 
   const handleImageUpload = (e) => {
@@ -502,34 +459,13 @@ function EmergencyGuideAppContent() {
       }
   };
 
-  // 2. BEDSIDE GUIDANCE
   const generateBedsideConduct = async () => {
     if (!bedsideAnamnesis.trim()) { showError('Preencha a anamnese.'); return; }
-    setIsGeneratingBedside(true); 
-    setBedsideResult(null);
-    
+    setIsGeneratingBedside(true); setBedsideResult(null);
     try {
-      const response = await fetch('/api/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-              mode: 'bedside',
-              anamnesis: bedsideAnamnesis,
-              exams: bedsideExams
-          })
-      });
-
-      if (!response.ok) throw new Error("Erro na API Bedside");
-      const data = await response.json();
-      
-      setBedsideResult(data);
-
-    } catch (error) { 
-        console.error(error);
-        showError("Erro ao processar caso clínico."); 
-    } finally { 
-        setIsGeneratingBedside(false); 
-    }
+      await new Promise(r => setTimeout(r, 1500));
+      setBedsideResult({ hypotheses: ["Hipótese Principal", "Diagnóstico Diferencial"], conduct: "Conduta sugerida baseada na anamnese (Simulação)..." });
+    } catch (error) { showError("Erro ao processar."); } finally { setIsGeneratingBedside(false); }
   };
 
   const toggleFavorite = async () => {
@@ -584,7 +520,7 @@ function EmergencyGuideAppContent() {
   const updateItemDays = (farmaco, days) => {
       setSelectedPrescriptionItems(prev => prev.map(i => i.farmaco === farmaco ? { ...i, days: parseInt(days) || 1 } : i));
   };
-   
+  
   const roomConfig = {
     verde: { name: 'Sala Verde', color: 'emerald', accent: isDarkMode ? 'bg-emerald-600' : 'bg-emerald-500', border: isDarkMode ? 'border-emerald-700' : 'border-emerald-500', text: isDarkMode ? 'text-emerald-300' : 'text-emerald-800', light: isDarkMode ? 'bg-emerald-900/30' : 'bg-emerald-50', icon: <Stethoscope className="w-5 h-5" />, description: 'Ambulatorial / Baixa Complexidade' },
     amarela: { name: 'Sala Amarela', color: 'amber', accent: isDarkMode ? 'bg-amber-600' : 'bg-amber-500', border: isDarkMode ? 'border-amber-700' : 'border-amber-500', text: isDarkMode ? 'text-amber-300' : 'text-amber-800', light: isDarkMode ? 'bg-amber-900/30' : 'bg-amber-50', icon: <BedDouble className="w-5 h-5" />, description: 'Observação / Média Complexidade' },
@@ -697,7 +633,7 @@ function EmergencyGuideAppContent() {
                 )}
             </button>
           </div>
-           
+          
           {finalTime && !loading && (
              <div className="flex justify-center -mt-4 animate-in fade-in slide-in-from-top-1">
                  <span className={`text-[10px] font-bold px-3 py-1 rounded-full border flex items-center gap-1 ${isDarkMode ? 'bg-slate-900 border-slate-700 text-slate-400' : 'bg-white border-gray-200 text-slate-500'}`}>
@@ -719,6 +655,7 @@ function EmergencyGuideAppContent() {
               </div>
             )}
 
+            {/* --- BLOCO NOVO: TRANSFERÊNCIA AMARELA -> VERMELHA --- */}
             {activeRoom === 'amarela' && (
               <div className={`border-l-4 border-rose-500 p-4 rounded-r-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${isDarkMode ? 'bg-rose-900/20' : 'bg-rose-50'}`}>
                 <div className="flex items-center gap-3">
@@ -817,17 +754,17 @@ function EmergencyGuideAppContent() {
                            if (!catItems || catItems.length === 0) return null;
 
                            return (
-                             <div key={catName} className="relative">
-                                 <h4 className={`flex items-center gap-2 font-bold uppercase text-xs mb-3 pl-1 border-b pb-1 ${isDarkMode ? 'text-rose-300 border-rose-800/50' : 'text-rose-800 border-rose-100'}`}>
-                                   {catName === 'Dieta' && <Utensils size={14}/>}
-                                   {catName === 'Hidratação' && <Droplets size={14}/>}
-                                   {catName === 'Drogas Vasoativas' && <Zap size={14}/>}
-                                   {catName}
-                                 </h4>
-                                 <div className="grid gap-4">
-                                   {catItems.map((med, idx) => (<MedicationCard key={idx} med={med} activeRoom={activeRoom} selectedPrescriptionItems={selectedPrescriptionItems} togglePrescriptionItem={togglePrescriptionItem} updateItemDays={updateItemDays} isDarkMode={isDarkMode} />))}
-                                 </div>
-                             </div>
+                              <div key={catName} className="relative">
+                                  <h4 className={`flex items-center gap-2 font-bold uppercase text-xs mb-3 pl-1 border-b pb-1 ${isDarkMode ? 'text-rose-300 border-rose-800/50' : 'text-rose-800 border-rose-100'}`}>
+                                    {catName === 'Dieta' && <Utensils size={14}/>}
+                                    {catName === 'Hidratação' && <Droplets size={14}/>}
+                                    {catName === 'Drogas Vasoativas' && <Zap size={14}/>}
+                                    {catName}
+                                  </h4>
+                                  <div className="grid gap-4">
+                                    {catItems.map((med, idx) => (<MedicationCard key={idx} med={med} activeRoom={activeRoom} selectedPrescriptionItems={selectedPrescriptionItems} togglePrescriptionItem={togglePrescriptionItem} updateItemDays={updateItemDays} isDarkMode={isDarkMode} />))}
+                                  </div>
+                              </div>
                            );
                           })}
                       </div>
@@ -852,8 +789,12 @@ function EmergencyGuideAppContent() {
         )}
       </main>
 
+      {/* --- FOOTER REESTRUTURADO (CENTRALIZADO & HARMONICO) --- */}
       <footer className={`border-t py-6 mt-auto transition-colors ${isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-500' : 'bg-white border-gray-200 text-slate-500'}`}>
+        {/* Container relativo para posicionamento absoluto do botão no desktop */}
         <div className="max-w-6xl mx-auto px-4 relative flex flex-col md:block items-center py-4 sm:py-6">
+          
+          {/* Texto / Disclaimer - Centralizado */}
           <div className="flex flex-col items-center text-center gap-1.5 md:w-3/4 md:mx-auto mb-6 md:mb-0">
              <div className="flex items-center gap-2 mb-2">
                 <ShieldAlert size={16} className={isDarkMode ? 'text-blue-500' : 'text-blue-700'} />
@@ -865,6 +806,7 @@ function EmergencyGuideAppContent() {
              </p>
           </div>
           
+          {/* Botão - Absoluto na direita (desktop), estático centralizado (mobile) */}
           <button 
             onClick={() => setShowFeedbackModal(true)}
             className={`shrink-0 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider border flex items-center gap-2 transition-all hover:-translate-y-0.5 md:absolute md:right-4 md:top-1/2 md:-translate-y-1/2 ${isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-white hover:border-slate-600' : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-white hover:text-blue-600 hover:border-gray-300'}`}
@@ -897,6 +839,8 @@ function EmergencyGuideAppContent() {
       />
       
       <PhysicalExamModal isOpen={showPhysicalExam} onClose={() => setShowPhysicalExam(false)} isDarkMode={isDarkMode} />
+      
+      {/* NOVO MODAL DE FEEDBACK */}
       <FeedbackModal isOpen={showFeedbackModal} onClose={() => setShowFeedbackModal(false)} isDarkMode={isDarkMode} currentUser={currentUser} />
     </div>
   );
