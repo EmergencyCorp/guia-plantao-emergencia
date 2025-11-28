@@ -1,4 +1,5 @@
-// Localização: /api/generate.js
+// Este arquivo roda nos servidores da Vercel (Serverless Function).
+// Localização: /api/generate.js na raiz do projeto.
 
 export default async function handler(req, res) {
   // Configurações de CORS
@@ -19,17 +20,14 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  // Recebe os dados do Frontend
   const { searchQuery, activeRoom, image, prompt, mode, anamnesis, exams } = req.body;
-  
-  // Tenta pegar a chave de API de várias formas possíveis
   const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
 
   if (!apiKey) {
     return res.status(500).json({ error: 'Configuração de servidor ausente (API Key).' });
   }
 
-  // --- 1. LÓGICA BEDSIDE (CLÍNICA) ---
+  // --- LÓGICA BEDSIDE (NOVA) ---
   if (mode === 'bedside') {
     const bedsidePrompt = `
       Você é um Médico Preceptor Sênior discutindo um caso clínico detalhado à beira leito (BedSide).
@@ -57,8 +55,7 @@ export default async function handler(req, res) {
     `;
 
     try {
-      // Usando modelo 1.5 Flash que é mais estável
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -67,15 +64,12 @@ export default async function handler(req, res) {
         })
       });
 
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`Erro API BedSide: ${response.status} - ${errText}`);
-      }
+      if (!response.ok) throw new Error(`Erro API BedSide: ${response.status}`);
       
       const data = await response.json();
       let textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
       
-      // Limpeza de markdown caso venha
+      // Limpeza básica de markdown json se houver
       textResponse = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
       
       res.status(200).json(JSON.parse(textResponse));
@@ -88,18 +82,10 @@ export default async function handler(req, res) {
     }
   }
 
-  // --- 2. LÓGICA DE ANÁLISE DE IMAGEM (IA VISION) ---
+  // --- LÓGICA DE ANÁLISE DE IMAGEM (IA VISION) ---
   if (image) {
-    // Verifica se a imagem veio correta (Base64)
-    let base64Data = image;
-    let mimeType = 'image/jpeg'; // Padrão
-
-    if (image.includes(',')) {
-        const parts = image.split(',');
-        base64Data = parts[1];
-        mimeType = parts[0].split(';')[0].split(':')[1];
-    }
-
+    const base64Data = image.split(',')[1];
+    const mimeType = image.split(';')[0].split(':')[1];
     const userPrompt = prompt || "Analise esta imagem médica e descreva os achados.";
 
     const visionPrompt = `
@@ -109,11 +95,11 @@ export default async function handler(req, res) {
       1. Seja extremamente técnico e preciso.
       2. Se for um ECG: Descreva ritmo, frequência, eixo, ondas P, complexo QRS, segmento ST e ondas T. Conclua com o diagnóstico provável.
       3. Se for Raio-X/TC: Descreva a qualidade da imagem e os achados patológicos visíveis.
-      4. Responda DIRETAMENTE em texto corrido (pode usar Markdown para negrito e tópicos). NÃO use formato JSON.
+      4. Responda DIRETAMENTE em texto corrido e tópicos (Markdown). NÃO use formato JSON.
     `;
 
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -134,8 +120,14 @@ export default async function handler(req, res) {
       const data = await response.json();
       const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
       
-      // Retorna em formato JSON simples para o frontend ler
-      res.status(200).json({ analysis: textResponse });
+      let finalAnalysis = textResponse;
+      try {
+         const parsed = JSON.parse(textResponse);
+         if(parsed.analysis) finalAnalysis = parsed.analysis;
+         else if (parsed.analise_ecg) finalAnalysis = JSON.stringify(parsed.analise_ecg);
+      } catch(e) {}
+
+      res.status(200).json({ analysis: finalAnalysis });
       return;
 
     } catch (error) {
@@ -145,8 +137,8 @@ export default async function handler(req, res) {
     }
   }
 
-  // --- 3. LÓGICA PADRÃO DE TEXTO (Geração de Conduta) ---
-  // Só verifica se a busca está vazia SE não for imagem nem bedside
+  // --- LÓGICA PADRÃO DE TEXTO (Geração de Conduta) ---
+
   if (!searchQuery) {
     return res.status(400).json({ error: 'Busca vazia.' });
   }
@@ -191,7 +183,7 @@ export default async function handler(req, res) {
 
   const lowerQuery = searchQuery.toLowerCase();
 
-  // Lógica Clínica Específica (Protocolos)
+  // 2. Lógica Clínica Específica (Protocolos)
   if (lowerQuery.includes('dengue')) {
     promptExtra += `
     PROTOCOLO DENGUE (MS BRASIL):
@@ -261,7 +253,7 @@ export default async function handler(req, res) {
            "quantidade": "...",
            "instrucoes": "...",
            "dias_sugeridos": 7
-        }, 
+        }, // Receita obrigatória APENAS se sala VERDE. Se Amarela/Vermelha focar na prescrição hospitalar.
         "usa_peso": false
       } 
     ],
@@ -277,7 +269,7 @@ export default async function handler(req, res) {
   Baseie-se em doses para adulto 70kg (padrão).`;
 
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

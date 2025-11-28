@@ -257,8 +257,8 @@ function EmergencyGuideAppContent() {
         snapshot.forEach((doc) => favs.push({ id: doc.id, ...doc.data() }));
         setFavorites(favs);
         if (conduct) {
-              const conductId = getConductDocId(searchQuery, activeRoom);
-              setIsCurrentConductFavorite(favs.some(f => f.id === conductId));
+             const conductId = getConductDocId(searchQuery, activeRoom);
+             setIsCurrentConductFavorite(favs.some(f => f.id === conductId));
         }
     });
   };
@@ -336,7 +336,7 @@ function EmergencyGuideAppContent() {
     }
   };
 
-  // --- GERAR CONDUTA (TEXTO) ---
+  // --- GERAR CONDUTA ---
   const generateConduct = async (overrideRoom = null) => {
     if (!searchQuery.trim()) { showError('Digite uma condição clínica.'); return; }
     const targetRoom = overrideRoom || activeRoom;
@@ -443,98 +443,29 @@ function EmergencyGuideAppContent() {
     }
   };
 
-  // --- OTHER HANDLERS (CORRIGIDOS) ---
-
-  // 1. ANALISAR IMAGEM (Real Fetch)
+  // --- OTHER HANDLERS ---
   const handleAnalyzeImage = async () => {
     if (!selectedImage || !imageQuery.trim()) { showError("Selecione imagem e pergunta."); return; }
-    setIsAnalyzingImage(true); 
-    setImageAnalysisResult(null);
-
+    setIsAnalyzingImage(true); setImageAnalysisResult(null);
     try {
-      const headers = { 'Content-Type': 'application/json' };
-      if (auth?.currentUser) {
-          try {
-             const token = await auth.currentUser.getIdToken();
-             headers['Authorization'] = `Bearer ${token}`;
-          } catch(e) { }
-      }
-
-      const response = await fetch('/api/generate', {
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify({
-            image: selectedImage, // Base64 string
-            prompt: imageQuery,
-            searchQuery: "Vision Analysis" // Dummy para validação
-        })
-      });
-
-      if (!response.ok) throw new Error("Erro na API de Imagem");
-
-      const data = await response.json();
-      setImageAnalysisResult(data.analysis || "Sem análise retornada.");
-
-    } catch (error) { 
-        console.error(error);
-        showError("Falha na análise da imagem. Tente novamente."); 
-    } finally { 
-        setIsAnalyzingImage(false); 
-    }
+      await new Promise(r => setTimeout(r, 1500));
+      setImageAnalysisResult("Simulação: A análise de imagem requer um backend Python configurado. (Esta é uma resposta placeholder)");
+    } catch (error) { showError("Falha na análise."); } finally { setIsAnalyzingImage(false); }
   };
 
-  // 2. UPLOAD DE IMAGEM (Conversão correta para Base64)
   const handleImageUpload = (e) => {
       if (e.target.files && e.target.files[0]) {
-          const file = e.target.files[0];
-          const reader = new FileReader();
-          
-          reader.onloadend = () => {
-              // reader.result contém a string base64 completa (data:image/jpeg;base64,...)
-              setSelectedImage(reader.result);
-          };
-          
-          reader.readAsDataURL(file);
+          setSelectedImage(URL.createObjectURL(e.target.files[0]));
       }
   };
 
-  // 3. GERAÇÃO BEDSIDE (Real Fetch)
   const generateBedsideConduct = async () => {
     if (!bedsideAnamnesis.trim()) { showError('Preencha a anamnese.'); return; }
-    setIsGeneratingBedside(true); 
-    setBedsideResult(null);
-
+    setIsGeneratingBedside(true); setBedsideResult(null);
     try {
-      const headers = { 'Content-Type': 'application/json' };
-      if (auth?.currentUser) {
-          try {
-             const token = await auth.currentUser.getIdToken();
-             headers['Authorization'] = `Bearer ${token}`;
-          } catch(e) { }
-      }
-
-      const response = await fetch('/api/generate', {
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify({
-            mode: 'bedside',
-            anamnesis: bedsideAnamnesis,
-            exams: bedsideExams,
-            searchQuery: "Bedside Case" // Dummy para validação
-        })
-      });
-
-      if (!response.ok) throw new Error("Erro na API Bedside");
-
-      const data = await response.json();
-      setBedsideResult(data);
-
-    } catch (error) { 
-        console.error(error);
-        showError("Erro ao processar caso clínico. Verifique sua conexão."); 
-    } finally { 
-        setIsGeneratingBedside(false); 
-    }
+      await new Promise(r => setTimeout(r, 1500));
+      setBedsideResult({ hypotheses: ["Hipótese Principal", "Diagnóstico Diferencial"], conduct: "Conduta sugerida baseada na anamnese (Simulação)..." });
+    } catch (error) { showError("Erro ao processar."); } finally { setIsGeneratingBedside(false); }
   };
 
   const toggleFavorite = async () => {
@@ -823,17 +754,17 @@ function EmergencyGuideAppContent() {
                            if (!catItems || catItems.length === 0) return null;
 
                            return (
-                             <div key={catName} className="relative">
-                                 <h4 className={`flex items-center gap-2 font-bold uppercase text-xs mb-3 pl-1 border-b pb-1 ${isDarkMode ? 'text-rose-300 border-rose-800/50' : 'text-rose-800 border-rose-100'}`}>
-                                   {catName === 'Dieta' && <Utensils size={14}/>}
-                                   {catName === 'Hidratação' && <Droplets size={14}/>}
-                                   {catName === 'Drogas Vasoativas' && <Zap size={14}/>}
-                                   {catName}
-                                 </h4>
-                                 <div className="grid gap-4">
-                                   {catItems.map((med, idx) => (<MedicationCard key={idx} med={med} activeRoom={activeRoom} selectedPrescriptionItems={selectedPrescriptionItems} togglePrescriptionItem={togglePrescriptionItem} updateItemDays={updateItemDays} isDarkMode={isDarkMode} />))}
-                                 </div>
-                             </div>
+                              <div key={catName} className="relative">
+                                  <h4 className={`flex items-center gap-2 font-bold uppercase text-xs mb-3 pl-1 border-b pb-1 ${isDarkMode ? 'text-rose-300 border-rose-800/50' : 'text-rose-800 border-rose-100'}`}>
+                                    {catName === 'Dieta' && <Utensils size={14}/>}
+                                    {catName === 'Hidratação' && <Droplets size={14}/>}
+                                    {catName === 'Drogas Vasoativas' && <Zap size={14}/>}
+                                    {catName}
+                                  </h4>
+                                  <div className="grid gap-4">
+                                    {catItems.map((med, idx) => (<MedicationCard key={idx} med={med} activeRoom={activeRoom} selectedPrescriptionItems={selectedPrescriptionItems} togglePrescriptionItem={togglePrescriptionItem} updateItemDays={updateItemDays} isDarkMode={isDarkMode} />))}
+                                  </div>
+                              </div>
                            );
                           })}
                       </div>
