@@ -28,7 +28,6 @@ import MedicalScoresModal from './components/modals/MedicalScoresModal';
 import QuickPrescriptionsModal from './components/modals/QuickPrescriptionsModal';
 import PhysicalExamModal from './components/modals/PhysicalExamModal';
 import CompleteProfileModal from './components/modals/CompleteProfileModal';
-import FeedbackModal from './components/modals/FeedbackModal';
 
 // --- FIREBASE IMPORTS ---
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
