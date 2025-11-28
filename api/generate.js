@@ -1,10 +1,7 @@
 // Este arquivo roda nos servidores da Vercel (Serverless Function).
 // Localização: /api/generate.js na raiz do projeto.
 
-import { GoogleGenAI } from '@google/genai'; // Assumindo que você tem o SDK instalado
-
-// Inicialize o SDK fora do handler para melhor desempenho (Se o ambiente for Node.js padrão Vercel)
-// Se não puder usar o SDK, usaremos o fetch API como no seu código original (mais seguro para seu setup)
+// REMOVIDO: import { GoogleGenAI } from '@google/genai';
 
 export default async function handler(req, res) {
   // Configurações de CORS
@@ -25,16 +22,16 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  // Desestrutura os novos campos 'history' e 'mode'
+  // Desestrutura os campos, incluindo o histórico para o chat
   const { searchQuery, activeRoom, image, prompt, mode, anamnesis, exams, history } = req.body;
   const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
-  const modelName = 'gemini-2.5-flash'; // Modelo preferencial para chat rápido e multimodal
+  const modelName = 'gemini-2.5-flash'; 
 
   if (!apiKey) {
     return res.status(500).json({ error: 'Configuração de servidor ausente (API Key).' });
   }
   
-  // --- LÓGICA DE CHAT EM TEMPO REAL (NOVA) ---
+  // --- LÓGICA DE CHAT EM TEMPO REAL ---
   if (mode === 'chat') {
     if (!history || history.length === 0) {
         return res.status(400).json({ error: 'Histórico de chat ausente.' });
@@ -54,7 +51,7 @@ export default async function handler(req, res) {
     
     // Converte o histórico simples [role: text] para o formato 'contents' do Gemini
     const contents = history.map(msg => ({
-        role: msg.role === 'user' ? 'user' : 'model', // Mapeia 'user' para 'user', e 'preceptor' (IA) para 'model'
+        role: msg.role === 'user' ? 'user' : 'model', 
         parts: [{ text: msg.text }]
     }));
     
@@ -63,11 +60,15 @@ export default async function handler(req, res) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                contents: contents, // Envia o histórico
+                contents: [
+                    // Adiciona a instrução do sistema como primeira parte (se o modelo suportar)
+                    { role: 'user', parts: [{ text: `INSTRUÇÃO DE SISTEMA: ${systemInstruction}\n\nINÍCIO DO CHAT:\n` }] }, 
+                    ...contents
+                ],
+                // Configuração para forçar a instrução de sistema
                 config: {
-                    systemInstruction: systemInstruction,
-                },
-                // Não é necessário responseMimeType JSON aqui, a resposta é texto/markdown
+                   systemInstruction: systemInstruction,
+                }
             })
         });
 
@@ -79,7 +80,6 @@ export default async function handler(req, res) {
         const data = await response.json();
         const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || "Desculpe, não consegui processar a resposta.";
         
-        // Retorna a resposta pura (texto/markdown)
         res.status(200).json({ text: textResponse });
         return;
 
@@ -97,7 +97,6 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Anamnese é obrigatória para BedSide.' });
     }
     
-    // ... [O restante da lógica BEDSIDE permanece INALTERADA] ...
     const bedsidePrompt = `
       Você é um Médico Preceptor Sênior discutindo um caso clínico detalhado à beira leito (BedSide).
       
@@ -124,7 +123,7 @@ export default async function handler(req, res) {
     `;
 
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -156,7 +155,6 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Prompt é obrigatório para Análise de Imagem.' });
     }
     
-    // ... [O restante da lógica VISION permanece INALTERADA] ...
     const base64Data = image.split(',')[1];
     const mimeType = image.split(';')[0].split(':')[1];
     const userPrompt = prompt || "Analise esta imagem médica e descreva os achados.";
@@ -172,7 +170,7 @@ export default async function handler(req, res) {
     `;
 
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -216,8 +214,6 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Busca vazia.' });
   }
   
-  // ... [O restante da lógica PADRÃO permanece INALTERADA] ...
-
   // Definição de contextos baseados na sala
   let roomContext = '';
   let roleDefinition = '';
