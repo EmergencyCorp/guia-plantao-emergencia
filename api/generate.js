@@ -1,8 +1,6 @@
 // Este arquivo roda nos servidores da Vercel (Serverless Function).
 // Localização: /api/generate.js na raiz do projeto.
 
-// REMOVIDO: import { GoogleGenAI } from '@google/genai';
-
 export default async function handler(req, res) {
   // Configurações de CORS
   res.setHeader('Access-Control-Allow-Credentials', true);
@@ -22,7 +20,6 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  // Desestrutura os campos, incluindo o histórico para o chat
   const { searchQuery, activeRoom, image, prompt, mode, anamnesis, exams, history } = req.body;
   const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
   const modelName = 'gemini-2.5-flash'; 
@@ -31,15 +28,14 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Configuração de servidor ausente (API Key).' });
   }
   
-// A PARTIR DA LINHA ~37 (LÓGICA DE CHAT EM TEMPO REAL) NO api/generate.js
-
-  // --- LÓGICA DE CHAT EM TEMPO REAL ---
-if (mode === 'chat') {
+  // --- LÓGICA DE CHAT EM TEMPO REAL (CORRIGIDA) ---
+  if (mode === 'chat') {
     if (!history || history.length === 0) {
         return res.status(400).json({ error: 'Histórico de chat ausente.' });
     }
 
     const systemInstruction = `
+        INSTRUÇÃO DO PRECEPTOR:
         Você é um Médico Preceptor Sênior, experiente em emergências e clínica médica.
         Sua função é fornecer feedback rigoroso, educacional e em tempo real para um Residente que está apresentando ou discutindo um caso.
         Seu tom deve ser profissional, direto, mas sempre construtivo.
@@ -48,33 +44,37 @@ if (mode === 'chat') {
         1. Mantenha o contexto do caso, referenciando as mensagens anteriores.
         2. Seja breve e objetivo. Não gere planos de tratamento completos, mas sim, diretrizes ou perguntas para guiar o Residente.
         3. Use Markdown para estruturar o texto (listas, negrito).
-        4. O Residente começará o caso.
     `;
     
-    // Converte o histórico simples [role: text] para o formato 'contents' do Gemini
-    const contents = history.map(msg => ({
-        // O role 'preceptor' (que é a IA no frontend) deve ser mapeado para 'model' para o backend do Gemini
+    // Converte o histórico de mensagens do frontend
+    const conversationContents = history.map(msg => ({
+        // Mapeia 'preceptor' (a IA no frontend) para 'model' para o backend do Gemini
         role: msg.role === 'user' ? 'user' : 'model', 
         parts: [{ text: msg.text }]
     }));
+    
+    // Anexa a instrução do sistema como o primeiro turno da conversa
+    const contentsWithSystemInstruction = [
+        { 
+            role: 'user', 
+            parts: [{ text: systemInstruction }] 
+        },
+        ...conversationContents
+    ];
     
     try {
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                contents: contents, 
-                // CORREÇÃO: Usar generationConfig para systemInstruction
-                generationConfig: {
-                   systemInstruction: systemInstruction,
-                }
+                contents: contentsWithSystemInstruction, 
+                // REMOVIDO: generationConfig com systemInstruction, que estava falhando
             })
         });
 
         if (!response.ok) {
-            // Se houver um erro, capture o texto para debug (o que causou a mensagem de erro)
             const errText = await response.text();
-            console.error("ERRO DETALHADO DA API CHAT:", errText); 
+            console.error("ERRO DETALHADO DA API CHAT (FINAL):", errText); 
             throw new Error(`Erro na API Gemini (${response.status})`);
         }
 
@@ -90,8 +90,6 @@ if (mode === 'chat') {
         return;
     }
   }
-  
-  // ... o restante do arquivo (lógicas bedside, image, e padrão) permanece inalterado.
 
 
   // --- LÓGICA BEDSIDE (EXISTENTE) ---
