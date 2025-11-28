@@ -6,7 +6,7 @@ import {
   LogOut, History, Cloud, CloudOff, HeartPulse, Microscope, Image as ImageIcon, 
   Wind, Droplet, Skull, Printer, Calculator, Star, Utensils, Zap, Camera, 
   BedDouble, ClipboardList, Edit, LayoutGrid, ChevronDown, FileText, Droplets,
-  Pill, HelpCircle, UserCheck, Lock, Timer, Menu
+  Pill, HelpCircle, UserCheck, Lock, Timer, Menu, MessageSquare
 } from 'lucide-react';
 
 // --- CONFIG & COMPONENTS ---
@@ -28,6 +28,7 @@ import MedicalScoresModal from './components/modals/MedicalScoresModal';
 import QuickPrescriptionsModal from './components/modals/QuickPrescriptionsModal';
 import PhysicalExamModal from './components/modals/PhysicalExamModal';
 import CompleteProfileModal from './components/modals/CompleteProfileModal';
+import FeedbackModal from './components/modals/FeedbackModal'; // NOVO MODAL
 
 // --- FIREBASE IMPORTS ---
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
@@ -126,6 +127,7 @@ function EmergencyGuideAppContent() {
   const [showScoresModal, setShowScoresModal] = useState(false);
   const [showQuickPrescriptions, setShowQuickPrescriptions] = useState(false);
   const [showPhysicalExam, setShowPhysicalExam] = useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false); // NOVO STATE
 
   // Feature Data States
   const [userNotes, setUserNotes] = useState('');
@@ -552,7 +554,7 @@ function EmergencyGuideAppContent() {
     );
   }
 
-  // --- MAIN APP RENDER (RESPONSIVO) ---
+  // --- MAIN APP RENDER (RESPONSIVO COM FOOTER) ---
   return (
     <div className={`min-h-screen flex flex-col font-sans selection:bg-blue-100 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
       <header className={`border-b sticky top-0 z-40 shadow-sm ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
@@ -562,12 +564,10 @@ function EmergencyGuideAppContent() {
              <div><h1 className={`text-base sm:text-lg font-bold leading-none ${isDarkMode ? 'text-slate-100' : 'text-slate-800'}`}>Lister Guidance</h1><span className="text-[9px] sm:text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Suporte Médico</span></div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
-             {/* Esconde info de user em telas muito pequenas (mobile) */}
              <div className="hidden sm:flex flex-col items-end mr-2"><span className={`text-xs font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{currentUser.name}</span><span className="text-[10px] text-slate-400 uppercase">Médico(a)</span></div>
              <ThemeToggle isDarkMode={isDarkMode} toggleTheme={toggleTheme} />
              <div className="relative">
                 <button aria-label="Ferramentas" onClick={() => setShowToolsMenu(!showToolsMenu)} className={`px-2 sm:px-3 py-2 rounded-lg flex items-center gap-2 transition-colors font-bold text-sm ${isDarkMode ? 'bg-blue-900/30 text-blue-300 hover:bg-blue-900/50' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}>
-                  {/* Ícone muda no mobile para Menu hamburguer ou Grid */}
                   <LayoutGrid size={18} className="hidden sm:block" />
                   <Menu size={18} className="block sm:hidden" />
                   <span className="hidden md:inline">Ferramentas</span>
@@ -605,7 +605,6 @@ function EmergencyGuideAppContent() {
         )}
 
         <div className="space-y-4 sm:space-y-6">
-          {/* Grid de Salas adaptável: 1 coluna no mobile, 2 no tablet/pc */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
             {Object.entries(roomConfig).map(([key, config]) => {
               const isActive = activeRoom === key;
@@ -635,7 +634,6 @@ function EmergencyGuideAppContent() {
             </button>
           </div>
           
-          {/* EXIBIÇÃO DO TEMPO FINAL */}
           {finalTime && !loading && (
              <div className="flex justify-center -mt-4 animate-in fade-in slide-in-from-top-1">
                  <span className={`text-[10px] font-bold px-3 py-1 rounded-full border flex items-center gap-1 ${isDarkMode ? 'bg-slate-900 border-slate-700 text-slate-400' : 'bg-white border-gray-200 text-slate-500'}`}>
@@ -649,7 +647,7 @@ function EmergencyGuideAppContent() {
         </div>
 
         {conduct && (
-          <div ref={resultsRef} className="animate-in slide-in-from-bottom-4 fade-in duration-500 space-y-6 pb-20">
+          <div ref={resultsRef} className="animate-in slide-in-from-bottom-4 fade-in duration-500 space-y-6">
             {activeRoom === 'verde' && (
               <div className={`border-l-4 border-amber-500 p-4 rounded-r-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${isDarkMode ? 'bg-amber-900/20' : 'bg-amber-50'}`}>
                 <div className="flex items-center gap-3"><div className={`p-2 rounded-full ${isDarkMode ? 'bg-amber-900/50 text-amber-400' : 'bg-amber-100 text-amber-600'}`}><AlertTriangle size={20} /></div><div><h4 className={`text-sm font-bold ${isDarkMode ? 'text-amber-300' : 'text-amber-900'}`}>Caso mais grave que o esperado?</h4><p className={`text-xs ${isDarkMode ? 'text-amber-400/70' : 'text-amber-700'}`}>Gere uma conduta de média complexidade.</p></div></div>
@@ -688,7 +686,6 @@ function EmergencyGuideAppContent() {
               </div>
             )}
 
-            {/* Grid Principal Adaptável */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
               <div className="lg:col-span-4 space-y-6">
                 <div className={`rounded-2xl shadow-sm border overflow-hidden ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
@@ -774,6 +771,30 @@ function EmergencyGuideAppContent() {
         )}
       </main>
 
+      {/* --- FOOTER REESTRUTURADO --- */}
+      <footer className={`border-t py-8 mt-auto ${isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-white border-gray-200 text-gray-500'}`}>
+        <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="text-center md:text-left">
+             <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
+                <ShieldAlert size={16} />
+                <span className="font-bold text-sm uppercase tracking-wider">EmergencyCorp © 2025</span>
+             </div>
+             <p className="text-xs max-w-md mx-auto md:mx-0 leading-relaxed opacity-80">
+               Esta plataforma é uma ferramenta de auxílio e consulta rápida. 
+               <span className="font-bold block sm:inline"> Não substitui o julgamento clínico do médico.</span>
+               <br/> A EmergencyCorp não se responsabiliza por condutas tomadas com base nas informações aqui contidas.
+             </p>
+          </div>
+          
+          <button 
+            onClick={() => setShowFeedbackModal(true)}
+            className={`px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wide border flex items-center gap-2 transition-all hover:scale-105 ${isDarkMode ? 'border-slate-700 hover:bg-slate-800 hover:text-white' : 'border-gray-300 hover:bg-gray-100 hover:text-gray-800'}`}
+          >
+            <MessageSquare size={14} /> Enviar Feedback
+          </button>
+        </div>
+      </footer>
+
       {/* RENDERIZAÇÃO DOS MODALS VIA COMPONENTES */}
       <InfusionCalculator isOpen={showCalculatorModal} onClose={() => setShowCalculatorModal(false)} isDarkMode={isDarkMode} />
       <NotepadModal isOpen={showNotepad} onClose={() => setShowNotepad(false)} isDarkMode={isDarkMode} userNotes={userNotes} handleNoteChange={handleNoteChange} currentUser={currentUser} isCloudConnected={isCloudConnected} isSaving={isSaving} />
@@ -797,6 +818,9 @@ function EmergencyGuideAppContent() {
       />
       
       <PhysicalExamModal isOpen={showPhysicalExam} onClose={() => setShowPhysicalExam(false)} isDarkMode={isDarkMode} />
+      
+      {/* NOVO MODAL DE FEEDBACK */}
+      <FeedbackModal isOpen={showFeedbackModal} onClose={() => setShowFeedbackModal(false)} isDarkMode={isDarkMode} currentUser={currentUser} />
     </div>
   );
 }
