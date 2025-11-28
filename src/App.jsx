@@ -28,12 +28,15 @@ import MedicalScoresModal from './components/modals/MedicalScoresModal';
 import QuickPrescriptionsModal from './components/modals/QuickPrescriptionsModal';
 import PhysicalExamModal from './components/modals/PhysicalExamModal';
 import CompleteProfileModal from './components/modals/CompleteProfileModal';
+import FeedbackModal from './components/modals/FeedbackModal';
 
 // --- FIREBASE IMPORTS ---
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
-import { doc, setDoc, getDoc, collection, query as firestoreQuery, where, orderBy, getDocs, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, query as firestoreQuery, where, orderBy, getDocs, deleteDoc, limit } from 'firebase/firestore';
 
 const appId = (typeof __app_id !== 'undefined') ? __app_id : 'emergency-guide-app';
+const GLOBAL_CACHE_COLLECTION = 'global_conduct_cache'; // Coleção compartilhada por todos
+const CACHE_LIMIT = 50;
 
 // --- FUNÇÕES AUXILIARES GLOBAIS ---
 const getVitalIcon = (text) => {
@@ -46,14 +49,15 @@ const getVitalIcon = (text) => {
 };
 
 const getConductDocId = (query, room) => {
+  // Cria um ID único baseado na busca e na sala (ex: "cefaleia_verde")
   return `${query.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}_${room}`;
 };
 
-// --- MOCKS DE CONTINGÊNCIA (CASO A API FALHE) ---
+// --- MOCKS DE CONTINGÊNCIA ---
 const getMockConduct = (query, room) => ({
-    condicao: query.charAt(0).toUpperCase() + query.slice(1),
-    classificacao: "Protocolo de Contingência",
-    estadiamento: "Suporte Inicial",
+    condicao: query ? (query.charAt(0).toUpperCase() + query.slice(1)) : "Conduta Padrão",
+    classificacao: room === 'vermelha' ? "Emergência" : "Urgência",
+    estadiamento: "Protocolo de Contingência",
     guideline_referencia: "Diretrizes Gerais de Suporte à Vida",
     resumo_clinico: "O servidor não respondeu a tempo. Esta é uma conduta de segurança gerada automaticamente.",
     criterios_gravidade: ["Instabilidade", "Rebaixamento", "Insuficiência Respiratória"],
@@ -72,13 +76,6 @@ const getMockConduct = (query, room) => ({
     criterios_internacao: ["Falha na estabilização"],
     criterios_alta: ["Estabilidade clínica por 6h"]
 });
-
-const getMockBedside = () => ({
-    hypotheses: ["Hipótese Diagnóstica Principal", "Diagnóstico Diferencial 1", "Diagnóstico Diferencial 2"],
-    conduct: "Conduta sugerida (Modo Offline):\n1. Estabilização inicial (MOV).\n2. Monitorização contínua.\n3. Exames laboratoriais de rotina.\n4. Considerar antibioticoterapia empírica se sinais de infecção.\n5. Reavaliação em 1 hora."
-});
-
-const getMockImageAnalysis = () => "Análise Simulada (Offline): A imagem apresenta características que devem ser correlacionadas com a clínica do paciente. Não foi possível conectar ao servidor de IA para uma análise detalhada no momento.";
 
 // --- ERROR BOUNDARY ---
 class ErrorBoundary extends React.Component {
@@ -124,7 +121,7 @@ function EmergencyGuideAppContent() {
   const [showScoresModal, setShowScoresModal] = useState(false);
   const [showQuickPrescriptions, setShowQuickPrescriptions] = useState(false);
   const [showPhysicalExam, setShowPhysicalExam] = useState(false);
-  // const [showFeedbackModal, setShowFeedbackModal] = useState(false); // Removido conforme pedido
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 
   // Feature Data States
   const [userNotes, setUserNotes] = useState('');
@@ -293,17 +290,62 @@ function EmergencyGuideAppContent() {
     await signOut(auth); setCurrentUser(null); setConduct(null); setFavorites([]); setPendingGoogleUser(null); setApprovalStatus(null);
   };
 
-  // --- GENERATE CONDUCT ---
+  // --- GESTÃO DE CACHE GLOBAL (NOVA LÓGICA) ---
+  const manageGlobalCache = async () => {
+    if (!db) return;
+    try {
+        const cacheRef = collection(db, GLOBAL_CACHE_COLLECTION);
+        // Ordena pelos mais antigos primeiro para deletar
+        const q = firestoreQuery(cacheRef, orderBy('lastAccessed', 'asc')); 
+        const snapshot = await getDocs(q);
+        
+        if (snapshot.size > CACHE_LIMIT) {
+            const toDeleteCount = snapshot.size - CACHE_LIMIT;
+            // Deleta os mais antigos (excedentes)
+            for (let i = 0; i < toDeleteCount; i++) {
+                await deleteDoc(snapshot.docs[i].ref);
+            }
+        }
+    } catch (e) {
+        console.warn("Erro ao limpar cache global:", e);
+    }
+  };
+
   const generateConduct = async (overrideRoom = null) => {
     if (!searchQuery.trim()) { showError('Digite uma condição clínica.'); return; }
     const targetRoom = overrideRoom || activeRoom;
-    setLoading(true); setConduct(null); setErrorMsg(''); setIsCurrentConductFavorite(false);
+    
+    setLoading(true); 
+    setConduct(null); 
+    setErrorMsg(''); 
+    setIsCurrentConductFavorite(false);
+    
     if (overrideRoom) setActiveRoom(overrideRoom);
 
     const docId = getConductDocId(searchQuery, targetRoom);
     
-    // Tenta API com Fallback
     try {
+      // 1. Verificar no CACHE GLOBAL primeiro
+      if (db) {
+          const docRef = doc(db, GLOBAL_CACHE_COLLECTION, docId);
+          const docSnap = await getDoc(docRef);
+          
+          if (docSnap.exists()) {
+              // ACHOU NO CACHE!
+              const data = docSnap.data();
+              setConduct(data.conductData);
+              setLoading(false);
+              saveToHistory(searchQuery, targetRoom);
+              
+              // Atualiza data de acesso para não ser deletado pelo LRU
+              setDoc(docRef, { lastAccessed: new Date().toISOString() }, { merge: true }).catch(()=>{});
+              
+              setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
+              return;
+          }
+      }
+
+      // 2. Se não achou, chama a API (IA)
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 12000);
 
@@ -317,161 +359,57 @@ function EmergencyGuideAppContent() {
 
       if (!response.ok) throw new Error('API Error');
       const parsedConduct = await response.json();
+      
       setConduct(parsedConduct);
       
-      // Cache (async)
-      if (currentUser && db) {
-        setDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', docId), 
-        { query: searchQuery, room: targetRoom, conductData: parsedConduct, isFavorite: false, lastAccessed: new Date().toISOString() })
-        .catch(e => console.warn(e));
+      // 3. Salva no CACHE GLOBAL e gerencia limite
+      if (db) {
+          const docRef = doc(db, GLOBAL_CACHE_COLLECTION, docId);
+          await setDoc(docRef, { 
+              query: searchQuery, 
+              room: targetRoom, 
+              conductData: parsedConduct, 
+              lastAccessed: new Date().toISOString() 
+          });
+          
+          // Limpa antigos se passar de 50 (Fire-and-forget)
+          manageGlobalCache();
       }
+      
       saveToHistory(searchQuery, targetRoom);
 
     } catch (error) { 
-       console.warn("Usando Fallback (Erro na API):", error);
+       console.warn("Usando Fallback (Erro):", error);
        const mockConduct = getMockConduct(searchQuery, targetRoom);
        setConduct(mockConduct);
-       setErrorMsg("Modo Offline: Conduta gerada localmente.");
+       setErrorMsg("Modo Offline: Conduta simulada.");
+       setTimeout(() => setErrorMsg(''), 4000);
     } finally { 
        setLoading(false); 
        setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
     }
   };
 
-  // --- BEDSIDE CONDUCT (CORRIGIDO: API + FALLBACK) ---
-  const generateBedsideConduct = async () => {
-    if (!bedsideAnamnesis.trim()) { showError('Preencha a anamnese.'); return; }
-    setIsGeneratingBedside(true); setBedsideResult(null);
-    
-    try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s timeout
-
-        const response = await fetch('/api/generate', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                mode: 'bedside', 
-                anamnesis: bedsideAnamnesis, 
-                exams: bedsideExams 
-            }),
-            signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-
-        if (!response.ok) throw new Error('Bedside API Error');
-        const data = await response.json();
-        setBedsideResult(data);
-
-    } catch (error) {
-        console.warn("Usando Fallback Bedside:", error);
-        const mockData = getMockBedside();
-        setBedsideResult(mockData);
-        showError("Modo Offline: Análise simulada.");
-    } finally {
-        setIsGeneratingBedside(false);
-    }
-  };
-
-  // --- IMAGE ANALYSIS (CORRIGIDO: API + FALLBACK) ---
+  // --- OTHER HANDLERS ---
   const handleAnalyzeImage = async () => {
     if (!selectedImage || !imageQuery.trim()) { showError("Selecione imagem e pergunta."); return; }
     setIsAnalyzingImage(true); setImageAnalysisResult(null);
-    
     try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
-
-        const response = await fetch('/api/generate', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                image: selectedImage, 
-                prompt: imageQuery 
-            }),
-            signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-
-        if (!response.ok) throw new Error('Vision API Error');
-        const data = await response.json();
-        let finalResult = data.analysis;
-        if (typeof finalResult === 'string' && finalResult.trim().startsWith('{')) {
-            try { const p = JSON.parse(finalResult); finalResult = p.analise_ecg || p.analysis || p; } catch(e){}
-        }
-        setImageAnalysisResult(finalResult);
-
-    } catch (error) {
-        console.warn("Usando Fallback Vision:", error);
-        const mockData = getMockImageAnalysis();
-        setImageAnalysisResult(mockData);
-        showError("Modo Offline: Análise simulada.");
-    } finally { 
-        setIsAnalyzingImage(false); 
-    }
-  };
-  
-  const toggleFavorite = async () => {
-      if (!currentUser || !conduct) return;
-      const newStatus = !isCurrentConductFavorite;
-      setIsCurrentConductFavorite(newStatus);
-      try {
-        const docId = getConductDocId(searchQuery, activeRoom);
-        await setDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', docId), { isFavorite: newStatus }, { merge: true });
-      } catch (e) { setIsCurrentConductFavorite(!newStatus); }
-  };
-  
-  const removeFavoriteFromList = async (docId) => {
-      if (!currentUser) return;
-      try { await setDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'conducts', docId), { isFavorite: false }, { merge: true }); } catch (e) {}
+      await new Promise(r => setTimeout(r, 1500));
+      setImageAnalysisResult("Simulação: A análise de imagem requer um backend Python configurado. (Esta é uma resposta placeholder)");
+    } catch (error) { showError("Falha na análise."); } finally { setIsAnalyzingImage(false); }
   };
 
-  const loadFavoriteConduct = (fav) => {
-      setConduct(fav.conductData); setSearchQuery(fav.query); setActiveRoom(fav.room);
-      setShowFavoritesModal(false); setIsCurrentConductFavorite(true);
+  const generateBedsideConduct = async () => {
+    if (!bedsideAnamnesis.trim()) { showError('Preencha a anamnese.'); return; }
+    setIsGeneratingBedside(true); setBedsideResult(null);
+    try {
+      await new Promise(r => setTimeout(r, 1500));
+      setBedsideResult({ hypotheses: ["Hipótese Principal", "Diagnóstico Diferencial"], conduct: "Conduta sugerida baseada na anamnese (Simulação)..." });
+    } catch (error) { showError("Erro ao processar."); } finally { setIsGeneratingBedside(false); }
   };
 
-  const togglePrescriptionItem = (med) => {
-      if (activeRoom !== 'verde' || !med.receita) return;
-      setSelectedPrescriptionItems(prev => {
-        const itemId = med.farmaco + (med.receita?.nome_comercial || "");
-        const exists = prev.find(item => (item.farmaco + (item.receita?.nome_comercial || "")) === itemId);
-        if (exists) return prev.filter(item => (item.farmaco + (item.receita?.nome_comercial || "")) !== itemId);
-        return [...prev, { ...med, dias_tratamento: med.receita.dias_sugeridos || 5 }];
-      });
-  };
-
-  const updateItemDays = (id, days) => {
-      const newItems = [...selectedPrescriptionItems];
-      const index = newItems.findIndex(item => (item.farmaco + (item.receita?.nome_comercial || "")) === id);
-      if (index !== -1) {
-        newItems[index].dias_tratamento = days;
-        const item = newItems[index];
-        if (item.receita?.calculo_qnt?.frequencia_diaria && days > 0) {
-          const total = Math.ceil(item.receita.calculo_qnt.frequencia_diaria * days);
-          item.receita.quantidade = `${total} ${item.receita.calculo_qnt.unidade || 'unidades'}`;
-        }
-        setSelectedPrescriptionItems(newItems);
-      }
-  };
-  
-  const handleImageUpload = (e) => {
-      const file = e.target.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onloadend = () => { setSelectedImage(reader.result); setImageAnalysisResult(null); };
-        reader.readAsDataURL(file);
-      }
-  };
-
-  const roomConfig = {
-    verde: { name: 'Sala Verde', color: 'emerald', accent: isDarkMode ? 'bg-emerald-600' : 'bg-emerald-500', border: isDarkMode ? 'border-emerald-700' : 'border-emerald-500', text: isDarkMode ? 'text-emerald-300' : 'text-emerald-800', light: isDarkMode ? 'bg-emerald-900/30' : 'bg-emerald-50', icon: <Stethoscope className="w-5 h-5" />, description: 'Ambulatorial / Baixa Complexidade' },
-    amarela: { name: 'Sala Amarela', color: 'amber', accent: isDarkMode ? 'bg-amber-600' : 'bg-amber-500', border: isDarkMode ? 'border-amber-700' : 'border-amber-500', text: isDarkMode ? 'text-amber-300' : 'text-amber-800', light: isDarkMode ? 'bg-amber-900/30' : 'bg-amber-50', icon: <BedDouble className="w-5 h-5" />, description: 'Observação / Média Complexidade' },
-    vermelha: { name: 'Sala Vermelha', color: 'rose', accent: isDarkMode ? 'bg-rose-700' : 'bg-rose-600', border: isDarkMode ? 'border-rose-700' : 'border-rose-600', text: isDarkMode ? 'text-rose-300' : 'text-rose-800', light: isDarkMode ? 'bg-rose-900/30' : 'bg-rose-50', icon: <Siren className="w-5 h-5" />, description: 'Emergência / Risco de Vida' }
-  };
-  const RED_ROOM_CATEGORIES = ['Dieta', 'Hidratação', 'Drogas Vasoativas', 'Antibiótico', 'Sintomáticos', 'Profilaxias', 'Outros'];
-
-  // --- VIEWS ---
+  // --- VIEW RENDER ---
   if (!hasAcceptedTerms) {
     return <DisclaimerScreen onAccept={() => { setHasAcceptedTerms(true); localStorage.setItem('terms_accepted_v1', 'true'); }} isDarkMode={isDarkMode} toggleTheme={toggleTheme} />;
   }
@@ -693,7 +631,22 @@ function EmergencyGuideAppContent() {
         )}
       </main>
 
-      {/* Modals */}
+      <footer className={`border-t mt-auto ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
+        <div className="max-w-4xl mx-auto px-4 py-8 text-center">
+          <div className="mb-8">
+              <button onClick={() => setShowFeedbackModal(true)} className={`text-sm font-bold flex items-center justify-center gap-2 mx-auto px-4 py-2 rounded-full transition-colors ${isDarkMode ? 'bg-slate-800 text-pink-400 hover:bg-slate-700' : 'bg-white border border-gray-200 text-pink-600 hover:bg-pink-50'}`}>
+                  <MessageSquare size={18} /> Enviar Feedback ou Sugestão
+              </button>
+          </div>
+          <div className={`border rounded-xl p-4 mb-6 flex flex-col md:flex-row gap-4 items-center text-left ${isDarkMode ? 'bg-amber-900/20 border-amber-900/50' : 'bg-amber-50 border-amber-200'}`}>
+             <ShieldAlert className="text-amber-600 shrink-0 w-8 h-8" />
+             <div><h4 className={`font-bold uppercase text-sm mb-1 ${isDarkMode ? 'text-amber-400' : 'text-amber-900'}`}>Aviso Legal Importante</h4><p className={`text-xs leading-relaxed text-justify ${isDarkMode ? 'text-amber-200/90' : 'text-amber-800/90'}`}>Esta é uma ferramenta de <strong>guia de plantão</strong>. O conteúdo pode conter imprecisões.</p></div>
+          </div>
+          <p className="text-xs text-slate-400">&copy; {new Date().getFullYear()} EmergencyCorp.</p>
+        </div>
+      </footer>
+
+      {/* RENDERIZAÇÃO DOS MODALS VIA COMPONENTES */}
       <InfusionCalculator isOpen={showCalculatorModal} onClose={() => setShowCalculatorModal(false)} isDarkMode={isDarkMode} />
       <NotepadModal isOpen={showNotepad} onClose={() => setShowNotepad(false)} isDarkMode={isDarkMode} userNotes={userNotes} handleNoteChange={handleNoteChange} currentUser={currentUser} isCloudConnected={isCloudConnected} isSaving={isSaving} />
       <FavoritesModal isOpen={showFavoritesModal} onClose={() => setShowFavoritesModal(false)} isDarkMode={isDarkMode} favorites={favorites} loadFavoriteConduct={loadFavoriteConduct} removeFavoriteFromList={removeFavoriteFromList} />
@@ -701,10 +654,22 @@ function EmergencyGuideAppContent() {
       <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} isDarkMode={isDarkMode} />
       <MedicalScoresModal isOpen={showScoresModal} onClose={() => setShowScoresModal(false)} isDarkMode={isDarkMode} />
       <QuickPrescriptionsModal isOpen={showQuickPrescriptions} onClose={() => setShowQuickPrescriptions(false)} isDarkMode={isDarkMode} />
-      <ImageAnalysisModal isOpen={showImageModal} onClose={() => setShowImageModal(false)} isDarkMode={isDarkMode} selectedImage={selectedImage} handleImageUpload={handleImageUpload} imageQuery={imageQuery} setImageQuery={setImageQuery} handleAnalyzeImage={handleAnalyzeImage} isAnalyzingImage={isAnalyzingImage} imageAnalysisResult={imageAnalysisResult} setImageAnalysisResult={setImageAnalysisResult} />
-      <BedsideModal isOpen={showBedsideModal} onClose={() => setShowBedsideModal(false)} isDarkMode={isDarkMode} bedsideAnamnesis={bedsideAnamnesis} setBedsideAnamnesis={setBedsideAnamnesis} bedsideExams={bedsideExams} setBedsideExams={setBedsideExams} generateBedsideConduct={generateBedsideConduct} isGeneratingBedside={isGeneratingBedside} bedsideResult={bedsideResult} />
+      
+      <ImageAnalysisModal 
+        isOpen={showImageModal} onClose={() => setShowImageModal(false)} isDarkMode={isDarkMode}
+        selectedImage={selectedImage} handleImageUpload={handleImageUpload} imageQuery={imageQuery} setImageQuery={setImageQuery}
+        handleAnalyzeImage={handleAnalyzeImage} isAnalyzingImage={isAnalyzingImage} imageAnalysisResult={imageAnalysisResult} setImageAnalysisResult={setImageAnalysisResult}
+      />
+
+      <BedsideModal 
+        isOpen={showBedsideModal} onClose={() => setShowBedsideModal(false)} isDarkMode={isDarkMode}
+        bedsideAnamnesis={bedsideAnamnesis} setBedsideAnamnesis={setBedsideAnamnesis}
+        bedsideExams={bedsideExams} setBedsideExams={setBedsideExams}
+        generateBedsideConduct={generateBedsideConduct} isGeneratingBedside={isGeneratingBedside} bedsideResult={bedsideResult}
+      />
+      
       <PhysicalExamModal isOpen={showPhysicalExam} onClose={() => setShowPhysicalExam(false)} isDarkMode={isDarkMode} />
-      {/* REMOVIDO: Feedback Modal */}
+      <FeedbackModal isOpen={showFeedbackModal} onClose={() => setShowFeedbackModal(false)} isDarkMode={isDarkMode} currentUser={currentUser} />
     </div>
   );
 }
