@@ -732,10 +732,8 @@ function EmergencyGuideAppContent() {
         bedsideExams={bedsideExams} setBedsideExams={setBedsideExams}
         generateBedsideConduct={generateBedsideConduct} isGeneratingBedside={isGeneratingBedside} bedsideResult={bedsideResult}
       />
-      
-      {/* RENDERIZAÇÃO DO MODAL DE EXAME FÍSICO E FEEDBACK */}
-      <PhysicalExamModal isOpen={showPhysicalExam} onClose={() => setShowPhysicalExam(false)} isDarkMode={isDarkMode} />
-      <FeedbackModal isOpen={showFeedbackModal} onClose={() => setShowFeedbackModal(false)} isDarkMode={isDarkMode} currentUser={currentUser} />
+     
+    
     </div>
   );
 }
