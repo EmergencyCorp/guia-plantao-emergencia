@@ -2,7 +2,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage'; // <--- NOVO IMPORT
 
 const getFirebaseConfig = () => {
   try {
@@ -26,18 +25,18 @@ const getFirebaseConfig = () => {
 };
 
 const firebaseConfig = getFirebaseConfig();
-let app, auth, db, storage, googleProvider;
+let app, auth, db, googleProvider;
 
 if (firebaseConfig && firebaseConfig.apiKey) {
   try {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
-    storage = getStorage(app); // <--- INICIALIZAÇÃO DO STORAGE
     googleProvider = new GoogleAuthProvider();
   } catch (e) {
     console.error("Erro init firebase:", e);
   }
 }
 
-export { auth, db, storage, app, googleProvider, firebaseConfig }; // <--- EXPORTANDO STORAGE
+// Exportando sem 'storage' para evitar erros
+export { auth, db, app, googleProvider, firebaseConfig };
